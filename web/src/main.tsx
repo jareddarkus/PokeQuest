@@ -9,7 +9,9 @@ const WorldMap = import.meta.env.DEV ? lazy(() => import('./dev/WorldMap')) : nu
 const BtlView = import.meta.env.DEV ? lazy(() => import('./dev/BtlView')) : null
 const AnimTest = import.meta.env.DEV ? lazy(() => import('./dev/AnimTest')) : null
 const OwView = import.meta.env.DEV ? lazy(() => import('./dev/OwView')) : null
+const BldView = import.meta.env.DEV ? lazy(() => import('./dev/BldView')) : null
 const q = new URLSearchParams(location.search)
+const showBld = import.meta.env.DEV && q.has('bldview')
 const showOw = import.meta.env.DEV && q.has('owview')
 const showViewer = import.meta.env.DEV && q.has('mapview')
 const showWorld = import.meta.env.DEV && q.has('worldmap')
@@ -18,7 +20,11 @@ const showAnim = import.meta.env.DEV && q.has('animtest')
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    {showOw && OwView ? (
+    {showBld && BldView ? (
+      <Suspense fallback={null}>
+        <BldView />
+      </Suspense>
+    ) : showOw && OwView ? (
       <Suspense fallback={null}>
         <OwView />
       </Suspense>

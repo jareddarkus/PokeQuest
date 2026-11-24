@@ -3,6 +3,7 @@ import * as THREE from 'three'
 import type { BuiltWorld } from '../rom/chunkWorld'
 import { drawCharacter, lookSprite, randomLook, type Look } from './character'
 import { owEmote, owFrame } from './ow'
+import { GYM_MODELS } from '../rom/buildings'
 import { safeTileFor, type GameEvents, type GameHandle, type OtherPlayer } from './GameView'
 import { hash2 } from './rng'
 import type { Settings } from './settings'
@@ -186,15 +187,33 @@ export default function GameView3D(props: Props) {
       return a * (1 - ax) * (1 - az) + b * ax * (1 - az) + c * (1 - ax) * az + d * ax * az
     }
 
-    // gyms: a sign at the entrance (until the real building models are imported too)
-    for (const g of world.gyms) {
+    // gyms: the real gym buildings of the game (a sign at the entrance if the building is not available)
+    world.gyms.forEach((g, gi) => {
+      const spec = GYM_MODELS[gi % GYM_MODELS.length]
+      const b = built.makeBuilding(spec.pack, spec.model)
+      const gy = heightAt(g.x + 0.5, g.y + 0.5)
+      if (b) {
+        // the front of the building (its door side, towards the south) ends at the south edge of the door tile
+        const box = new THREE.Box3().setFromObject(b.obj)
+        b.obj.position.set(g.x + 0.5 - (box.min.x + box.max.x) / 2, gy, g.y + 1 - box.max.z)
+        scene.add(b.obj)
+        // you cannot walk through the building (the door tile and the row in front of it stay open)
+        const wb = new THREE.Box3().setFromObject(b.obj)
+        for (let ty = Math.floor(wb.min.z + 0.2); ty < g.y; ty++) {
+          for (let tx = Math.floor(wb.min.x + 0.2); tx <= Math.floor(wb.max.x - 0.2); tx++) {
+            if (tx < 0 || ty < 0 || tx >= SIZE || ty >= SIZE) continue
+            const t = world.tiles[ty * SIZE + tx]
+            if (t === T.Grass || t === T.Tall || t === T.Sand) world.tiles[ty * SIZE + tx] = T.GymWall
+          }
+        }
+      }
       const mat = new THREE.SpriteMaterial({ map: labelTexture(`${g.type.toUpperCase()} GYM`, TYPE_COLOR[g.type]), transparent: false })
       const s = new THREE.Sprite(mat)
       s.center.set(0.5, 0)
       s.scale.set(3, 0.75, 1)
-      s.position.set(g.x + 0.5, heightAt(g.x + 0.5, g.y + 0.5) + 0.2, g.y + 0.5)
+      s.position.set(g.x + 0.5, gy + 0.2, g.y + 0.5)
       scene.add(s)
-    }
+    })
 
     const ballMat = ballMaterial()
     const pickupSprites = new Map<string, THREE.Sprite>()
@@ -241,7 +260,7 @@ export default function GameView3D(props: Props) {
       scene.add(sp)
       return { spec: s, x: s.x, y: s.y, fx: s.x, fy: s.y, dir: s.dir, moving: 0, fromX: s.x, fromY: s.y, timer: 1 + hash2(s.x, s.y, 3) * 3, defeated: false, frozen: false, look, sprite: sp }
     })
-    if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__pq = { npcs, me } // developer test hook
+    if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__pq = { npcs, me, world } // developer test hook
     const otherSprites = new Map<string, { body: THREE.Sprite; label: THREE.Sprite }>()
     let paused = false
     const held = new Set<string>()

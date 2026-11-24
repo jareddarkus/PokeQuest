@@ -325,10 +325,10 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, onEnd }:
 
         {mode === 'menu' && req && (
           <div className="panel battle-menu cmd">
-            <CmdButton name="fight" label="Fight" scale={3} onClick={() => setMode('fight')} />
-            <CmdButton name="bag" label="Bag" onClick={() => setMode('bag')} />
-            <CmdButton name="pokemon" label="Pokémon" onClick={() => setMode('switch')} disabled={req.trapped || req.bench.filter((b) => !b.fainted && !b.active).length === 0} />
-            <CmdButton name="run" label="Run" onClick={doRun} disabled={kind !== 'wild'} />
+            <CmdButton name="fight" label="Fight" scale={2} onClick={() => setMode('fight')} />
+            <CmdButton name="bag" label="Bag" scale={2} onClick={() => setMode('bag')} />
+            <CmdButton name="pokemon" label="Pokémon" scale={2} onClick={() => setMode('switch')} disabled={req.trapped || req.bench.filter((b) => !b.fainted && !b.active).length === 0} />
+            <CmdButton name="run" label="Run" scale={2} onClick={doRun} disabled={kind !== 'wild'} />
           </div>
         )}
 

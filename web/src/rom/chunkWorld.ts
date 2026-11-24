@@ -1,6 +1,7 @@
 // Builds the 3D island from the real map chunks and works out, for every tile, whether it can be walked on.
 import * as THREE from 'three'
 import { buildModelObject, type ClipUniforms } from './mapModel'
+import { parsePack } from './buildings'
 import { readModels, readTexFile, type Model } from './nitro'
 import type { WorldData } from './worldData'
 
@@ -13,6 +14,8 @@ export interface BuiltWorld {
   height: Float32Array // ground height of every tile (in tile units)
   waterY: number
   uniforms: ClipUniforms
+  /** A real building model (from a building pack) ready to put into the scene, or null. Size in tiles is in `size`. */
+  makeBuilding: (pack: number, model: number) => { obj: THREE.Group; w: number; d: number; h: number } | null
 }
 
 const TALL = new Set([4, 5, 6, 7, 8, 9, 0x21, 0x22])
@@ -70,6 +73,35 @@ function rasterHeights(model: Model, out: Float32Array, ox: number, oz: number, 
   }
 }
 
+/** Puts the real buildings (Pokémon Centers, houses, signs ...) of every map piece into the world. */
+function addBuildings(data: WorldData, group: THREE.Group, uniforms: ClipUniforms) {
+  if (!data.buildings || !data.packs) return
+  const parsed = new Map<number, { models: Uint8Array[]; tex: ReturnType<typeof readTexFile> }>()
+  for (const cb of data.buildings) {
+    let pk = parsed.get(cb.pack)
+    if (!pk) {
+      const raw = data.packs[cb.pack]
+      const pack = raw ? parsePack(raw.bld) : null
+      if (!raw || !pack) continue
+      pk = { models: pack.models, tex: readTexFile(raw.tex) }
+      parsed.set(cb.pack, pk)
+    }
+    if (!pk.tex) continue
+    const ox = (cb.gx - data.window.x0) * 32 + 16
+    const oz = (cb.gy - data.window.y0) * 32 + 16
+    for (const it of cb.items) {
+      try {
+        const model = readModels(pk.models[it.model])[0]
+        if (!model) continue
+        const obj = buildModelObject(model, pk.tex, uniforms)
+        obj.position.set(ox + it.x, it.y, oz + it.z)
+        obj.rotation.y = (it.rot / 65536) * Math.PI * 2
+        group.add(obj)
+      } catch { /* skip a model we cannot read */ }
+    }
+  }
+}
+
 export function buildChunkWorld(data: WorldData): BuiltWorld {
   const n = data.window.n
   const size = n * 32
@@ -107,8 +139,28 @@ export function buildChunkWorld(data: WorldData): BuiltWorld {
     }
     rasterHeights(model, height, ox, oz, size)
   }
+  addBuildings(data, group, uniforms)
   for (let i = 0; i < size * size; i++) if (ground[i] === T.Water) waterHeights.push(height[i])
   waterHeights.sort((a, b) => a - b)
   const waterY = waterHeights.length ? waterHeights[Math.floor(waterHeights.length / 2)] : -1
-  return { group, size, ground, height, waterY, uniforms }
+  const packCache = new Map<number, { models: Uint8Array[]; tex: ReturnType<typeof readTexFile> } | null>()
+  const makeBuilding = (pack: number, model: number) => {
+    let pk = packCache.get(pack)
+    if (pk === undefined) {
+      const raw = data.packs?.[pack]
+      const parsed = raw ? parsePack(raw.bld) : null
+      pk = raw && parsed ? { models: parsed.models, tex: readTexFile(raw.tex) } : null
+      packCache.set(pack, pk)
+    }
+    if (!pk || !pk.tex || !pk.models[model]) return null
+    try {
+      const m = readModels(pk.models[model])[0]
+      if (!m) return null
+      const obj = buildModelObject(m, pk.tex, uniforms)
+      const box = new THREE.Box3().setFromObject(obj)
+      const sz = box.getSize(new THREE.Vector3())
+      return { obj, w: sz.x, d: sz.z, h: sz.y }
+    } catch { return null }
+  }
+  return { group, size, ground, height, waterY, uniforms, makeBuilding }
 }
