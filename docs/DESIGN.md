@@ -93,3 +93,9 @@ Private, friends-only web game. Main menu: **"PokÃ©mon White 2 Together"** (sh
 - At app start `applyRomColors()` (store.ts) snaps the character maker's skin / hair / eye / clothes swatches to the nearest real colour, so characters are drawn in the game's own colours. NPC outfits use natural hair and eye colours and dark trousers/shoes.
 - Real skin ramp found: #dea57b (main) / #bd7b63 (shade) / #d6a57b / #efdec6; light #ffd6bd.
 - Next: real overworld NPC/player sprites from the game file (replace the drawn placeholders).
+
+### Real walking characters (DONE)
+- Archive `a/0/4/8` (BTX0 files 7-354) = every overworld character of White 2. Each file holds 32x32 textures that share one palette (the real colours, no pairing guesswork). Frame counts: 7 (up, up-step, down, down-step, side, side-step, side-step; other foot/side = mirror), 12 or 24 (3 pictures each: up, down, side, side; frames 12-23 = running) - other counts (4, 14, 16: bikes, special poses) are skipped.
+- `rom/overworld.ts` rebuilds each into a 12-picture strip (down, left, right, up x stand/step/step), stored as `ow:<file>` (+ `ow:list`) in IndexedDB; `game/ow.ts` keeps them in memory; `Look.sprite` = file number. ~270 characters imported. Boy = 7, girl = 10.
+- Customizer now shows a grid of the real characters instead of the drawn colours (fallback to the drawn one when no game file). NPCs pick a random real character.
+- Not done: the bike/surf/fishing poses of the player; ROM import VERSION 12.

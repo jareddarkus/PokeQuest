@@ -8,6 +8,8 @@ import { BATTLE_NARC } from './battleScene'
 import { UI_NARC, decodeBattleUi, decodePlates } from './plates'
 import { TRAINER_NARCS, extractColors, snapAll, type RomColors } from './colors'
 import { CLOTH_COLORS, EYE_COLORS, HAIR_COLORS, SKIN_TONES } from '../game/character'
+import { OVERWORLD_NARC, decodeOverworld } from './overworld'
+import { owList, registerOw } from '../game/ow'
 
 const DB = 'pokequest-rom'
 const STORE = 'assets'
@@ -45,7 +47,27 @@ async function get<T>(key: string): Promise<T | undefined> {
 }
 
 export interface RomMeta { title: string; gameCode: string; sprites: number; version: number }
-const VERSION = 11 // 11 = ... + the game's own trainer colours
+/** Loads the walking characters (kept in memory for the game). */
+let owLoaded = false
+export async function loadOverworldSprites(): Promise<void> {
+  if (owLoaded) return
+  try {
+    const list = await get<number[]>('ow:list')
+    if (!list) return
+    for (const idx of list) {
+      const blob = await get<Blob>(`ow:${idx}`)
+      if (!blob) continue
+      const img = new Image()
+      const url = URL.createObjectURL(blob)
+      await new Promise<void>((res) => { img.onload = () => res(); img.onerror = () => res(); img.src = url })
+      registerOw(idx, img)
+    }
+    owList.sort((a, b) => a - b)
+    owLoaded = true
+  } catch { /* the game falls back to the drawn characters */ }
+}
+
+const VERSION = 12 // 12 = ... + walking characters;  11 = ... + the game's own trainer colours
 
 let colorsApplied = false
 /** Makes the colour choices of the character maker use the colours the game really uses (snaps each to the nearest real one). */
@@ -74,7 +96,7 @@ export async function loadWorldData(): Promise<WorldData | undefined> {
 export async function getRomMeta(): Promise<RomMeta | null> {
   try {
     const m = await get<RomMeta>(META_KEY)
-    if (m && m.version === VERSION) await applyRomColors()
+    if (m && m.version === VERSION) { await applyRomColors(); await loadOverworldSprites() }
     return m && m.version === VERSION ? m : null
   } catch {
     return null
@@ -106,10 +128,17 @@ export async function importRom(file: RomSource, onProgress: (text: string, frac
   const trainerNarcs: Uint8Array[] = []
   for (const p of TRAINER_NARCS) { try { trainerNarcs.push(await nds.get(p)) } catch { /* not in this version */ } }
   await put('colors', extractColors(trainerNarcs))
+  onProgress('Reading the walking characters…', 0.984)
+  const ow = await decodeOverworld(parseNarc(await nds.get(OVERWORLD_NARC)), (i, b) => put(`ow:${i}`, b))
+  await put('ow:list', ow)
   onProgress('Reading the island map…', 0.985)
   await put('world', await extractWorldData(nds, WORLD_WINDOW))
   const meta: RomMeta = { title: nds.header.title, gameCode: code, sprites: count, version: VERSION }
   await put(META_KEY, meta)
+  colorsApplied = false
+  owLoaded = false
+  await applyRomColors()
+  await loadOverworldSprites()
   onProgress('Done!', 1)
   return meta
 }

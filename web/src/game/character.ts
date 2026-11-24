@@ -1,5 +1,6 @@
 // A fully customizable trainer, drawn with code (placeholder look until the White 2 trainer sprites are imported).
 import type { Dir } from './world'
+import { OW_BOY, hasOw, owList } from './ow'
 
 export interface Look {
   skin: string
@@ -13,6 +14,14 @@ export interface Look {
   shoes: string
   hat: number // 0 none, 1 cap, 2 beanie, 3 wide hat
   hatColor: string
+  /** A real walking character from the player's game file (file number in a/0/4/8). When set, the drawn colours above are not used. */
+  sprite?: number
+}
+
+/** Which real character to show for this look, or undefined when only the drawn placeholder is possible. */
+export function lookSprite(look: Look): number | undefined {
+  if (hasOw(look.sprite)) return look.sprite
+  return hasOw(OW_BOY) ? OW_BOY : undefined
 }
 
 export const SKIN_TONES = ['#ffe0c7', '#f5cba7', '#e0ac82', '#c68642', '#8d5524', '#5c3a1e']
@@ -45,6 +54,7 @@ export function randomLook(seed: number): Look {
     eyes: EYE_COLORS[r(4)], top: CLOTH_COLORS[r(CLOTH_COLORS.length)], topStyle: r(3),
     bottom: CLOTH_COLORS[[5, 9, 10, 11][r(4)]], bottomStyle: r(3), shoes: CLOTH_COLORS[[9, 10, 11][r(3)]],
     hat: r(4) === 0 ? 1 + r(3) : 0, hatColor: CLOTH_COLORS[r(CLOTH_COLORS.length)],
+    sprite: owList.length ? owList[r(owList.length)] : undefined,
   }
 }
 

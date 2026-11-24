@@ -1,7 +1,8 @@
 import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import type { BuiltWorld } from '../rom/chunkWorld'
-import { drawCharacter, randomLook, type Look } from './character'
+import { drawCharacter, lookSprite, randomLook, type Look } from './character'
+import { owFrame } from './ow'
 import { safeTileFor, type GameEvents, type GameHandle, type OtherPlayer } from './GameView'
 import { hash2 } from './rng'
 import type { Settings } from './settings'
@@ -52,11 +53,28 @@ function walkableFor(world: World, x: number, y: number, elapsed: number | null)
   return true
 }
 
+/** Real game characters are 32x32 pictures (2 tiles wide, feet near the bottom); the drawn placeholders are smaller. */
+function fit(sp: THREE.Sprite) {
+  if (sp.material.userData.real) { sp.center.set(0.5, 0.1); sp.scale.set(2, 2, 1) }
+  else { sp.center.set(0.5, 0.05); sp.scale.set(1.15, 1.45, 1) }
+}
+
 const spriteCache = new Map<string, THREE.SpriteMaterial>()
 function charMaterial(look: Look, dir: Dir, frame: number): THREE.SpriteMaterial {
-  const key = `${JSON.stringify(look)}|${dir}|${frame}`
+  const real = lookSprite(look)
+  const key = real !== undefined ? `real|${real}|${dir}|${frame}` : `${JSON.stringify(look)}|${dir}|${frame}`
   let m = spriteCache.get(key)
   if (m) return m
+  if (real !== undefined) {
+    const t = new THREE.CanvasTexture(owFrame(real, dir, frame)!)
+    t.magFilter = THREE.NearestFilter
+    t.minFilter = THREE.NearestFilter
+    t.colorSpace = THREE.SRGBColorSpace
+    m = new THREE.SpriteMaterial({ map: t, transparent: true, alphaTest: 0.1, depthWrite: false })
+    m.userData.real = true
+    spriteCache.set(key, m)
+    return m
+  }
   const c = document.createElement('canvas')
   c.width = 64
   c.height = 80
@@ -195,16 +213,14 @@ export default function GameView3D(props: Props) {
     me.fromX = me.x
     me.fromY = me.y
     const mySprite = new THREE.Sprite(charMaterial(propsRef.current.look, 0, 0))
-    mySprite.center.set(0.5, 0.05)
-    mySprite.scale.set(1.15, 1.45, 1)
+    fit(mySprite)
     scene.add(mySprite)
 
     const removed = new Set<string>()
     const npcs: NpcRuntime[] = world.npcs.map((s) => {
       const look = randomLook(s.look)
       const sp = new THREE.Sprite(charMaterial(look, s.dir, 0))
-      sp.center.set(0.5, 0.05)
-      sp.scale.set(1.15, 1.45, 1)
+      fit(sp)
       scene.add(sp)
       return { spec: s, x: s.x, y: s.y, fx: s.x, fy: s.y, dir: s.dir, moving: 0, fromX: s.x, fromY: s.y, timer: 1 + hash2(s.x, s.y, 3) * 3, defeated: false, frozen: false, look, sprite: sp }
     })
@@ -365,11 +381,13 @@ export default function GameView3D(props: Props) {
       const py = me.fromY + (me.y - me.fromY) * me.t
       const ph = heightAt(px + 0.5, py + 0.5)
       mySprite.material = charMaterial(p.look, me.dir, me.t < 1 ? 1 + me.step : 0)
+      fit(mySprite)
       mySprite.position.set(px + 0.5, ph, py + 0.5)
       for (const n of npcs) {
         n.sprite.visible = !n.defeated || true
         const frame = n.moving > 0 ? 1 + (Math.floor(n.moving * 2) % 2) : 0
         n.sprite.material = charMaterial(n.look, n.dir, frame)
+        fit(n.sprite)
         n.sprite.position.set(n.fx + 0.5, heightAt(n.fx + 0.5, n.fy + 0.5), n.fy + 0.5)
       }
       // other players (named, never yourself)
@@ -379,8 +397,7 @@ export default function GameView3D(props: Props) {
         let e = otherSprites.get(o.id)
         if (!e) {
           const body = new THREE.Sprite(charMaterial(o.look, o.dir, 0))
-          body.center.set(0.5, 0.05)
-          body.scale.set(1.15, 1.45, 1)
+          fit(body)
           const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: nameTexture(o.name), transparent: true, depthWrite: false }))
           label.center.set(0.5, 0)
           label.scale.set(2.4, 0.45, 1)
@@ -389,6 +406,7 @@ export default function GameView3D(props: Props) {
           otherSprites.set(o.id, e)
         }
         e.body.material = charMaterial(o.look, o.dir, o.moving ? 1 + (Math.floor(now / 150) % 2) : 0)
+        fit(e.body)
         const h = heightAt(o.x + 0.5, o.y + 0.5)
         e.body.position.set(o.x + 0.5, h, o.y + 0.5)
         e.label.position.set(o.x + 0.5, h + 1.5, o.y + 0.5)
