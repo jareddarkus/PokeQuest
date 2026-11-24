@@ -170,3 +170,15 @@ button.big small { opacity: .7; font-size: .75rem; }
 .statnums { grid-column: 3; font-size: .7rem; opacity: .7; margin-top: -4px; }
 .stat-legend { display: flex; gap: 14px; font-size: .72rem; opacity: .75; margin-top: 2px; }
 .stat-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+/* ---------------------------------------------------------------- real 3D battle scenery */
+.battle-backdrop { position: absolute; inset: 0; }
+.stage-sprite { position: absolute; transform: translate(-50%, -82%); display: flex; justify-content: center; align-items: flex-end; transition: opacity .5s, transform .4s; z-index: 2; }
+.stage-sprite.hit { animation: stagehit .25s; }
+@keyframes stagehit { 0%, 100% { transform: translate(-50%, -82%); } 30% { transform: translate(calc(-50% - 10px), -82%); } 60% { transform: translate(calc(-50% + 10px), -82%); } }
+.stage-sprite.fainted { opacity: 0; transform: translate(-50%, -55%); }
+.foe-zone, .me-zone { z-index: 3; pointer-events: none; }
+.foe-zone .hpbox { left: 2%; top: 8px; width: min(46%, 300px); }
+.me-zone { inset: auto 0 0 auto; width: 100%; height: 100%; }
+.me-zone .hpbox { position: absolute; right: 2%; bottom: 190px; width: min(46%, 320px); left: auto; }
+.battle-bottom { z-index: 4; }
+.foe-zone { inset: 0; width: 100%; height: 100%; }

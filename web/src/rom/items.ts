@@ -9,7 +9,7 @@ function find(d: Uint8Array, tag: string): number {
   return -1
 }
 
-function paletteOf(file: Uint8Array): Array<[number, number, number]> | null {
+export function paletteOf(file: Uint8Array): Array<[number, number, number]> | null {
   const d = decompress(file)
   const p = find(d, 'TTLP')
   if (p < 0) return null

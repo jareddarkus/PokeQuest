@@ -4,6 +4,8 @@ import { NdsFile, parseNarc, type RomSource } from './nds'
 import { SPRITE_NARC, decodeAllSprites, spriteKey } from './sprites'
 import { WORLD_WINDOW, extractWorldData, type WorldData } from './worldData'
 import { ITEM_ICON_NARC, decodeItemIcons } from './items'
+import { BATTLE_NARC } from './battleScene'
+import { UI_NARC, decodePlates } from './plates'
 
 const DB = 'pokequest-rom'
 const STORE = 'assets'
@@ -41,7 +43,7 @@ async function get<T>(key: string): Promise<T | undefined> {
 }
 
 export interface RomMeta { title: string; gameCode: string; sprites: number; version: number }
-const VERSION = 5 // 5 = pictures + map pieces + item icons + the Pokémon animation archive
+const VERSION = 7 // 7 = ... + the move-type plates
 
 export async function loadWorldData(): Promise<WorldData | undefined> {
   try {
@@ -72,10 +74,13 @@ export async function importRom(file: RomSource, onProgress: (text: string, frac
   onProgress('Reading the Pokémon pictures…', 0.05)
   const narc = await nds.get(SPRITE_NARC)
   await put('sprites:narc', new Blob([new Uint8Array(narc)]))
+  onProgress('Reading the battle scenery…', 0.97)
+  await put('battle:narc', new Blob([new Uint8Array(await nds.get(BATTLE_NARC))]))
   let count = 0
   count = await decodeAllSprites(narc, (d, t) => onProgress(`Converting Pokémon ${d} of ${t}…`, 0.1 + 0.88 * (d / t)), (k, b) => put(`sprite:${k}`, b))
   onProgress('Reading the item icons…', 0.975)
   await decodeItemIcons(await nds.get(ITEM_ICON_NARC), (id, b) => put(`item:${id}`, b))
+  await decodePlates(await nds.get(UI_NARC), (name, b) => put(`plate:${name}`, b))
   onProgress('Reading the island map…', 0.985)
   await put('world', await extractWorldData(nds, WORLD_WINDOW))
   const meta: RomMeta = { title: nds.header.title, gameCode: code, sprites: count, version: VERSION }
@@ -138,6 +143,34 @@ export async function getSpriteFiles(): Promise<Uint8Array[] | null> {
     if (!blob) return null
     narcFiles = parseNarc(new Uint8Array(await blob.arrayBuffer()))
     return narcFiles
+  } catch {
+    return null
+  }
+}
+let battleFiles: Uint8Array[] | null = null
+/** The battle scenery files (platform and backdrop models). */
+export async function getBattleFiles(): Promise<Uint8Array[] | null> {
+  if (battleFiles) return battleFiles
+  try {
+    const blob = await get<Blob>('battle:narc')
+    if (!blob) return null
+    battleFiles = parseNarc(new Uint8Array(await blob.arrayBuffer()))
+    return battleFiles
+  } catch {
+    return null
+  }
+}
+/** A move-type label (or the physical / special / status icon) from the player's game file. */
+export async function romPlateUrl(name: string): Promise<string | null> {
+  const key = `plate:${name}`
+  const hit = urlCache.get(key)
+  if (hit) return hit
+  try {
+    const blob = await get<Blob>(key)
+    if (!blob) return null
+    const url = URL.createObjectURL(blob)
+    urlCache.set(key, url)
+    return url
   } catch {
     return null
   }

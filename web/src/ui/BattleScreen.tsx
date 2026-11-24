@@ -7,6 +7,9 @@ import {
 } from '../game/state'
 import { TYPE_COLOR, type PType } from '../game/world'
 import ItemIcon from './ItemIcon'
+import TypePlate from './TypePlate'
+import BattleBackdrop from './BattleBackdrop'
+import type { BattleLayout } from '../rom/battleScene'
 import MonSprite from './MonSprite'
 
 export type BattleKind = 'wild' | 'trainer' | 'gym'
@@ -61,6 +64,8 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, onEnd }:
   const caughtRef = useRef<Mon | null>(null)
   const ranRef = useRef(false)
   const [shake, setShake] = useState<'me' | 'foe' | null>(null)
+  const [layout, setLayout] = useState<BattleLayout | null>(null)
+  const environment = 'grass'
   const [ball, setBall] = useState<null | { shakes: number }>(null)
   const legendaryNames = useMemo(() => new Set(allSpecies().filter((s) => s.legendary).map((s) => s.name)), [])
 
@@ -288,24 +293,26 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, onEnd }:
 
   return (
     <div className="fullscreen battle">
-      <div className="battle-sky" />
-      <div className="battle-ground" />
+      <BattleBackdrop env={environment} onLayout={setLayout} />
 
       <div className="foe-zone">
         {foe && <HpBox side={foe} mine={false} />}
-        <div className={`foe-sprite ${shake === 'foe' ? 'hit' : ''} ${foe?.fainted ? 'fainted' : ''}`}>
-          {foe && !ball && <MonSprite species={foe.species} shiny={foe.shiny} scale={2.2} animated />}
-          {ball && <div className={`ball shake-${ball.shakes}`} />}
-        </div>
       </div>
-
       <div className="me-zone">
-        <div className={`me-sprite ${shake === 'me' ? 'hit' : ''} ${me?.fainted ? 'fainted' : ''}`}>
-          {me && <MonSprite species={me.species} back shiny={me.shiny} scale={2.6} animated />}
-        </div>
         {me && <HpBox side={me} mine />}
       </div>
 
+      {layout && foe && (
+        <div className={`stage-sprite ${shake === 'foe' ? 'hit' : ''} ${foe.fainted ? 'fainted' : ''}`} style={{ left: layout.foe.x, top: layout.foe.y, width: layout.foe.w }}>
+          {!ball && <MonSprite species={foe.species} shiny={foe.shiny} scale={layout.foe.w / 124} animated />}
+          {ball && <div className={`ball shake-${ball.shakes}`} />}
+        </div>
+      )}
+      {layout && me && (
+        <div className={`stage-sprite ${shake === 'me' ? 'hit' : ''} ${me.fainted ? 'fainted' : ''}`} style={{ left: layout.me.x, top: layout.me.y, width: layout.me.w }}>
+          <MonSprite species={me.species} back shiny={me.shiny} scale={layout.me.w / 124} animated />
+        </div>
+      )}
       <div className="battle-bottom">
         <div className="panel battle-text">{text}</div>
 
@@ -324,7 +331,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, onEnd }:
               <button key={mv.id} disabled={mv.disabled || mv.pp === 0} onClick={() => doMove(i)}
                 style={{ borderColor: TYPE_COLOR[mv.type as PType] ?? '#888', boxShadow: `inset 4px 0 0 ${TYPE_COLOR[mv.type as PType] ?? '#888'}` }}>
                 <span>{mv.name}</span>
-                <small>{mv.type} · {mv.pp}/{mv.maxpp}</small>
+                <small style={{ display: 'flex', alignItems: 'center', gap: 8 }}><TypePlate type={mv.type} scale={1.6} />{mv.pp}/{mv.maxpp} PP</small>
               </button>
             ))}
             <button className="back" onClick={() => setMode('menu')}>Back</button>

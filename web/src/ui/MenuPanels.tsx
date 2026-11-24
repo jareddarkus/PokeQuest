@@ -10,6 +10,7 @@ import { TYPE_COLOR, type PType } from '../game/world'
 import ItemIcon from './ItemIcon'
 import MonSprite from './MonSprite'
 import StatBars from './StatBars'
+import TypePlate from './TypePlate'
 
 interface PanelProps {
   trainer: Trainer
@@ -33,12 +34,11 @@ function TypeChips({ species }: { species: string }) {
   return (
     <span className="chips">
       {speciesTypes(species).map((t) => (
-        <span key={t} className="chip" style={{ background: TYPE_COLOR[t as PType] ?? '#777' }}>{t}</span>
+        <TypePlate key={t} type={t} scale={1.5} />
       ))}
     </span>
   )
 }
-
 // ---------------------------------------------------------------- summary (stats, nature, ability, moves)
 export function Summary({ mon, onChange, onBack }: { mon: Mon; onChange: (m: Mon) => void; onBack: () => void }) {
   const [pickFor, setPickFor] = useState<number | null>(null)
@@ -77,7 +77,7 @@ export function Summary({ mon, onChange, onBack }: { mon: Mon; onChange: (m: Mon
           return (
             <button key={mv + i} onClick={() => setPickFor(pickFor === i ? null : i)} style={{ boxShadow: `inset 4px 0 0 ${TYPE_COLOR[info.type as PType] ?? '#888'}` }}>
               <span>{mv}</span>
-              <small>{info.type} · {info.category} · {info.power || '—'} power · {info.pp} PP</small>
+              <small style={{ display: 'flex', alignItems: 'center', gap: 6 }}><TypePlate type={info.type} scale={1.6} /><TypePlate type={info.category} scale={1.6} />{info.power || '—'} power · {info.pp} PP</small>
             </button>
           )
         })}
@@ -94,7 +94,7 @@ export function Summary({ mon, onChange, onBack }: { mon: Mon; onChange: (m: Mon
                   onClick={() => { onChange({ ...mon, moves: mon.moves.map((x, k) => (k === pickFor ? o : x)) }); setPickFor(null) }}
                   style={{ boxShadow: `inset 4px 0 0 ${TYPE_COLOR[info.type as PType] ?? '#888'}` }}
                 >
-                  <span>{o}</span><small>{info.type} · {info.power || '—'}</small>
+                  <span>{o}</span><small style={{ display: 'flex', alignItems: 'center', gap: 6 }}><TypePlate type={info.type} scale={1.6} />{info.power || '—'}</small>
                 </button>
               )
             })}
