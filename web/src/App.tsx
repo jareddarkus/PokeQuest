@@ -11,6 +11,7 @@ function Login() {
   const [mode, setMode] = useState<'login' | 'signup'>('login')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
+  const [invite, setInvite] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -18,7 +19,7 @@ function Login() {
     e.preventDefault()
     setBusy(true)
     setError(null)
-    const problem = mode === 'login' ? await signIn(username, password) : await signUp(username, password)
+    const problem = mode === 'login' ? await signIn(username, password) : await signUp(username, password, invite)
     setError(problem)
     setBusy(false)
   }
@@ -35,6 +36,9 @@ function Login() {
         onChange={(e) => setPassword(e.target.value)}
         autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
       />
+      {mode === 'signup' && (
+        <input placeholder="Invite code (from your friend)" value={invite} onChange={(e) => setInvite(e.target.value)} autoComplete="off" />
+      )}
       {error && <p className="error">{error}</p>}
       <button disabled={busy}>{mode === 'login' ? 'Log in' : 'Create account'}</button>
       <button type="button" className="link" onClick={() => setMode(mode === 'login' ? 'signup' : 'login')}>
