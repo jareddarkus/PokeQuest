@@ -6,7 +6,7 @@ export function dsK(max = 3): number {
   return Math.max(1, Math.min(max, Math.floor((window.innerWidth - 24) / 256), Math.floor((window.innerHeight - 140) / 192)))
 }
 
-const BASE: Record<string, string> = { 'bag:red': '#6b0010', 'bag:blue': '#0f4aa8', 'bag:dark': '#4a0818', 'sum:stats': '#181820' }
+const BASE: Record<string, string> = { 'bag:red': '#6b0010', 'bag:blue': '#0f4aa8', 'bag:dark': '#4a0818', 'sum:stats': '#181820', 'sum:info': '#181820', 'sum:moves': '#181820' }
 
 /** A 256 x 192 DS screen: the game's own background picture with things placed on it in DS pixels. */
 export function DsScreen({ bg, K, children, style }: { bg: string; K: number; children?: ReactNode; style?: CSSProperties }) {

@@ -18,6 +18,7 @@ import SettingsPanel from './SettingsPanel'
 import StarterPick from './StarterPick'
 import MenuButton from './MenuButton'
 import PartyBar from './PartyBar'
+import { useFrameStyle } from './DsFrame'
 import ChatPanel from './ChatPanel'
 import { useMatchPlayers } from '../net/useMatchPlayers'
 import { useChat } from './useChat'
@@ -55,6 +56,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
   const [menuOpen, setMenuOpen] = useState(false)
   const [panel, setPanel] = useState<null | 'settings' | 'team' | 'bag' | 'pc' | 'chat'>(null)
   const [toast, setToast] = useState<string | null>(null)
+  const toastFrame = useFrameStyle('white', 2)
   const [ring, setRing] = useState(1)
   const [secs, setSecs] = useState(0)
   const [radius, setRadius] = useState(RADIUS)
@@ -266,7 +268,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
         </div>
       )}
 
-      {toast && <div className="toast panel">{toast}</div>}
+      {toast && <div className="toast panel" style={toastFrame ?? undefined}>{toast}</div>}
       {panel === 'chat' && <ChatPanel messages={chat.messages} status={chat.status} send={chat.send} canChat={!!username} onClose={() => setPanel(null)} />}
       {panel === 'settings' && <SettingsPanel settings={settings} onChange={onSettings} onClose={() => setPanel(null)} onCustomize={onCustomize} />}
       {panel === 'team' && <TeamPanel trainer={trainer} setTrainer={setTrainer} onClose={() => setPanel(null)} onMessage={say} />}

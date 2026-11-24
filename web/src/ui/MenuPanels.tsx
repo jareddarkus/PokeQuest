@@ -13,6 +13,8 @@ import MonSprite, { MonIcon } from './MonSprite'
 import StatBars from './StatBars'
 import TypePlate from './TypePlate'
 import { DsScreen, DsText, dsK } from './DsScreen'
+import PartyScreen from './PartyScreen'
+import { useUiUrl } from './CmdButton'
 
 interface PanelProps {
   trainer: Trainer
@@ -64,14 +66,68 @@ function StatsScreen({ mon }: { mon: Mon }) {
   )
 }
 
+/** The info page on the game's own summary background: a dark band with the name, then a white panel with rows. */
+function InfoScreen({ mon }: { mon: Mon }) {
+  const K = dsK(2)
+  const nm = natureMods(mon.nature)
+  const lo = mon.level ** 3, hi = (mon.level + 1) ** 3
+  const rows: Array<[string, string]> = [
+    ['Nature', nm.plus ? `${mon.nature} (+${STAT_NAMES[nm.plus]}, −${STAT_NAMES[nm.minus!]})` : `${mon.nature} (neutral)`],
+    ['Ability', mon.ability],
+    ['Held item', mon.item || 'none'],
+    ['Type', speciesTypes(mon.species).join(' / ')],
+    ['Exp. points', String(mon.exp)],
+    ['To next level', String(Math.max(0, hi - mon.exp))],
+    ['Level', `${mon.level} (from ${lo})`],
+  ]
+  return (
+    <div style={{ display: 'flex', justifyContent: 'center', margin: '8px 0' }}>
+      <DsScreen bg="sum:info" K={K}>
+        <DsText x={10} y={14} K={K} size={10}>{mon.species}{mon.shiny ? ' ★' : ''}  Lv{mon.level}  {mon.gender === 'M' ? '♂' : mon.gender === 'F' ? '♀' : ''}</DsText>
+        {rows.map(([k, v], i) => (
+          <div key={k}>
+            <DsText x={8} y={44 + i * 16} K={K} color="#505868" size={7.5}>{k}</DsText>
+            <DsText x={96} y={44 + i * 16} K={K} color="#181820" size={7.5}>{v}</DsText>
+          </div>
+        ))}
+      </DsScreen>
+    </div>
+  )
+}
+
+/** The moves page on the game's own summary background (tap a move to replace it). */
+function MovesScreen({ mon, pickFor, onPick }: { mon: Mon; pickFor: number | null; onPick: (i: number) => void }) {
+  const K = dsK(2)
+  const cur = moveInfo(mon.moves[pickFor ?? 0] ?? mon.moves[0])
+  return (
+    <div style={{ display: 'flex', justifyContent: 'center', margin: '8px 0' }}>
+      <DsScreen bg="sum:moves" K={K}>
+        <DsText x={10} y={36} K={K} size={8}>Moves</DsText>
+        {mon.moves.map((mv, i) => {
+          const info = moveInfo(mv)
+          return (
+            <button key={mv + i} onClick={() => onPick(i)} style={{ position: 'absolute', left: 0, top: (57 + i * 16) * K, width: 256 * K, height: 15 * K, border: 'none', background: pickFor === i ? 'rgba(255,216,74,.28)' : 'transparent', cursor: 'pointer', padding: 0 }}>
+              <DsText x={6} y={4} K={K} size={7.5}>{mv}</DsText>
+              <DsText x={124} y={4} K={K} size={7.5} color="#181820">PP {info.pp}</DsText>
+              <DsText x={172} y={4} K={K} size={7.5} color="#181820">Pow {info.power || '—'}</DsText>
+              <span style={{ position: 'absolute', left: 212 * K, top: 2 * K }}><TypePlate type={info.type} scale={K * 0.75} /></span>
+            </button>
+          )
+        })}
+        <DsText x={42} y={162} K={K} size={7} color="#181820">{cur.type} · {cur.category} · {cur.power ? `Power ${cur.power}` : 'no power'}</DsText>
+      </DsScreen>
+    </div>
+  )
+}
+
 // ---------------------------------------------------------------- summary (stats, nature, ability, moves)
 export function Summary({ mon, onChange, onBack }: { mon: Mon; onChange: (m: Mon) => void; onBack: () => void }) {
   const [pickFor, setPickFor] = useState<number | null>(null)
+  const [page, setPage] = useState<'info' | 'stats' | 'moves'>('stats')
   const [options, setOptions] = useState<string[]>([])
   useEffect(() => {
     void learnableMoves(mon.species, mon.level).then(setOptions)
   }, [mon.species, mon.level])
-  const nm = natureMods(mon.nature)
   const evTotal = STAT_IDS.reduce((a, s) => a + mon.evs[s], 0)
 
   return (
@@ -86,28 +142,21 @@ export function Summary({ mon, onChange, onBack }: { mon: Mon; onChange: (m: Mon
         </div>
       </div>
 
-      <div className="summary-info">
-        <div><span className="muted">Nature</span> <strong>{mon.nature}</strong>{nm.plus ? ` (+${STAT_NAMES[nm.plus]}, −${STAT_NAMES[nm.minus!]})` : ' (neutral)'}</div>
-        <div><span className="muted">Ability</span> <strong>{mon.ability}</strong></div>
-        <div><span className="muted">Held item</span> <strong>{mon.item || 'none'}</strong></div>
+      <div className="btn-row">
+        {(['info', 'stats', 'moves'] as const).map((p) => (
+          <button key={p} className={page === p ? 'primary' : ''} onClick={() => setPage(p)}>{p === 'info' ? 'Info' : p === 'stats' ? 'Stats' : 'Moves'}</button>
+        ))}
       </div>
+      {page === 'info' && <InfoScreen mon={mon} />}
+      {page === 'stats' && (
+        <>
+          <StatsScreen mon={mon} />
+          <StatBars mon={mon} />
+          <div className="muted">Total EVs {evTotal} / 510</div>
+        </>
+      )}
+      {page === 'moves' && <MovesScreen mon={mon} pickFor={pickFor} onPick={(i) => setPickFor(pickFor === i ? null : i)} />}
 
-      <StatsScreen mon={mon} />
-      <StatBars mon={mon} />
-      <div className="muted">Total EVs {evTotal} / 510</div>
-
-      <h3>Moves (tap one to swap it)</h3>
-      <div className="moves-list">
-        {mon.moves.map((mv, i) => {
-          const info = moveInfo(mv)
-          return (
-            <button key={mv + i} onClick={() => setPickFor(pickFor === i ? null : i)} style={{ boxShadow: `inset 4px 0 0 ${TYPE_COLOR[info.type as PType] ?? '#888'}` }}>
-              <span>{mv}</span>
-              <small style={{ display: 'flex', alignItems: 'center', gap: 6 }}><TypePlate type={info.type} scale={1.6} /><TypePlate type={info.category} scale={1.6} />{info.power || '—'} power · {info.pp} PP</small>
-            </button>
-          )
-        })}
-      </div>
       {pickFor !== null && (
         <div className="pick-move">
           <h3>Replace {mon.moves[pickFor]} with…</h3>
@@ -146,7 +195,7 @@ export function TeamPanel({ trainer, setTrainer, onClose }: PanelProps) {
   }
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="panel modal wide" onClick={(e) => e.stopPropagation()}>
+      <div className={mon && sel !== null ? 'panel modal wide' : ''} style={mon && sel !== null ? undefined : { background: '#0c0c10', padding: 8, borderRadius: 10, boxShadow: '0 8px 40px rgba(0,0,0,.6)' }} onClick={(e) => e.stopPropagation()}>
         {mon && sel !== null ? (
           <>
             <Summary mon={mon} onChange={(m) => setMon(sel, m)} onBack={() => setSel(null)} />
@@ -157,20 +206,8 @@ export function TeamPanel({ trainer, setTrainer, onClose }: PanelProps) {
           </>
         ) : (
           <>
-            <h2>Your team</h2>
-            <div className="mon-list">
-              {trainer.team.map((m, i) => (
-                <button key={m.uid} className={m.hp <= 0 ? 'fainted' : ''} onClick={() => setSel(i)}>
-                  <MonIcon species={m.species} shiny={m.shiny} />
-                  <div>
-                    <strong>{m.species}{m.shiny ? ' ★' : ''}</strong> <span className="muted">Lv {m.level}</span>
-                    <HpLine m={m} />
-                  </div>
-                </button>
-              ))}
-              {trainer.team.length === 0 && <span className="muted">No Pokémon yet.</span>}
-            </div>
-            <button onClick={onClose}>Close</button>
+            <PartyScreen team={trainer.team} onPick={setSel} onClose={onClose} />
+            {trainer.team.length === 0 && <span className="muted">No Pokémon yet.</span>}
           </>
         )}
       </div>
@@ -293,30 +330,38 @@ export function PcPanel({ trainer, setTrainer, onClose, onMessage }: PanelProps)
     if (trainer.team.length <= 1) { onMessage('You need at least one Pokémon on your team.'); return }
     setTrainer({ ...trainer, pc: [...trainer.pc, trainer.team[i]], team: trainer.team.filter((_, k) => k !== i) })
   }
+  const [box, setBox] = useState(0)
+  const K = Math.max(1, Math.min(3, Math.floor((window.innerHeight - 120) / 160), Math.floor((window.innerWidth - 260) / 168)))
+  const boxes = Math.max(1, Math.ceil((trainer.pc.length + 1) / 30))
+  const wall = useUiUrl(`screen:pc:${box % 24}`)
+  const first = box * 30
+  const slots = Array.from({ length: 30 }, (_, i) => trainer.pc[first + i] ?? null)
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="panel modal wide" onClick={(e) => e.stopPropagation()}>
-        <h2>PC</h2>
-        <h3>Team ({trainer.team.length}/6) — tap to send to the PC</h3>
-        <div className="mon-list">
+      <div onClick={(e) => e.stopPropagation()} style={{ background: '#0c0c10', padding: 10, borderRadius: 10, display: 'flex', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap', justifyContent: 'center', maxWidth: '96vw' }}>
+        {/* the box, on the game's own box wallpaper */}
+        <div style={{ position: 'relative', width: 168 * K, height: 160 * K, background: wall ? `url(${wall}) 0 0 / 100% 100% no-repeat` : '#2a3a2a', imageRendering: 'pixelated', borderRadius: 4 }}>
+          <button onClick={() => setBox((b) => (b + boxes - 1) % boxes)} style={{ position: 'absolute', left: 4 * K, top: 8 * K, width: 14 * K, height: 16 * K, border: 'none', background: 'rgba(0,0,0,.35)', color: '#fff', fontWeight: 700, cursor: 'pointer', fontSize: 9 * K }}>‹</button>
+          <button onClick={() => setBox((b) => (b + 1) % boxes)} style={{ position: 'absolute', left: 150 * K, top: 8 * K, width: 14 * K, height: 16 * K, border: 'none', background: 'rgba(0,0,0,.35)', color: '#fff', fontWeight: 700, cursor: 'pointer', fontSize: 9 * K }}>›</button>
+          <span style={{ position: 'absolute', left: 20 * K, top: 12 * K, width: 128 * K, textAlign: 'center', color: '#fff', fontWeight: 700, fontSize: 9 * K, lineHeight: 1, textShadow: '1px 1px 0 rgba(0,0,0,.7)' }}>BOX {box + 1}</span>
+          {slots.map((m, i) => (
+            <button key={i} disabled={!m} onClick={() => m && toTeam(first + i)} title={m ? `${m.species} Lv${m.level}` : ''} style={{ position: 'absolute', left: (8 + (i % 6) * 25) * K, top: (37 + Math.floor(i / 6) * 23) * K, width: 25 * K, height: 23 * K, border: 'none', background: 'transparent', padding: 0, cursor: m ? 'pointer' : 'default' }}>
+              {m && <MonIcon species={m.species} shiny={m.shiny} size={26 * K} />}
+            </button>
+          ))}
+        </div>
+        {/* your team */}
+        <div style={{ width: 150, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <strong style={{ color: '#fff' }}>Your team ({trainer.team.length}/6)</strong>
+          <span className="muted" style={{ fontSize: 12 }}>Tap a Pokémon to swap it between the team and the box.</span>
           {trainer.team.map((m, i) => (
-            <button key={m.uid} onClick={() => toPc(i)}>
-              <MonIcon species={m.species} shiny={m.shiny} />
-              <div><strong>{m.species}</strong> <span className="muted">Lv {m.level}</span></div>
+            <button key={m.uid} onClick={() => toPc(i)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: 4 }}>
+              <MonIcon species={m.species} shiny={m.shiny} size={32} />
+              <span style={{ fontSize: 13 }}><strong>{m.species}</strong><br /><small>Lv {m.level}</small></span>
             </button>
           ))}
+          <button onClick={onClose}>Close</button>
         </div>
-        <h3>PC ({trainer.pc.length}) — tap to add to your team</h3>
-        <div className="mon-list">
-          {trainer.pc.length === 0 && <span className="muted">Empty.</span>}
-          {trainer.pc.map((m, i) => (
-            <button key={m.uid} onClick={() => toTeam(i)}>
-              <MonIcon species={m.species} shiny={m.shiny} />
-              <div><strong>{m.species}</strong> <span className="muted">Lv {m.level}</span></div>
-            </button>
-          ))}
-        </div>
-        <button onClick={onClose}>Close</button>
       </div>
     </div>
   )

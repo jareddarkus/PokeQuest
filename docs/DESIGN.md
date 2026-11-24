@@ -200,3 +200,10 @@ Next ideas if this is picked up again: (1) the "!" emote for trainers spotting t
 - Done: the Bag is drawn on the game's own Bag backgrounds (`a/0/8/7`: screen maps 2 / 5 / 7 with tiles 0 / 3 / 6 and colours 1 / 4 / 8 = red / blue / dark red, one per pocket) and the Summary stats page on `a/0/7/7` (map 65, tiles 10, colours 1). `rom/screens.ts`, `ui/DsScreen.tsx`. Which pocket gets which colour is our choice. The row layout and the text on top are our own (the game lays them out in code).
 - Not done yet (art located, not used): PC box screens (`a/1/1/7`, `a/1/4/1`, `a/0/8/2`), text box frames (`a/0/0/5`), other Summary pages (maps 66, 69, 75 with tiles 12 and colours 3 in `a/0/7/7`: moves / info / ribbons pages), party screen (not in the lists; may be inside `a/0/7/x`), the item-type icons and buttons (`a/0/8/7` cells).
 - RomMeta.version 31.
+
+### Review round 6 (2026-11-24): party, summary pages, PC, message frames (all from the game file)
+- Party screen = `a/0/7/5` map 18 + tiles 12 + colours 6: seven slot panels (126 x 43), two columns, the right one 8 px lower (`rom/screens.ts` `PARTY_BOXES`, `ui/PartyScreen.tsx`). Which panel colour means what is our choice (blue = healthy, maroon = fainted, red-highlight = hover, dark = empty).
+- Summary: pages Info (`a/0/7/7` map 66), Stats (65), Moves (75), tiles 12 / 10, colours 3 / 1. Text and rows on top are ours. The Ribbons page (map 69) and other pages are not used.
+- PC: the 24 box wallpapers = `a/1/1/7` map 13 with tiles 14..37 and colours 38..61 (`screen:pc:<k>`, box n uses wallpaper n mod 24). The box grid (6 x 5), the banner text and the arrows are ours; the PC bottom-screen layout (`a/1/4/1`) is not used.
+- Message frames: `a/0/0/5` file 8 = nine tiles (3 x 3) of a window frame; colours 1 = dark (battle messages), 3 = white (dialogue toasts); drawn as a 9-slice border-image (`ui/DsFrame.tsx`). The scroll-shaped frame (file 6) and the "more text" arrow (file 11) are not used yet.
+- RomMeta.version 34.

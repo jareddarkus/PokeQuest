@@ -7,6 +7,7 @@ import {
 } from '../game/state'
 import ItemIcon from './ItemIcon'
 import { useUiUrl } from './CmdButton'
+import { useFrameStyle } from './DsFrame'
 import StatusIcon from './StatusIcon'
 import BattleBackdrop from './BattleBackdrop'
 import type { BattleLayout } from '../rom/battleScene'
@@ -98,6 +99,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, onEnd }:
   const setLayout = (l: BattleLayout) => { layoutRef.current = l; setLayoutState(l) }
   const fxCanvas = useRef<HTMLCanvasElement>(null)
   const fxRef = useRef<MoveFx | null>(null)
+  const textFrame = useFrameStyle('dark', 2)
   const environment = 'grass'
   const [ball, setBall] = useState<null | { shakes: number }>(null)
   const legendaryNames = useMemo(() => new Set(allSpecies().filter((s) => s.legendary).map((s) => s.name)), [])
@@ -428,7 +430,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, onEnd }:
         {me && <HpBox side={me} mine exp={teamRef.current.find((m) => m.uid === me.uid)?.exp} />}
       </div>
       <div className="battle-bottom">
-        <div className="panel battle-text">{text}</div>
+        <div className="panel battle-text" style={textFrame ?? undefined}>{text}</div>
 
         {mode === 'menu' && req && (
           <CommandScreen
