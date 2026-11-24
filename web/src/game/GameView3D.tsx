@@ -282,6 +282,8 @@ export default function GameView3D(props: Props) {
     }
 
     const removed = new Set<string>()
+    // items lying on the ground are in the way: characters walking around never step on them
+    const pickupAt = (x: number, y: number) => world.pickups.some((q) => q.x === x && q.y === y && !removed.has(q.id))
     const npcs: NpcRuntime[] = world.npcs.map((s) => {
       const look = randomLook(s.look)
       const sp = new THREE.Sprite(charMaterial(look, s.dir, 0))
@@ -289,7 +291,7 @@ export default function GameView3D(props: Props) {
       scene.add(sp)
       return { spec: s, x: s.x, y: s.y, fx: s.x, fy: s.y, dir: s.dir, moving: 0, fromX: s.x, fromY: s.y, timer: 1 + hash2(s.x, s.y, 3) * 3, defeated: false, frozen: false, look, sprite: sp }
     })
-    if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__pq = { npcs, me, world, group: built.group, pick: (nx: number, ny: number) => { const rc = new THREE.Raycaster(); rc.setFromCamera(new THREE.Vector2(nx, ny), camera); return rc.intersectObjects(built.group.children, true).slice(0, 4).map((h) => (h.object as THREE.Mesh).material as THREE.Material).map((m) => m.name) } } // developer test hook
+    if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__pq = { npcs, me, world, built, rayDown: (x: number, y: number, z: number) => { const maps = built.group.children.filter((c) => !c.userData.building); const rc = new THREE.Raycaster(); rc.set(new THREE.Vector3(x, y, z), new THREE.Vector3(0, -1, 0)); return rc.intersectObjects(maps, true).slice(0, 5).map((h) => [(h.object as THREE.Mesh).material instanceof THREE.Material ? ((h.object as THREE.Mesh).material as THREE.Material).name : '?', +h.point.y.toFixed(2)]) }, group: built.group, overlap: () => { const maps = built.group.children.filter((c) => !c.userData.building); const rc = new THREE.Raycaster(); return built.group.children.filter((c) => c.userData.building).map((c) => { const b = c.userData.building; rc.set(new THREE.Vector3(b.x, b.y + 4, b.z), new THREE.Vector3(0, -1, 0)); const hits = rc.intersectObjects(maps, true); return { m: b.model, pack: b.pack, x: b.x, z: b.z, y: b.y, top: hits.length ? +hits[0].point.y.toFixed(2) : null } }) }, pick: (nx: number, ny: number) => { const rc = new THREE.Raycaster(); rc.setFromCamera(new THREE.Vector2(nx, ny), camera); return rc.intersectObjects(built.group.children, true).slice(0, 4).map((h) => (h.object as THREE.Mesh).material as THREE.Material).map((m) => m.name) } } // developer test hook
     const otherSprites = new Map<string, { body: THREE.Sprite; label: THREE.Sprite; shadow: THREE.Mesh }>()
     let paused = false
     const held = new Set<string>()
@@ -434,7 +436,7 @@ export default function GameView3D(props: Props) {
                 const ny = n.y + DY[d]
                 n.dir = d
                 const homeOk = Math.abs(nx - n.spec.x) <= 7 && Math.abs(ny - n.spec.y) <= 7
-                if (homeOk && walkableFor(world, nx, ny, elapsed) && tileAt(world, nx, ny) !== T.GymDoor && !(nx === me.x && ny === me.y) && !npcAt(nx, ny)) {
+                if (homeOk && walkableFor(world, nx, ny, elapsed) && tileAt(world, nx, ny) !== T.GymDoor && !(nx === me.x && ny === me.y) && !npcAt(nx, ny) && !pickupAt(nx, ny)) {
                   n.fromX = n.x; n.fromY = n.y; n.x = nx; n.y = ny; n.moving = 0.001
                 }
                 n.timer = b === 'run' ? 0.05 + Math.random() * 0.4 : 0.4 + Math.random() * 1.6

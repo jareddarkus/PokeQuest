@@ -94,8 +94,12 @@ function addBuildings(data: WorldData, group: THREE.Group, uniforms: ClipUniform
         const model = readModels(pk.models[it.model])[0]
         if (!model) continue
         const obj = buildModelObject(model, pk.tex, uniforms)
-        obj.position.set(ox + it.x, it.y, oz + it.z)
+        // vending machines and bins (building numbers 19 and 20 of the shared set) stand one tile further south than the table says:
+        // the game's tile data puts them on the row in front of the flower bed, not inside it
+        const dz = it.model === 19 || it.model === 20 ? 1 : 0
+        obj.position.set(ox + it.x, it.y, oz + it.z + dz)
         obj.rotation.y = (it.rot / 65536) * Math.PI * 2
+        obj.userData.building = { model: it.model, pack: cb.pack, x: ox + it.x, y: it.y, z: oz + it.z }
         group.add(obj)
       } catch { /* skip a model we cannot read */ }
     }
