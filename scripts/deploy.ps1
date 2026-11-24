@@ -16,6 +16,8 @@ git init -q -b gh-pages
 git add -A
 git -c user.name="PokeQuest dev" -c user.email="dev@pokequest.invalid" commit -q -m "Deploy website"
 git push -q -f $remote gh-pages
+$pushed = $LASTEXITCODE
 Pop-Location
+if ($pushed -ne 0) { Remove-Item $tmp -Recurse -Force; throw "push failed" }
 Remove-Item $tmp -Recurse -Force
 Write-Host "Deployed. https://jareddarkus.github.io/PokeQuest/"
