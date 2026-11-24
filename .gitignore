@@ -1,0 +1,8 @@
+﻿# Never commit game files (ROMs, extracted Nintendo assets) or secrets
+*.nds
+*.zip
+*.7z
+*.rom
+extracted/
+.env
+.env.*

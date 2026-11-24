@@ -1,9 +1,9 @@
-# Wildring
+﻿# PokeQuest
 
-A private, friends-only Pokémon-style battle royale for the browser.
+A private, friends-only PokÃ©mon-style battle royale for the browser.
 
 - `web/` - the website (React + Vite + TypeScript)
-- Supabase project `wildring` (eu-central-1, ref `uqthugajmqezxyamfsgn`): accounts, saved monsters, bag, money
+- Supabase project `wildring` (the display name could not be changed with the tools used; rename it in the dashboard if wanted) (eu-central-1, ref `uqthugajmqezxyamfsgn`): accounts, saved monsters, bag, money
 - Login = username + password (the Edge Function `signup` creates the account with an internal made-up email)
 
 ## Rules for this project
@@ -21,6 +21,6 @@ npm run dev
 `web/.env.local` holds the Supabase URL and the publishable key (it is not committed).
 
 ## Next steps
-1. Walkable top-down map  2. Live player positions + speed check  3. Battles (Pokémon Showdown engine)
-4. Lobby + shrinking ring (outside the ring Pokémon lose HP every second, computed on the server)
+1. Walkable top-down map  2. Live player positions + speed check  3. Battles (PokÃ©mon Showdown engine)
+4. Lobby + shrinking ring (outside the ring PokÃ©mon lose HP every second, computed on the server)
 5. Server-side move validation  6. Optional ROM import into browser storage

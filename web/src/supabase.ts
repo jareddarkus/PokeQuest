@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js'
+﻿import { createClient } from '@supabase/supabase-js'
 
 const url = import.meta.env.VITE_SUPABASE_URL as string
 const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string
@@ -6,7 +6,7 @@ const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string
 export const supabase = createClient(url, key)
 
 // Players log in with a username + password. Behind the scenes that is an account with a made-up email.
-export const emailFor = (username: string) => `${username.trim().toLowerCase()}@players.wildring.app`
+export const emailFor = (username: string) => `${username.trim().toLowerCase()}@players.pokequest.app`
 
 export async function signUp(username: string, password: string): Promise<string | null> {
   const res = await fetch(`${url}/functions/v1/signup`, {

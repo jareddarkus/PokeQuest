@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase, signIn, signUp } from './supabase'
 import './App.css'
@@ -23,7 +23,7 @@ function Login() {
 
   return (
     <form className="card" onSubmit={submit}>
-      <h1>Wildring</h1>
+      <h1>PokeQuest</h1>
       <p className="sub">{mode === 'login' ? 'Log in to your trainer' : 'Create your trainer'}</p>
       <input placeholder="Username" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" />
       <input
@@ -56,7 +56,7 @@ function Home({ session }: { session: Session }) {
 
   return (
     <div className="card">
-      <h1>Wildring</h1>
+      <h1>PokeQuest</h1>
       <p className="sub" id="welcome">{profile ? `Welcome, ${profile.username}! Money: ${profile.money}` : 'Loading your trainer...'}</p>
       <p>Logged in. The map and battles come next.</p>
       <button onClick={() => supabase.auth.signOut()}>Log out</button>
