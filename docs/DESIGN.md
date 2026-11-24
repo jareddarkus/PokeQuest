@@ -99,3 +99,7 @@ Private, friends-only web game. Main menu: **"PokÃ©mon White 2 Together"** (sh
 - `rom/overworld.ts` rebuilds each into a 12-picture strip (down, left, right, up x stand/step/step), stored as `ow:<file>` (+ `ow:list`) in IndexedDB; `game/ow.ts` keeps them in memory; `Look.sprite` = file number. ~270 characters imported. Boy = 7, girl = 10.
 - Customizer now shows a grid of the real characters instead of the drawn colours (fallback to the drawn one when no game file). NPCs pick a random real character.
 - Not done: the bike/surf/fishing poses of the player; ROM import VERSION 12.
+
+### Pokémon menu icons (DONE)
+- `a/0/0/7`: file 0 = 3 palettes (16 colours each), file 8+2N = icon of Pokémon N (1024 bytes = 2 pictures of 32x32, 4bpp, 4x4 tiles; we use picture 1). The palette per species is NOT stored here, so `rom/icons.ts` picks the one whose lively colours are closest to the Pokémon's big front picture. Spot check of #1-150: looks right (a few may still be a different shade). Used by `MonIcon` in Team / Bag / PC lists. RomMeta.version 13.
+- Searched for the battle command buttons (Fight/Bag/Pokémon/Run), text frames and bag screens: NOT in a/0/8/2. The ds-pokemon-hacking sprite-location pages have no rows for them. Screen-map survey (RCSN) of many archives was inconclusive: graphics/palette/screen pairing is not stored together, so each needs a hand-made pairing. Still open.

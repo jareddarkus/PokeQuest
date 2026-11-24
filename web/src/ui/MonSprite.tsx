@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { dexNum, spriteUrl } from '../data/dex'
 import { MAX_ROM_DEX } from '../rom/sprites'
-import { romSpriteUrl } from '../rom/store'
+import { romIconUrl, romSpriteUrl } from '../rom/store'
 import AnimSprite from './AnimSprite'
 
 interface Props {
@@ -59,5 +59,15 @@ export default function MonSprite({ species, back, shiny, scale = 2, className, 
 
 /** A small still picture for lists. */
 export function MonIcon({ species, shiny }: { species: string; shiny?: boolean }) {
+  const dex = dexNum(species)
+  const inRom = dex > 0 && dex <= MAX_ROM_DEX
+  const [url, setUrl] = useState<string | null>(null)
+  useEffect(() => {
+    let live = true
+    if (inRom) void romIconUrl(dex).then((u) => live && setUrl(u))
+    return () => { live = false }
+  }, [dex, inRom])
+  // the game's own menu icon (32 x 32); newer Pokémon and missing icons use the small big picture instead
+  if (inRom && url) return <img src={url} alt={species} draggable={false} style={{ width: 48, height: 48, imageRendering: 'pixelated', flex: 'none' }} />
   return <MonSprite species={species} shiny={shiny} scale={0.9} className="mon-icon" />
 }

@@ -9,6 +9,7 @@ import { UI_NARC, decodeBattleUi, decodePlates } from './plates'
 import { TRAINER_NARCS, extractColors, snapAll, type RomColors } from './colors'
 import { CLOTH_COLORS, EYE_COLORS, HAIR_COLORS, SKIN_TONES } from '../game/character'
 import { OVERWORLD_NARC, decodeOverworld } from './overworld'
+import { ICON_NARC, decodeIcons } from './icons'
 import { owList, registerOw } from '../game/ow'
 
 const DB = 'pokequest-rom'
@@ -67,7 +68,7 @@ export async function loadOverworldSprites(): Promise<void> {
   } catch { /* the game falls back to the drawn characters */ }
 }
 
-const VERSION = 12 // 12 = ... + walking characters;  11 = ... + the game's own trainer colours
+const VERSION = 13 // 13 = ... + menu icons;  12 = ... + walking characters;  11 = ... + the game's own trainer colours
 
 let colorsApplied = false
 /** Makes the colour choices of the character maker use the colours the game really uses (snaps each to the nearest real one). */
@@ -124,6 +125,8 @@ export async function importRom(file: RomSource, onProgress: (text: string, frac
   const uiNarc = await nds.get(UI_NARC)
   await decodePlates(uiNarc, (name, b) => put(`plate:${name}`, b))
   await decodeBattleUi(uiNarc, (name, b) => put(`ui:${name}`, b))
+  onProgress('Reading the menu icons…', 0.981)
+  await decodeIcons(parseNarc(await nds.get(ICON_NARC)), async (dex) => (await get<Blob>(`sprite:${spriteKey(dex, false, false)}`)) ?? null, (dex, b) => put(`icon:${dex}`, b))
   onProgress('Reading the trainer colours…', 0.982)
   const trainerNarcs: Uint8Array[] = []
   for (const p of TRAINER_NARCS) { try { trainerNarcs.push(await nds.get(p)) } catch { /* not in this version */ } }
@@ -176,6 +179,21 @@ export async function clearRom(): Promise<void> {
 /** A picture address for an item icon from the player's game file (item number = the game's item id). */
 export async function romItemUrl(id: number): Promise<string | null> {
   const key = `item:${id}`
+  const hit = urlCache.get(key)
+  if (hit) return hit
+  try {
+    const blob = await get<Blob>(key)
+    if (!blob) return null
+    const url = URL.createObjectURL(blob)
+    urlCache.set(key, url)
+    return url
+  } catch {
+    return null
+  }
+}
+/** A picture address for the small menu icon of a Pokémon (by Pokédex number), or null. */
+export async function romIconUrl(dex: number): Promise<string | null> {
+  const key = `icon:${dex}`
   const hit = urlCache.get(key)
   if (hit) return hit
   try {

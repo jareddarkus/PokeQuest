@@ -9,7 +9,7 @@ import {
 import { TYPE_COLOR, type PType } from '../game/world'
 import HpBar from './HpBar'
 import ItemIcon from './ItemIcon'
-import MonSprite from './MonSprite'
+import MonSprite, { MonIcon } from './MonSprite'
 import StatBars from './StatBars'
 import TypePlate from './TypePlate'
 
@@ -134,7 +134,7 @@ export function TeamPanel({ trainer, setTrainer, onClose }: PanelProps) {
             <div className="mon-list">
               {trainer.team.map((m, i) => (
                 <button key={m.uid} className={m.hp <= 0 ? 'fainted' : ''} onClick={() => setSel(i)}>
-                  <MonSprite species={m.species} shiny={m.shiny} scale={0.9} className="mon-icon" />
+                  <MonIcon species={m.species} shiny={m.shiny} />
                   <div>
                     <strong>{m.species}{m.shiny ? ' ★' : ''}</strong> <span className="muted">Lv {m.level}</span>
                     <HpLine m={m} />
@@ -218,7 +218,7 @@ export function BagPanel({ trainer, setTrainer, onClose, onMessage }: PanelProps
             <div className="mon-list">
               {trainer.team.map((m, i) => (
                 <button key={m.uid} className={m.hp <= 0 ? 'fainted' : ''} onClick={() => apply(i)}>
-                  <MonSprite species={m.species} shiny={m.shiny} scale={0.9} className="mon-icon" />
+                  <MonIcon species={m.species} shiny={m.shiny} />
                   <div><strong>{m.species}</strong> <span className="muted">Lv {m.level}{m.item ? ` · ${m.item}` : ''}</span><HpLine m={m} /></div>
                 </button>
               ))}
@@ -254,7 +254,7 @@ export function PcPanel({ trainer, setTrainer, onClose, onMessage }: PanelProps)
         <div className="mon-list">
           {trainer.team.map((m, i) => (
             <button key={m.uid} onClick={() => toPc(i)}>
-              <MonSprite species={m.species} shiny={m.shiny} scale={0.9} className="mon-icon" />
+              <MonIcon species={m.species} shiny={m.shiny} />
               <div><strong>{m.species}</strong> <span className="muted">Lv {m.level}</span></div>
             </button>
           ))}
@@ -264,7 +264,7 @@ export function PcPanel({ trainer, setTrainer, onClose, onMessage }: PanelProps)
           {trainer.pc.length === 0 && <span className="muted">Empty.</span>}
           {trainer.pc.map((m, i) => (
             <button key={m.uid} onClick={() => toTeam(i)}>
-              <MonSprite species={m.species} shiny={m.shiny} scale={0.9} className="mon-icon" />
+              <MonIcon species={m.species} shiny={m.shiny} />
               <div><strong>{m.species}</strong> <span className="muted">Lv {m.level}</span></div>
             </button>
           ))}
