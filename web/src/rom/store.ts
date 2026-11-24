@@ -6,6 +6,8 @@ import { WORLD_WINDOW, extractWorldData, type WorldData } from './worldData'
 import { ITEM_ICON_NARC, decodeItemIcons } from './items'
 import { BATTLE_NARC } from './battleScene'
 import { UI_NARC, decodeBattleUi, decodePlates } from './plates'
+import { TRAINER_NARCS, extractColors, snapAll, type RomColors } from './colors'
+import { CLOTH_COLORS, EYE_COLORS, HAIR_COLORS, SKIN_TONES } from '../game/character'
 
 const DB = 'pokequest-rom'
 const STORE = 'assets'
@@ -43,7 +45,23 @@ async function get<T>(key: string): Promise<T | undefined> {
 }
 
 export interface RomMeta { title: string; gameCode: string; sprites: number; version: number }
-const VERSION = 8 // 8 = ... + HP bar and status icons
+const VERSION = 11 // 11 = ... + the game's own trainer colours
+
+let colorsApplied = false
+/** Makes the colour choices of the character maker use the colours the game really uses (snaps each to the nearest real one). */
+export async function applyRomColors(): Promise<void> {
+  if (colorsApplied) return
+  try {
+    const rc = await get<RomColors>('colors')
+    if (!rc || rc.skin.length < 4 || rc.pool.length < 20) return
+    const swap = (arr: string[], from: string[]) => { arr.splice(0, arr.length, ...snapAll(arr, from)) }
+    swap(SKIN_TONES, rc.skin)
+    swap(HAIR_COLORS, rc.pool)
+    swap(EYE_COLORS, rc.pool)
+    swap(CLOTH_COLORS, rc.pool)
+    colorsApplied = true
+  } catch { /* keep the built-in colours */ }
+}
 
 export async function loadWorldData(): Promise<WorldData | undefined> {
   try {
@@ -56,6 +74,7 @@ export async function loadWorldData(): Promise<WorldData | undefined> {
 export async function getRomMeta(): Promise<RomMeta | null> {
   try {
     const m = await get<RomMeta>(META_KEY)
+    if (m && m.version === VERSION) await applyRomColors()
     return m && m.version === VERSION ? m : null
   } catch {
     return null
@@ -83,6 +102,10 @@ export async function importRom(file: RomSource, onProgress: (text: string, frac
   const uiNarc = await nds.get(UI_NARC)
   await decodePlates(uiNarc, (name, b) => put(`plate:${name}`, b))
   await decodeBattleUi(uiNarc, (name, b) => put(`ui:${name}`, b))
+  onProgress('Reading the trainer colours…', 0.982)
+  const trainerNarcs: Uint8Array[] = []
+  for (const p of TRAINER_NARCS) { try { trainerNarcs.push(await nds.get(p)) } catch { /* not in this version */ } }
+  await put('colors', extractColors(trainerNarcs))
   onProgress('Reading the island map…', 0.985)
   await put('world', await extractWorldData(nds, WORLD_WINDOW))
   const meta: RomMeta = { title: nds.header.title, gameCode: code, sprites: count, version: VERSION }

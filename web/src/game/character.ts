@@ -40,9 +40,10 @@ export function randomLook(seed: number): Look {
     return (s >>> 8) % n
   }
   return {
-    skin: SKIN_TONES[r(SKIN_TONES.length)], hairStyle: r(5), hair: HAIR_COLORS[r(HAIR_COLORS.length)],
-    eyes: EYE_COLORS[r(EYE_COLORS.length)], top: CLOTH_COLORS[r(CLOTH_COLORS.length)], topStyle: r(3),
-    bottom: CLOTH_COLORS[r(CLOTH_COLORS.length)], bottomStyle: r(3), shoes: CLOTH_COLORS[r(CLOTH_COLORS.length)],
+    // people in the game mostly have natural hair/eye colours, dark trousers and dark shoes
+    skin: SKIN_TONES[r(SKIN_TONES.length)], hairStyle: r(5), hair: HAIR_COLORS[r(6)],
+    eyes: EYE_COLORS[r(4)], top: CLOTH_COLORS[r(CLOTH_COLORS.length)], topStyle: r(3),
+    bottom: CLOTH_COLORS[[5, 9, 10, 11][r(4)]], bottomStyle: r(3), shoes: CLOTH_COLORS[[9, 10, 11][r(3)]],
     hat: r(4) === 0 ? 1 + r(3) : 0, hatColor: CLOTH_COLORS[r(CLOTH_COLORS.length)],
   }
 }

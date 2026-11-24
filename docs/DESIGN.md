@@ -87,3 +87,9 @@ Private, friends-only web game. Main menu: **"PokÃ©mon White 2 Together"** (sh
 
 - 2026-11-24 (HP bar + status icons DONE): a/0/8/2 file 2 = 9 tiles (72x8): "HP" label + dark track (fill drawn by the game, 48 px wide starting at x=16, rows 3-4 inside the track); colours come from palette file 0 sub 0 (green 00ff4a/00bd21, yellow ffad00/a58429, red ff4273/a54a5a; game switches at 50% / 20%). Status icons: file 12 = 8 rows of 32x8 (PKRS, PAR, FRZ, SLP, PSN, BRN, FNT, TOX) with palette file 11 (standard colours). Components `HpBar`, `StatusIcon`; battle engine emits 'status' events. RomMeta.version 8.
 - NOT found yet: the command buttons (Fight/Bag/Pokémon/Run), text box frames, bag/menu screens, trainer battle intro art, PC/box UI. Trainer class sprites look like a/0/4/0 (files 16..31, plain tiled 4bpp, one per class, not all classes).
+
+### Colour fix for characters (DONE)
+- `web/src/rom/colors.ts` reads every trainer palette in the player's game file (a/0/7/1 = 188 palettes, a/0/4/0 = 16), counts the colours the game really uses and splits them into skin tones and everything else (stored under IndexedDB key `colors`, ROM import VERSION 11).
+- At app start `applyRomColors()` (store.ts) snaps the character maker's skin / hair / eye / clothes swatches to the nearest real colour, so characters are drawn in the game's own colours. NPC outfits use natural hair and eye colours and dark trousers/shoes.
+- Real skin ramp found: #dea57b (main) / #bd7b63 (shade) / #d6a57b / #efdec6; light #ffd6bd.
+- Next: real overworld NPC/player sprites from the game file (replace the drawn placeholders).
