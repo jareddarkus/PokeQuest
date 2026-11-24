@@ -114,3 +114,15 @@ Private, friends-only web game. Main menu: **"PokÃ©mon White 2 Together"** (sh
 - `a/0/7/0` (43 files): 0/1/2 = light/dark/highlight palettes (256 colours each, we use the first 16-colour group), 3 = tile graphics, screen maps 16 = cream/grey grid background (pal 0/1/2), 18/19/20 = six dark "folder tab" button slabs (123x~38, pairs of normal / lighter outline), files 5-14 = 32x32 menu icons: 5 speech bubble, 6 Pokédex, 7 Bag, 8 (unknown, black blob), 9 Poké Ball (Pokémon), 10 / 13 / 14 other devices, 11 exit door, 12 Trainer Card; files 21-42 = their cells/animations (not used).
 - `rom/menuUi.ts` stores `ui:menu:slab` and `ui:menu:icon5..14`; `ui/MenuButton.tsx` draws the top-right HUD buttons (Team, Bag, PC, Settings, Menu) as these slabs with icons. Icon choice for PC (Pokédex) and Menu (Trainer Card) is my guess at what fits; Settings has no icon (none identified). RomMeta.version 16.
 - STILL NOT FOUND: text-box / message window frame, bag screen, party screen, summary screen, PC box art. a/0/1/1 files 380-419 (2084-byte screen maps) are only empty button outlines; a/1/0/0 looked like text/font data. These need a hand-made search of more archives.
+
+### Search for the remaining menu screens (2026-11-24, result: not found, but a map of what exists)
+Method: scanned every archive a/0..2/x/y that holds screen maps (RCSN), paired each with the nearest graphics + palette files that have enough tiles, rendered all 579 candidates and kept the ones that looked like clean pictures (contact sheets in the scratchpad). Pairing is still a guess, so some real screens were probably missed.
+NOT FOUND: the plain text-box / message-window frame, the Bag screen, the party (Pokémon list) screen, the summary screen, the PC box art. Possibly these are drawn from tiles stored in the program file (arm9) rather than in the archives.
+FOUND (not used yet):
+- a/0/8/3: 27 route-sign shields (teal, numbers 1-23, plus city/other signs), 32x32, 4bpp, palette = nearest RLCN before each file.
+- a/0/7/7: ~45 medals (32x32 each).
+- a/1/7/1: overworld emote bubbles (files 7-18: ..., "!" at 15, "?", hearts, music note ...), 32x32 4bpp - the "!" is what the game shows when a trainer spots you.
+- a/0/5/4: move-type plates in Japanese (not useful).
+- a/0/9/8: four dark hex menu rows with icons (Poké Ball, gear, pink, blue) = a list-row style (screens 5-8 with gfx 0 / pal 2).
+- a/2/0/3: Unova town map and Battle Subway map; a/2/9/7: wifi / Dream World picture screens; a/0/3/9: trainer card (28 palettes = card colours, screen 38 + gfx 28 = a strip of 8 trainer mugshots); a/0/1/1 files 380-419: empty button outlines.
+Next ideas if this is picked up again: (1) the "!" emote for trainers spotting the player (cheap, visible in play); (2) the list-row style of a/0/9/8; (3) pair the trainer-card parts by hand.
