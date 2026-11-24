@@ -269,3 +269,16 @@ button.big small { opacity: .7; font-size: .75rem; }
 .fx-canvas { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 3; pointer-events: none; }
 .stage-cam { position: absolute; inset: 0; transform-origin: 50% 62%; transition: transform .5s cubic-bezier(.2,.7,.2,1); }
 .stage-cam.zoom { transform: scale(1.16); }
+
+/* party bar: dragging to swap, the lead (follower) place */
+.party-slot { user-select: none; -webkit-user-select: none; cursor: grab; }
+.party-slot.lifted { opacity: .35; }
+.party-slot.drop { outline: 2px solid #ffd84a; outline-offset: -2px; background: rgba(255, 216, 74, .18); }
+.party-slot.lead { box-shadow: inset 3px 0 0 #ffd84a; }
+.party-ghost { position: fixed; z-index: 90; pointer-events: none; opacity: .9; filter: drop-shadow(0 4px 6px rgba(0,0,0,.5)); }
+
+/* HP boxes made from the game's own pieces */
+.hp2 { position: absolute; image-rendering: pixelated; pointer-events: none; }
+.foe-zone .hp2 { left: 8px; top: 10px; }
+.me-zone .hp2 { right: 8px; bottom: calc(var(--menu-h, 288px) + 74px); }
+@media (min-width: 1000px) { .me-zone .hp2 { bottom: 14px; right: 14px; } }

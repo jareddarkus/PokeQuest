@@ -8,6 +8,10 @@ import { animatedTextures } from '../rom/mapModel'
 import { valueAt } from '../rom/texanim'
 import { safeTileFor, type GameEvents, type GameHandle, type OtherPlayer } from './GameView'
 import { hash2 } from './rng'
+import { dexNum } from '../data/dex'
+import { MAX_ROM_DEX } from '../rom/sprites'
+import { romSpriteUrl } from '../rom/store'
+import { hdHeightFactor, loadHdSprite } from '../ui/hdSprite'
 import type { Settings } from './settings'
 import {
   DX, DY, RING_INNER, SIZE, T, TYPE_COLOR, collapseRadius, dist, isWalkable, tileAt, type Dir, type NpcSpec, type World,
@@ -25,6 +29,8 @@ interface Props {
   events: GameEvents
   handleRef: React.MutableRefObject<GameHandle | null>
   paused: boolean
+  /** the first Pokémon of your team walks behind you */
+  follower?: { species: string; shiny: boolean } | null
 }
 
 const WALK_SECONDS = 16 / 60 // one tile = 16 pictures at 60 a second when walking (like the DS games)
@@ -83,7 +89,7 @@ const lift = (sp: THREE.Sprite) => (sp.material.userData.real ? 0.2 : 0)
  * grass in front hides too much of it). Sliding the card towards the camera along the line of sight changes nothing on the screen
  * (we make it a little smaller to compensate) but puts it in front of the wall.
  */
-const PUSH = 0.9
+const PUSH = 1.4
 const _v = new THREE.Vector3()
 function place(sp: THREE.Sprite, camera: THREE.Camera, x: number, y: number, z: number) {
   _v.set(x, y, z)
@@ -289,6 +295,49 @@ export default function GameView3D(props: Props) {
     const myShadow = makeShadow(scene)
     const npcShadows = new Map<NpcRuntime, THREE.Mesh>()
 
+    // the follower: the first Pokémon of the team walks one tile behind you (it steps onto the tile you just left)
+    const fol = { x: me.x, y: me.y, fromX: me.x, fromY: me.y, t: 1, stepSec: WALK_SECONDS, key: '', h: 1, loading: false, sprite: new THREE.Sprite(new THREE.SpriteMaterial({ transparent: true, alphaTest: 0.1, depthWrite: false })), shadow: makeShadow(scene, 0.8) }
+    fol.sprite.visible = false
+    fol.sprite.center.set(0.5, 0)
+    fol.sprite.renderOrder = 3
+    scene.add(fol.sprite)
+    const loadFollower = (species: string, shiny: boolean) => {
+      const key = `${species}|${shiny}`
+      fol.key = key
+      fol.sprite.visible = false
+      fol.sprite.material.map = null
+      fol.sprite.material.needsUpdate = true
+      const dx = dexNum(species)
+      const apply = (img: HTMLImageElement, height: (fraction: number) => number) => {
+        if (fol.key !== key) return
+        // trim the see-through border so the Pokémon stands on the ground
+        const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight
+        const cx = c.getContext('2d', { willReadFrequently: true })!
+        cx.drawImage(img, 0, 0)
+        const d = cx.getImageData(0, 0, c.width, c.height).data
+        let x0 = c.width, y0 = c.height, x1 = -1, y1 = -1
+        for (let y = 0; y < c.height; y++) for (let x = 0; x < c.width; x++) if (d[(y * c.width + x) * 4 + 3] > 40) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y }
+        if (x1 < 0) return
+        const t = document.createElement('canvas'); t.width = x1 - x0 + 1; t.height = y1 - y0 + 1
+        t.getContext('2d')!.drawImage(c, x0, y0, t.width, t.height, 0, 0, t.width, t.height)
+        const tex = new THREE.CanvasTexture(t)
+        tex.magFilter = THREE.NearestFilter; tex.minFilter = THREE.NearestFilter; tex.colorSpace = THREE.SRGBColorSpace
+        fol.sprite.material.map = tex
+        fol.sprite.material.needsUpdate = true
+        fol.h = Math.max(0.5, Math.min(1.7, height(t.height / c.height)))
+        fol.sprite.userData.ratio = t.width / t.height
+        fol.sprite.visible = true
+      }
+      const img = new Image()
+      img.crossOrigin = 'anonymous'
+      if (dx > 0 && dx <= MAX_ROM_DEX) {
+        // from the game file: the size on screen follows the size of the Pokémon in its 96 x 96 picture
+        void romSpriteUrl(dx, false, shiny).then((u) => { if (!u) return; img.onload = () => apply(img, (f) => f * 1.9); img.src = u })
+      } else {
+        void loadHdSprite(dx).then((h) => { if (!h) return; img.onload = () => apply(img, () => Math.min(1.5, hdHeightFactor(species) * 1.5)); img.src = h.url })
+      }
+    }
+
     let alert: { n: NpcRuntime; t: number } | null = null
     let bubble: THREE.Sprite | null = null
     const em = owEmote(15)
@@ -322,7 +371,7 @@ export default function GameView3D(props: Props) {
     const held = new Set<string>()
 
     const handle: GameHandle = {
-      teleport: (x, y) => { me.x = x; me.y = y; me.fromX = x; me.fromY = y; me.t = 1 },
+      teleport: (x, y) => { me.x = x; me.y = y; me.fromX = x; me.fromY = y; me.t = 1; fol.x = x; fol.y = y; fol.fromX = x; fol.fromY = y; fol.t = 1 },
       getPos: () => ({ x: me.x, y: me.y, dir: me.dir }),
       removePickup: (id) => { removed.add(id); const s = pickupSprites.get(id); if (s) s.visible = false },
       defeatNpc: (id) => { const n = npcs.find((q) => q.spec.id === id); if (n) n.defeated = true },
@@ -403,6 +452,12 @@ export default function GameView3D(props: Props) {
         }
         return
       }
+      // the follower steps onto the tile you leave (from wherever it is right now)
+      fol.fromX = fol.x + (fol.fromX - fol.x) * (1 - fol.t)
+      fol.fromY = fol.y + (fol.fromY - fol.y) * (1 - fol.t)
+      fol.x = me.x
+      fol.y = me.y
+      fol.t = 0
       // walking onto the gym door tile starts the challenge too
       me.fromX = me.x
       me.fromY = me.y
@@ -525,6 +580,23 @@ export default function GameView3D(props: Props) {
       fit(mySprite)
       place(mySprite, camera, px + 0.5, ph + lift(mySprite), py + 0.5)
       myShadow.position.set(px + 0.5, ph + 0.03, py + 0.5)
+      // the follower
+      const fs = p.follower
+      if (fs && `${fs.species}|${fs.shiny}` !== fol.key && !fol.loading) { fol.loading = true; loadFollower(fs.species, fs.shiny); fol.loading = false }
+      if (!fs) { fol.sprite.visible = false; fol.key = '' }
+      fol.stepSec = me.stepSec
+      if (fol.t < 1) fol.t = Math.min(1, fol.t + dt / fol.stepSec)
+      fol.sprite.visible = !!fs && !!fol.sprite.material.map && fol.key !== ''
+      fol.shadow.visible = fol.sprite.visible
+      if (fol.sprite.visible) {
+        const fx = fol.fromX + (fol.x - fol.fromX) * fol.t
+        const fy = fol.fromY + (fol.y - fol.fromY) * fol.t
+        const fh = heightAt(fx + 0.5, fy + 0.5)
+        const hop = fol.t < 1 ? Math.abs(Math.sin(fol.t * Math.PI)) * 0.12 : 0
+        fol.sprite.scale.set(fol.h * (fol.sprite.userData.ratio ?? 1), fol.h, 1)
+        place(fol.sprite, camera, fx + 0.5, fh + 0.05 + hop, fy + 0.5)
+        fol.shadow.position.set(fx + 0.5, fh + 0.03, fy + 0.5)
+      }
       const fr = Math.floor(now / (1000 / 30)) // water pictures: 30 a second (a calm pace; the exact speed of the original is not known)
       for (const a of animatedTextures) a.tex.offset.set(valueAt(a.anim.moveS, fr), valueAt(a.anim.moveT, fr)) // moving water
       for (const n of npcs) {

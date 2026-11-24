@@ -275,7 +275,8 @@ export function buildAnimatedSprite(files: Uint8Array[], base: number, front: bo
           if (!anim) return null
           const f0 = anim.frames[0]
           const cell = cellOf(f0.idx)
-          const same = parts.find((p) => anims[p.node.anim]?.frames[0].idx === f0.idx)
+          // the same part of the first pose: the one with the same animation, else the first one that starts with the same picture
+          const same = parts.find((p) => p.node.anim === node.anim) ?? parts.find((p) => anims[p.node.anim]?.frames[0].idx === f0.idx)
           const rest: [number, number] = same ? [same.rest[0] + (node.x - same.node.x), same.rest[1] + (node.y - same.node.y)] : [49 + node.x, 71 + node.y]
           return { cell, anim, node, rest }
         }).filter((p): p is PartInfo => p !== null)

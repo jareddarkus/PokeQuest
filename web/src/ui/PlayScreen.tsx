@@ -225,6 +225,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
         events={events}
         handleRef={handleRef}
         paused={panel !== null || battle !== null || waiting}
+        follower={trainer.team[0] && trainer.team[0].hp > 0 ? { species: trainer.team[0].species, shiny: !!trainer.team[0].shiny } : null}
       />
 
       <div className="hud-top-left panel">
@@ -254,7 +255,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
         <MenuButton icon={9} label="Menu" badge={menuOpen ? 0 : chat.unread} onClick={() => setMenuOpen((o) => !o)} />
       </div>
 
-      <PartyBar team={trainer.team} onOpen={() => setPanel('team')} />
+      <PartyBar team={trainer.team} onOpen={() => setPanel('team')} onReorder={(a, b) => { const team = [...trainerRef.current.team]; if (a === b || !team[a] || !team[b]) return; [team[a], team[b]] = [team[b], team[a]]; setTrainer({ ...trainerRef.current, team }) }} />
 
       {waiting && <div className="match-wait panel"><strong>Get ready!</strong><span>The match begins in {Math.max(0, Math.ceil((t0 - now) / 1000))} seconds. Everybody is picking a starter…</span></div>}
 

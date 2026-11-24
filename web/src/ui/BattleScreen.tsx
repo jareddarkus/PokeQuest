@@ -6,7 +6,7 @@ import {
   addEvs, catchChance, evYield, evolve, expGain, gainExp, healMon, levelEvolution, rollCatch, useItemFromBag, type Trainer,
 } from '../game/state'
 import ItemIcon from './ItemIcon'
-import HpBar from './HpBar'
+import { useUiUrl } from './CmdButton'
 import StatusIcon from './StatusIcon'
 import BattleBackdrop from './BattleBackdrop'
 import type { BattleLayout } from '../rom/battleScene'
@@ -33,18 +33,40 @@ interface Side { uid: string; species: string; level: number; hp: number; maxHp:
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
 
-function HpBox({ side, mine }: { side: Side; mine: boolean }) {
+/** The HP box of Pokémon Black 2 / White 2 made from the game's own pieces: a name bar, an HP strip (and an EXP strip for yours) with the gauge on it. */
+function HpBox({ side, mine, exp }: { side: Side; mine: boolean; exp?: number }) {
+  const nameBar = useUiUrl(mine ? 'hp:nameme' : 'hp:namefoe')
+  const strip = useUiUrl(mine ? 'hp:stripme' : 'hp:stripfoe')
+  // DS pixels -> screen pixels: the box must fit beside the command screen on wide windows, above it on narrow ones
+  const room = window.innerWidth >= 1000 ? (window.innerWidth - 400) / 2 : window.innerWidth
+  const K = Math.max(1.6, Math.min(3, Math.floor((room - 16) / 136)))
+  const frac = side.maxHp > 0 ? Math.max(0, Math.min(1, side.hp / side.maxHp)) : 0
+  const fill = frac > 0.5 ? ['#00ff4a', '#00bd21'] : frac > 0.2 ? ['#ffad00', '#a58429'] : ['#ff4273', '#a54a5a']
+  const lo = side.level ** 3, hi = (side.level + 1) ** 3
+  const expFrac = exp === undefined ? 0 : Math.max(0, Math.min(1, (exp - lo) / Math.max(1, hi - lo)))
+  const u = (n: number) => n * K
+  // positions in DS pixels: the name bar on top, the strip below it (yours starts further left)
+  const stripX = mine ? 8 : 14, stripY = 12
+  const gx = stripX + (mine ? 41 : 29), gy = stripY + (mine ? 2 : 2), gw = mine ? 70 : 64
+  const text: React.CSSProperties = { position: 'absolute', color: '#101010', fontWeight: 700, lineHeight: 1, fontSize: u(8), whiteSpace: 'nowrap', textShadow: '0 1px 0 rgba(255,255,255,.35)' }
   return (
-    <div className={`hpbox panel ${mine ? 'mine' : 'foe'}`}>
-      <div className="hpbox-top">
-        <strong>{side.species}</strong>
-        <span>Lv{side.level}</span>
+    <div className={`hp2 ${mine ? 'mine' : 'foe'}`} style={{ width: u(136), height: u(mine ? 40 : 26) }}>
+      {nameBar && <img src={nameBar} alt="" draggable={false} style={{ position: 'absolute', left: 0, top: 0, width: u(136), height: u(14), imageRendering: 'pixelated' }} />}
+      {strip && <img src={strip} alt="" draggable={false} style={{ position: 'absolute', left: u(stripX), top: u(stripY), width: u(mine ? 124 : 112), height: u(mine ? 16 : 12), imageRendering: 'pixelated' }} />}
+      <span style={{ ...text, left: u(mine ? 12 : 6), top: u(3) }}>{side.species}</span>
+      <span style={{ ...text, right: u(mine ? 6 : 14), top: u(3) }}>Lv{side.level}</span>
+      {/* the HP gauge: a dark track with the fill on it */}
+      <div style={{ position: 'absolute', left: u(gx), top: u(gy), width: u(gw), height: u(4), background: '#212121', boxShadow: '0 0 0 1px #000' }}>
+        <div style={{ position: 'absolute', left: 0, top: u(1), height: u(1), width: `${frac * 100}%`, background: fill[0], transition: 'width .5s ease' }} />
+        <div style={{ position: 'absolute', left: 0, top: u(2), height: u(1), width: `${frac * 100}%`, background: fill[1], transition: 'width .5s ease' }} />
       </div>
-      <div className="hpbox-bar">
-        <HpBar hp={side.hp} max={side.maxHp} scale={3} />
-        <StatusIcon status={side.fainted ? 'fnt' : side.status} scale={2} />
-      </div>
-      {mine && <div className="hpnum">{Math.max(0, side.hp)} / {side.maxHp}</div>}
+      {mine && (
+        <div style={{ position: 'absolute', left: u(gx - 12), top: u(stripY + 10), width: u(gw + 12), height: u(2), background: '#212121' }}>
+          <div style={{ position: 'absolute', left: 0, top: 0, height: u(2), width: `${expFrac * 100}%`, background: '#38b6f5', transition: 'width .5s ease' }} />
+        </div>
+      )}
+      {mine && <span style={{ ...text, right: u(8), top: u(29), color: '#fff', textShadow: '1px 1px 0 #000, -1px 0 0 #000, 0 -1px 0 #000' }}>{Math.max(0, side.hp)}/{side.maxHp}</span>}
+      <div style={{ position: 'absolute', right: u(mine ? 14 : 22), top: u(stripY) }}><StatusIcon status={side.fainted ? 'fnt' : side.status} scale={K / 1.5} /></div>
     </div>
   )
 }
@@ -403,7 +425,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, onEnd }:
         {foe && <HpBox side={foe} mine={false} />}
       </div>
       <div className="me-zone">
-        {me && <HpBox side={me} mine />}
+        {me && <HpBox side={me} mine exp={teamRef.current.find((m) => m.uid === me.uid)?.exp} />}
       </div>
       <div className="battle-bottom">
         <div className="panel battle-text">{text}</div>
