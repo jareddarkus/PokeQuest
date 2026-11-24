@@ -13,6 +13,7 @@ import TypePlate from './TypePlate'
 import BattleBackdrop from './BattleBackdrop'
 import type { BattleLayout } from '../rom/battleScene'
 import MonSprite from './MonSprite'
+import CmdButton, { useUiUrl } from './CmdButton'
 
 export type BattleKind = 'wild' | 'trainer' | 'gym'
 export type BattleOutcome = 'win' | 'lose' | 'caught' | 'ran'
@@ -52,6 +53,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, onEnd }:
   const [foe, setFoe] = useState<Side | null>(null)
   const [text, setText] = useState('')
   const [mode, setMode] = useState<'wait' | 'menu' | 'fight' | 'switch' | 'bag' | 'done'>('wait')
+  const moveFrame = useUiUrl('move:grey')
   const [req, setReq] = useState<Request | null>(null)
   const sessionRef = useRef<BattleSession | null>(null)
   const queue = useRef<BattleEvent[]>([])
@@ -322,11 +324,11 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, onEnd }:
         <div className="panel battle-text">{text}</div>
 
         {mode === 'menu' && req && (
-          <div className="panel battle-menu">
-            <button onClick={() => setMode('fight')}>Fight</button>
-            <button onClick={() => setMode('bag')}>Bag</button>
-            <button onClick={() => setMode('switch')} disabled={req.trapped || req.bench.filter((b) => !b.fainted && !b.active).length === 0}>Pokémon</button>
-            <button onClick={doRun} disabled={kind !== 'wild'}>Run</button>
+          <div className="panel battle-menu cmd">
+            <CmdButton name="fight" label="Fight" scale={3} onClick={() => setMode('fight')} />
+            <CmdButton name="bag" label="Bag" onClick={() => setMode('bag')} />
+            <CmdButton name="pokemon" label="Pokémon" onClick={() => setMode('switch')} disabled={req.trapped || req.bench.filter((b) => !b.fainted && !b.active).length === 0} />
+            <CmdButton name="run" label="Run" onClick={doRun} disabled={kind !== 'wild'} />
           </div>
         )}
 
@@ -334,12 +336,14 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, onEnd }:
           <div className="panel battle-menu moves">
             {req.moves.map((mv, i) => (
               <button key={mv.id} disabled={mv.disabled || mv.pp === 0} onClick={() => doMove(i)}
-                style={{ borderColor: TYPE_COLOR[mv.type as PType] ?? '#888', boxShadow: `inset 4px 0 0 ${TYPE_COLOR[mv.type as PType] ?? '#888'}` }}>
+                style={moveFrame
+                  ? { background: `url(${moveFrame}) center / 100% 100% no-repeat`, imageRendering: 'pixelated', border: 'none', boxShadow: 'none', minHeight: 64, padding: '8px 40px 8px 38px' }
+                  : { borderColor: TYPE_COLOR[mv.type as PType] ?? '#888', boxShadow: `inset 4px 0 0 ${TYPE_COLOR[mv.type as PType] ?? '#888'}` }}>
                 <span>{mv.name}</span>
                 <small style={{ display: 'flex', alignItems: 'center', gap: 8 }}><TypePlate type={mv.type} scale={1.6} />{mv.pp}/{mv.maxpp} PP</small>
               </button>
             ))}
-            <button className="back" onClick={() => setMode('menu')}>Back</button>
+            <CmdButton name="back" label="Back" scale={2} onClick={() => setMode('menu')} />
           </div>
         )}
 
