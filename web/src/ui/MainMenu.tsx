@@ -21,6 +21,10 @@ export default function MainMenu({ username, onBattleRoyale, onPractice, onCusto
           <span>Pokémon Battle Royale</span>
           <small>Last trainer standing wins</small>
         </button>
+        <button className="big" disabled title="Coming later">
+          <span>Competitive</span>
+          <small>Play for points and climb the ranking (coming later)</small>
+        </button>
         <button className="big" onClick={onPractice}>
           <span>Practice Island</span>
           <small>Explore alone, no account needed</small>

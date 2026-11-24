@@ -147,7 +147,9 @@ function stillIndices(d0: Uint8Array): Uint8Array {
 
 interface PartCell { canvas: HTMLCanvasElement; pixels: Array<[number, number, number]> } // pixels: x, y (from cell origin), palette number
 
-function buildCell(oams: Oam[], atlas: { w: number; h: number; px: Uint8Array }, pal: Rgb[]): PartCell {
+function buildCell(oams0: Oam[], atlas: { w: number; h: number; px: Uint8Array }, pal: Rgb[], reverse = false): PartCell {
+  // on the DS the first object of a part is drawn on top of the later ones; `reverse` draws them in that order
+  const oams = reverse ? [...oams0].reverse() : oams0
   const SZ = 256
   const canvas = document.createElement('canvas')
   canvas.width = SZ
@@ -186,15 +188,20 @@ export interface AnimatedSprite {
   /** draw the picture for time t (in 1/60 s) with its feet at the bottom middle of a 96 x 96 area */
   draw(ctx: CanvasRenderingContext2D, t: number): void
   loopLength: number
+  /** how much of the game's still picture the first frame does NOT match (0 = identical, 1 = nothing); for checking */
+  mismatch: number
+  /** which drawing order was chosen: [objects inside a part reversed, parts reversed] */
+  order: [boolean, boolean]
 }
 
-const FINE_TUNE = false // the authored layout (table position + one common offset) is used as it is
-
 interface PartInfo { cell: PartCell; anim: Seq; node: Node; rest: [number, number] }
+interface Prelim { anim: Seq; node: Node; px: number; py: number; idx: number }
 
 /**
  * files: the 20 files of one Pokémon. front = true uses the front set (files 2,4,5,6,7), otherwise the back set (11,13,14,15,16).
- * The resting position of every part is found by laying the parts over the game's own still picture.
+ * The resting position of every part is found by laying the parts over the game's own still picture. The drawing order of the
+ * parts (which one lies on top) is chosen by trying every combination and keeping the one whose first frame is closest to the
+ * still picture.
  */
 export function buildAnimatedSprite(files: Uint8Array[], base: number, front: boolean, shiny: boolean): AnimatedSprite | null {
   try {
@@ -207,23 +214,22 @@ export function buildAnimatedSprite(files: Uint8Array[], base: number, front: bo
     const timeline = parseAnimBank(decompress(files[base + o + 7]))[0]
     if (!cells.length || !multi.length || !timeline) return null
     const still = stillIndices(files[base + o])
-    const cellCache = new Map<number, PartCell>()
-    const cellOf = (i: number) => {
-      let c = cellCache.get(i)
-      if (!c) { c = buildCell(cells[i] ?? [], atlas, pal); cellCache.set(i, c) }
-      return c
-    }
+    let stillCount = 0
+    for (let i = 0; i < still.length; i++) if (still[i]) stillCount++
 
-    // find where every part of the first multicell rests, using the still picture:
-    // first slide ALL parts together to the best overall position, then fine-tune each part a little
+    // where the parts of the first pose sit relative to each other
     const mc0 = multi[0]
-    const prelim: Array<{ cell: PartCell; anim: Seq; node: Node; px: number; py: number }> = []
+    const prelim: Prelim[] = []
     for (const node of mc0) {
       const anim = anims[node.anim]
       if (!anim) continue
       const f0 = anim.frames[0]
-      prelim.push({ cell: cellOf(f0.idx), anim, node, px: node.x + f0.tx, py: node.y + f0.ty })
+      prelim.push({ anim, node, idx: f0.idx, px: node.x + f0.tx, py: node.y + f0.ty })
     }
+
+    // 1) slide all parts together over the still picture to find the best overall position
+    const plain = new Map<number, PartCell>()
+    const plainCell = (i: number) => { let c = plain.get(i); if (!c) { c = buildCell(cells[i] ?? [], atlas, pal); plain.set(i, c) } return c }
     const scoreAt = (cell: PartCell, ox: number, oy: number): number => {
       let s = 0
       for (const [x, y, c] of cell.pixels) {
@@ -235,70 +241,47 @@ export function buildAnimatedSprite(files: Uint8Array[], base: number, front: bo
     let gBest = -1, gx = 49, gy = 71
     for (let by = 30; by <= 110; by++) {
       for (let bx = 20; bx <= 80; bx++) {
-        let s = 0
-        for (const p of prelim) s += scoreAt(p.cell, bx + p.px, by + p.py)
-        if (s > gBest) { gBest = s; gx = bx; gy = by }
+        let sc = 0
+        for (const p of prelim) sc += scoreAt(plainCell(p.idx), bx + p.px, by + p.py)
+        if (sc > gBest) { gBest = sc; gx = bx; gy = by }
       }
     }
-    // fine-tune: move the parts one at a time, in smaller and smaller steps, so that the parts laid on top of each other
-    // look as much as possible like the still picture
-    const pos: Array<[number, number]> = prelim.map((p) => [gx + p.px, gy + p.py])
-    const comp = new Uint8Array(96 * 96)
-    const error = (): number => {
-      comp.fill(0)
-      for (let i = 0; i < prelim.length; i++) {
-        const [ox, oy] = pos[i]
-        for (const [x, y, c] of prelim[i].cell.pixels) {
-          const X = ox + x, Y = oy + y
-          if (X >= 0 && Y >= 0 && X < 96 && Y < 96) comp[Y * 96 + X] = c
-        }
+
+    // 2) build the sprite for each drawing order and keep the best one
+    const probe = document.createElement('canvas')
+    probe.width = 96
+    probe.height = 96
+    const pctx = probe.getContext('2d', { willReadFrequently: true })!
+    const rgbOfStill = (i: number): Rgb => pal[i] ?? [255, 0, 255]
+
+    const idxOf = (p: Prelim) => prelim.indexOf(p)
+    const cellCaches = [new Map<number, PartCell>(), new Map<number, PartCell>()]
+    const make = (reverseCells: boolean, reverseParts: boolean, ox: number, oy: number, adj?: Array<[number, number]>) => {
+      const cellCache = cellCaches[reverseCells ? 1 : 0]
+      const cellOf = (i: number) => { let c = cellCache.get(i); if (!c) { c = buildCell(cells[i] ?? [], atlas, pal, reverseCells); cellCache.set(i, c) } return c }
+      let parts: PartInfo[] = prelim.map((p) => ({ cell: cellOf(p.idx), anim: p.anim, node: p.node, rest: [gx + ox + p.px + (adj ? adj[idxOf(p)][0] : 0), gy + oy + p.py + (adj ? adj[idxOf(p)][1] : 0)] as [number, number] }))
+      if (reverseParts) parts = [...parts].reverse()
+      const total = Math.max(1, timeline.total)
+      const frameAt = (sq: Seq, t: number): Frame => {
+        let tt = t % Math.max(1, sq.total)
+        for (const f of sq.frames) { if (tt < f.dur) return f; tt -= f.dur }
+        return sq.frames[sq.frames.length - 1]
       }
-      let e = 0
-      for (let i = 0; i < 96 * 96; i++) if (comp[i] !== still[i]) e++
-      return e
-    }
-    let cur = error()
-    for (const step of FINE_TUNE ? [8, 4, 2, 1, 1] : []) {
-      for (let i = 0; i < prelim.length; i++) {
-        let improved = true
-        while (improved) {
-          improved = false
-          for (const [dx, dy] of [[step, 0], [-step, 0], [0, step], [0, -step]]) {
-            pos[i][0] += dx; pos[i][1] += dy
-            const e = error()
-            if (e < cur) { cur = e; improved = true } else { pos[i][0] -= dx; pos[i][1] -= dy }
-          }
-        }
+      const partsFor = (mcIdx: number): PartInfo[] => {
+        if (mcIdx === 0 || !multi[mcIdx]) return parts
+        // other poses: keep the same parts, moved by how much their table positions differ
+        const list = multi[mcIdx].map((node) => {
+          const anim = anims[node.anim]
+          if (!anim) return null
+          const f0 = anim.frames[0]
+          const cell = cellOf(f0.idx)
+          const same = parts.find((p) => anims[p.node.anim]?.frames[0].idx === f0.idx)
+          const rest: [number, number] = same ? [same.rest[0] + (node.x - same.node.x), same.rest[1] + (node.y - same.node.y)] : [49 + node.x, 71 + node.y]
+          return { cell, anim, node, rest }
+        }).filter((p): p is PartInfo => p !== null)
+        return reverseParts ? list.reverse() : list
       }
-    }
-    const parts: PartInfo[] = prelim.map((p, i) => ({ cell: p.cell, anim: p.anim, node: p.node, rest: [pos[i][0], pos[i][1]] as [number, number] }))
-    if ((globalThis as { __pqDebug?: boolean }).__pqDebug) console.log('PARTS', base / 20, front ? 'front' : 'back', JSON.stringify({ g: [gx, gy], score: gBest, parts: parts.map((p) => ({ anim: p.node.anim, cell: p.anim.frames[0].idx, kind: p.anim.kind, node: [p.node.x, p.node.y], rest: p.rest, px: p.cell.pixels.length })) }))
-    const restByAnim = new Map<number, [number, number]>(parts.map((p) => [p.node.anim, p.rest]))
-    const total = Math.max(1, timeline.total)
-    const frameAt = (s: Seq, t: number): Frame => {
-      let tt = t % Math.max(1, s.total)
-      for (const f of s.frames) { if (tt < f.dur) return f; tt -= f.dur }
-      return s.frames[s.frames.length - 1]
-    }
-    const partsFor = (mcIdx: number): PartInfo[] => {
-      if (mcIdx === 0 || !multi[mcIdx]) return parts
-      // other poses: keep the same parts, moved by how much their table positions differ
-      return multi[mcIdx].map((node) => {
-        const anim = anims[node.anim]
-        if (!anim) return null
-        const f0 = anim.frames[0]
-        const cell = cellOf(f0.idx)
-        const same = parts.find((p) => anims[p.node.anim]?.frames[0].idx === f0.idx)
-        const rest: [number, number] = same ? [same.rest[0] + (node.x - same.node.x), same.rest[1] + (node.y - same.node.y)] : [49 + node.x, 71 + node.y]
-        return { cell, anim, node, rest }
-      }).filter((p): p is PartInfo => p !== null)
-    }
-    void restByAnim
-    return {
-      size: 96,
-      loopLength: total,
-      draw(ctx, t) {
-        // which pose of the parts is shown right now
+      const draw = (ctx: CanvasRenderingContext2D, t: number) => {
         let tt = t % total
         let mcIdx = 0
         for (const f of timeline.frames) { if (tt < f.dur) { mcIdx = f.idx; break } tt -= f.dur }
@@ -314,8 +297,63 @@ export function buildAnimatedSprite(files: Uint8Array[], base: number, front: bo
           ctx.drawImage(cell.canvas, -128, -128)
           ctx.restore()
         }
-      },
+      }
+      // how different is the first picture from the still one?
+      const measure = (): number => {
+        pctx.clearRect(0, 0, 96, 96)
+        draw(pctx, 0)
+        const d = pctx.getImageData(0, 0, 96, 96).data
+        let bad = 0
+        for (let i = 0; i < 96 * 96; i++) {
+          const a = d[i * 4 + 3] > 128
+          const si = still[i]
+          if (!si) { if (a) bad++; continue }
+          if (!a) { bad++; continue }
+          const [r, g, b] = rgbOfStill(si)
+          if (Math.abs(d[i * 4] - r) + Math.abs(d[i * 4 + 1] - g) + Math.abs(d[i * 4 + 2] - b) > 24) bad++
+        }
+        return bad / Math.max(1, stillCount)
+      }
+      return { draw, measure, total }
     }
+
+    let best: { v: [boolean, boolean]; m: number } | null = null
+    for (const rc of [false, true]) {
+      for (const rp of [false, true]) {
+        const m = make(rc, rp, 0, 0).measure()
+        if (!best || m < best.m - 1e-9) best = { v: [rc, rp], m }
+      }
+    }
+    // 3) with the order chosen, nudge the whole picture a few pixels if that makes it closer to the still picture
+    let ox = 0, oy = 0, bestM = best!.m
+    for (let dy = -3; dy <= 3; dy++) {
+      for (let dx = -3; dx <= 3; dx++) {
+        if (!dx && !dy) continue
+        const m = make(best!.v[0], best!.v[1], dx, dy).measure()
+        if (m < bestM - 1e-9) { bestM = m; ox = dx; oy = dy }
+      }
+    }
+    let final = make(best!.v[0], best!.v[1], ox, oy)
+    // a few Pokémon still do not match (their parts sit differently in the table): then move the parts one at a time
+    if (bestM > 0.12) {
+      const adj: Array<[number, number]> = prelim.map(() => [0, 0])
+      let cur = bestM
+      for (const step of [8, 4, 2, 1]) {
+        for (let pass = 0; pass < 3; pass++) {
+          let changed = false
+          for (let i = 0; i < prelim.length; i++) {
+            for (const [dx, dy] of [[step, 0], [-step, 0], [0, step], [0, -step]]) {
+              adj[i][0] += dx; adj[i][1] += dy
+              const m = make(best!.v[0], best!.v[1], ox, oy, adj).measure()
+              if (m < cur - 1e-9) { cur = m; changed = true } else { adj[i][0] -= dx; adj[i][1] -= dy }
+            }
+          }
+          if (!changed) break
+        }
+      }
+      if (cur < bestM) { bestM = cur; final = make(best!.v[0], best!.v[1], ox, oy, adj) }
+    }
+    return { size: 96, loopLength: final.total, draw: final.draw, mismatch: bestM, order: best!.v }
   } catch {
     return null
   }

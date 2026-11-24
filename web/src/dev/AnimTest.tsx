@@ -18,6 +18,21 @@ export default function AnimTest() {
       await nds.open()
       ;(globalThis as { __pqDebug?: boolean }).__pqDebug = q.has('debug')
       const files = parseNarc(await nds.get('a/0/0/4'))
+      if (q.has('all')) { // check every Pokémon: how close is the first animation picture to the game's still picture?
+        const rows: Array<{ d: number; front: number; back: number; of: string; ob: string }> = []
+        const from = Number(q.get('from') ?? 1), to = Number(q.get('to') ?? 649)
+        for (let d = from; d <= to; d++) {
+          const f = buildAnimatedSprite(files, d * 20, true, false), b = buildAnimatedSprite(files, d * 20, false, false)
+          rows.push({ d, front: f ? f.mismatch : 9, back: b ? b.mismatch : 9, of: f ? f.order.map(Number).join('') : '-', ob: b ? b.order.map(Number).join('') : '-' })
+          if (d % 20 === 0) { setInfo(`checking ${d}/${to}…`); await new Promise((r) => setTimeout(r, 0)) }
+        }
+        const worst = [...rows].sort((a, b) => Math.max(b.front, b.back) - Math.max(a.front, a.back)).slice(0, 40)
+        const avg = rows.reduce((s, r) => s + r.front + r.back, 0) / (rows.length * 2)
+        const orders: Record<string, number> = {}
+        for (const r of rows) { orders[r.of] = (orders[r.of] ?? 0) + 1; orders[r.ob] = (orders[r.ob] ?? 0) + 1 }
+        setInfo(`avg mismatch ${avg.toFixed(3)}  orders ${JSON.stringify(orders)}  worst: ` + worst.map((r) => `#${r.d} f${r.front.toFixed(2)}${r.of} b${r.back.toFixed(2)}${r.ob}`).join(' | '))
+        return
+      }
       const sprites: Array<{ front: ReturnType<typeof buildAnimatedSprite>; back: ReturnType<typeof buildAnimatedSprite> }> = list.map((d) => ({
         front: buildAnimatedSprite(files, d * 20, true, q.has('shiny')), back: buildAnimatedSprite(files, d * 20, false, q.has('shiny')),
       }))

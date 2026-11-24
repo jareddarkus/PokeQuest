@@ -13,6 +13,10 @@ export interface ClipUniforms {
   uWarn: { value: number } // 1 = tint the band that is about to fall
 }
 
+/** Textures of water (sea, rivers, fountains): the game scrolls them to make the water move. */
+export const waterTextures = new Set<THREE.Texture>()
+const WATER_NAME = /mizu|zanami|kawa|water|hunsui|nami|river|lake|pond/i
+
 const textureCache = new WeakMap<object, Map<string, THREE.Texture>>()
 
 export function buildModelObject(model: Model, tex: NonNullable<ReturnType<typeof readTexFile>>, clip?: ClipUniforms): THREE.Group {
@@ -46,6 +50,11 @@ export function buildModelObject(model: Model, tex: NonNullable<ReturnType<typeo
           t.flipY = false
           t.needsUpdate = true
           ;(t as THREE.Texture & { hasAlpha?: boolean }).hasAlpha = d.hasAlpha
+          if (WATER_NAME.test(m.name) || WATER_NAME.test(m.texture ?? '')) {
+            t.wrapS = THREE.RepeatWrapping
+            t.wrapT = THREE.RepeatWrapping
+            waterTextures.add(t)
+          }
           cache!.set(key, t)
           map = t
         }
@@ -57,6 +66,7 @@ export function buildModelObject(model: Model, tex: NonNullable<ReturnType<typeo
       opacity: m && m.alpha < 1 ? Math.max(0.35, m.alpha) : 1, side: m?.cullBack === false ? THREE.DoubleSide : THREE.FrontSide,
       color: map ? 0xffffff : 0x999999,
     })
+    mat.name = `${m?.name ?? '?'}|${m?.texture ?? '-'}|${m?.palette ?? '-'}|a${m?.alpha ?? 1}`
     if (clip) {
       mat.onBeforeCompile = (shader) => {
         shader.uniforms.uCut = clip.uCut
@@ -86,7 +96,8 @@ export function buildModelObject(model: Model, tex: NonNullable<ReturnType<typeo
       const v = mesh.verts[i]
       pos[i * 3] = v.x / TILE_UNITS; pos[i * 3 + 1] = v.y / TILE_UNITS; pos[i * 3 + 2] = v.z / TILE_UNITS
       uv[i * 2] = v.u; uv[i * 2 + 1] = v.v
-      col[i * 3] = v.r; col[i * 3 + 1] = v.g; col[i * 3 + 2] = v.b
+      // pieces that the DS lights with its own light (instead of vertex colours) come out as 0,0,0 here: show them plain
+      if (v.r + v.g + v.b < 0.06) { col[i * 3] = 1; col[i * 3 + 1] = 1; col[i * 3 + 2] = 1 } else { col[i * 3] = v.r; col[i * 3 + 1] = v.g; col[i * 3 + 2] = v.b }
     }
     const g = new THREE.BufferGeometry()
     g.setAttribute('position', new THREE.BufferAttribute(pos, 3))

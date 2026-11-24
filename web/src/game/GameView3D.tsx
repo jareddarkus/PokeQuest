@@ -4,6 +4,8 @@ import type { BuiltWorld } from '../rom/chunkWorld'
 import { drawCharacter, lookSprite, randomLook, type Look } from './character'
 import { owEmote, owFrame } from './ow'
 import { GYM_MODELS } from '../rom/buildings'
+import { waterTextures } from '../rom/mapModel'
+import { romItemUrl } from '../rom/store'
 import { safeTileFor, type GameEvents, type GameHandle, type OtherPlayer } from './GameView'
 import { hash2 } from './rng'
 import type { Settings } from './settings'
@@ -59,6 +61,18 @@ function fit(sp: THREE.Sprite) {
   if (sp.material.userData.real) { sp.center.set(0.5, 0.1); sp.scale.set(2, 2, 1) }
   else { sp.center.set(0.5, 0.05); sp.scale.set(1.15, 1.45, 1) }
 }
+
+/** A soft dark oval on the ground under a character or Pokémon. */
+const shadowGeo = new THREE.CircleGeometry(0.5, 24).rotateX(-Math.PI / 2)
+function makeShadow(scene: THREE.Scene, size = 1): THREE.Mesh {
+  const m = new THREE.Mesh(shadowGeo, new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.3, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }))
+  m.scale.set(0.8 * size, 1, 0.45 * size)
+  m.renderOrder = 1
+  scene.add(m)
+  return m
+}
+/** Real game characters are drawn a little higher so their feet do not sink into the ground (the picture leans back with the camera). */
+const lift = (sp: THREE.Sprite) => (sp.material.userData.real ? 0.2 : 0)
 
 const spriteCache = new Map<string, THREE.SpriteMaterial>()
 function charMaterial(look: Look, dir: Dir, frame: number): THREE.SpriteMaterial {
@@ -216,6 +230,19 @@ export default function GameView3D(props: Props) {
     })
 
     const ballMat = ballMaterial()
+    // every item on the ground is drawn with the game's own Poké Ball picture (item icon 4)
+    void romItemUrl(4).then((url) => {
+      if (!url) return
+      new THREE.TextureLoader().load(url, (tex) => {
+        tex.magFilter = THREE.NearestFilter
+        tex.minFilter = THREE.NearestFilter
+        tex.colorSpace = THREE.SRGBColorSpace
+        ballMat.map = tex
+        ballMat.color.set(0xffffff)
+        ballMat.needsUpdate = true
+        for (const sp of pickupSprites.values()) { sp.scale.set(0.75, 0.75, 1); sp.center.set(0.5, 0.2) }
+      })
+    })
     const pickupSprites = new Map<string, THREE.Sprite>()
     for (const pk of world.pickups) {
       const s = new THREE.Sprite(ballMat)
@@ -234,6 +261,8 @@ export default function GameView3D(props: Props) {
     const mySprite = new THREE.Sprite(charMaterial(propsRef.current.look, 0, 0))
     fit(mySprite)
     scene.add(mySprite)
+    const myShadow = makeShadow(scene)
+    const npcShadows = new Map<NpcRuntime, THREE.Mesh>()
 
     let alert: { n: NpcRuntime; t: number } | null = null
     let bubble: THREE.Sprite | null = null
@@ -260,8 +289,8 @@ export default function GameView3D(props: Props) {
       scene.add(sp)
       return { spec: s, x: s.x, y: s.y, fx: s.x, fy: s.y, dir: s.dir, moving: 0, fromX: s.x, fromY: s.y, timer: 1 + hash2(s.x, s.y, 3) * 3, defeated: false, frozen: false, look, sprite: sp }
     })
-    if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__pq = { npcs, me, world } // developer test hook
-    const otherSprites = new Map<string, { body: THREE.Sprite; label: THREE.Sprite }>()
+    if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__pq = { npcs, me, world, group: built.group, pick: (nx: number, ny: number) => { const rc = new THREE.Raycaster(); rc.setFromCamera(new THREE.Vector2(nx, ny), camera); return rc.intersectObjects(built.group.children, true).slice(0, 4).map((h) => (h.object as THREE.Mesh).material as THREE.Material).map((m) => m.name) } } // developer test hook
+    const otherSprites = new Map<string, { body: THREE.Sprite; label: THREE.Sprite; shadow: THREE.Mesh }>()
     let paused = false
     const held = new Set<string>()
 
@@ -434,13 +463,21 @@ export default function GameView3D(props: Props) {
       const ph = heightAt(px + 0.5, py + 0.5)
       mySprite.material = charMaterial(p.look, me.dir, me.t < 1 ? 1 + me.step : 0)
       fit(mySprite)
-      mySprite.position.set(px + 0.5, ph, py + 0.5)
+      mySprite.position.set(px + 0.5, ph + lift(mySprite), py + 0.5)
+      myShadow.position.set(px + 0.5, ph + 0.03, py + 0.5)
+      for (const [tex, i] of [...waterTextures].map((t, k) => [t, k] as const)) { // moving water
+        tex.offset.set(((now / 1000) * 0.02 + i * 0.13) % 1, ((now / 1000) * 0.012) % 1)
+      }
       for (const n of npcs) {
         n.sprite.visible = !n.defeated || true
         const frame = n.moving > 0 ? 1 + (Math.floor(n.moving * 2) % 2) : 0
         n.sprite.material = charMaterial(n.look, n.dir, frame)
         fit(n.sprite)
-        n.sprite.position.set(n.fx + 0.5, heightAt(n.fx + 0.5, n.fy + 0.5), n.fy + 0.5)
+        const nh = heightAt(n.fx + 0.5, n.fy + 0.5)
+        n.sprite.position.set(n.fx + 0.5, nh + lift(n.sprite), n.fy + 0.5)
+        let sh = npcShadows.get(n)
+        if (!sh) { sh = makeShadow(scene); npcShadows.set(n, sh) }
+        sh.position.set(n.fx + 0.5, nh + 0.03, n.fy + 0.5)
       }
       // other players (named, never yourself)
       const seen = new Set<string>()
@@ -454,16 +491,17 @@ export default function GameView3D(props: Props) {
           label.center.set(0.5, 0)
           label.scale.set(2.4, 0.45, 1)
           scene.add(body, label)
-          e = { body, label }
+          e = { body, label, shadow: makeShadow(scene) }
           otherSprites.set(o.id, e)
         }
         e.body.material = charMaterial(o.look, o.dir, o.moving ? 1 + (Math.floor(now / 150) % 2) : 0)
         fit(e.body)
         const h = heightAt(o.x + 0.5, o.y + 0.5)
-        e.body.position.set(o.x + 0.5, h, o.y + 0.5)
+        e.body.position.set(o.x + 0.5, h + lift(e.body), o.y + 0.5)
+        e.shadow.position.set(o.x + 0.5, h + 0.03, o.y + 0.5)
         e.label.position.set(o.x + 0.5, h + 1.5, o.y + 0.5)
       }
-      for (const [id, e] of otherSprites) if (!seen.has(id)) { scene.remove(e.body, e.label); otherSprites.delete(id) }
+      for (const [id, e] of otherSprites) if (!seen.has(id)) { scene.remove(e.body, e.label, e.shadow); otherSprites.delete(id) }
 
       // the camera
       const dst = CAM_DISTANCE / Math.max(0.3, p.settings.zoom)

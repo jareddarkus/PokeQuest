@@ -141,3 +141,15 @@ Next ideas if this is picked up again: (1) the "!" emote for trainers spotting t
 - `rom/sdat.ts` copies 11 songs (+ their bank + sample archive) into IndexedDB (`music:<fileId>`, `music:index`) during the import (`SONGS` list: field1-3, center, gym, wild, wildStrong, trainer, gymLeader, win, caught).
 - `audio/sseq.ts` = own player: SSEQ commands (notes, rests, program, volume/expression/pan, tempo, loops, jumps/calls, tracks, variables partly; the 0xA0-0xA2 "random/if" prefixes are skipped), SBNK instruments (PCM, PSG pulse via PeriodicWave, noise, drum set 16, key split 17), SWAR samples (PCM8/16, IMA-ADPCM, loops), envelopes by approximate formulas (NOT the exact DS tables), WebAudio scheduling with 250 ms look-ahead. `audio/music.ts` = one song at a time with fade; PlayScreen plays field1/2/3 by ring, wild / trainer / gymLeader in battles, volume from Settings.
 - KNOWN GAPS: sounds are approximations (envelopes, noise pitch, no vibrato/portamento/pitch sweep), the win jingle and "caught" jingle are imported but not played yet, no music in menus, the 0xA0 random/variable modifiers are ignored. RomMeta.version 21.
+
+## Ideas for later (from the owner)
+- Admin tools: the owner's own account should get a world builder / editor (place and change things in the world). Future work; the owner's login name is kept private (not written in this public repository).
+- Main menu: a "Competitive" mode to play for points (a ranking). A disabled "Competitive (coming later)" button is already in the menu.
+
+### Fix round (2026-11-24, after the owner's review)
+- Pokémon animations: the drawing order of the parts is now chosen per Pokémon by comparing the first frame with the game's own still picture (4 combinations: objects of a part reversed or not, parts reversed or not). Result over #1-#649 (front and back): average mismatch 2.5 %. Most use "parts reversed" (the first part of the table lies on top). Pokémon that still do not match (>12 %) get their parts nudged one by one. A few (e.g. Castform #351, Cottonee #546, Whirlipede #544) have effect parts or other poses and stay a little different from their still picture. Dev check: `?animtest&all&from=1&to=649` lists the worst.
+- Black patches on the map: pieces that the DS lights itself have vertex colour 0,0,0 in the file -> now drawn plain (white).
+- Water: names of water materials (mizu, zanami, kawa, hunsui, ...) get a slowly scrolling texture. This is NOT the game's real texture animation (BTA0 files in a/0/6/8 hold it, format not decoded yet).
+- Shadows: soft ovals under every character (3D) and under Pokémon in battle (CSS); characters are lifted 0.2 tiles so they do not sink into the ground.
+- Items on the ground use the game's Poké Ball item icon (item 4).
+- Battle menu redone like the DS bottom screen: Poké Ball backdrop (a/0/1/1 file 372, left half = menu, right half = move screen), FIGHT in the middle, BAG / RUN / POKÉMON along the bottom, four move buttons whose outline is painted in the type colour. `ui/DsMenu.tsx`. RomMeta.version 22.

@@ -109,6 +109,19 @@ export async function decodeCommandUi(narcData: Uint8Array, put: (name: string, 
   const fight = renderScreen(files[372], files[358], pal)
   if (fight) {
     await save('cmd:fight', crop(fight, 84, 86, 89, 21))
+    // the two Poké Ball backdrops (menu with the FIGHT label, and the move screen), dark where the game leaves a hole
+    const backdrop = (sx: number) => {
+      const c = document.createElement('canvas')
+      c.width = 256
+      c.height = 192
+      const x = c.getContext('2d')!
+      x.fillStyle = '#25282e'
+      x.fillRect(0, 0, 256, 192)
+      x.drawImage(fight, sx, 0, 256, 192, 0, 0, 256, 192)
+      return c
+    }
+    await save('menu:bg', backdrop(0))
+    await save('moves:bg', backdrop(256))
     await save('move:grey', crop(fight, 250, 222, 134, 50))
     await save('move:red', crop(fight, 384, 222, 128, 50))
     await save('move:blue', crop(fight, 250, 272, 134, 50))
