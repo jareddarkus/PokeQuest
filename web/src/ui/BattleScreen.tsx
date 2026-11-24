@@ -294,14 +294,14 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, onEnd }:
       <div className="foe-zone">
         {foe && <HpBox side={foe} mine={false} />}
         <div className={`foe-sprite ${shake === 'foe' ? 'hit' : ''} ${foe?.fainted ? 'fainted' : ''}`}>
-          {foe && !ball && <MonSprite species={foe.species} shiny={foe.shiny} scale={2.2} />}
+          {foe && !ball && <MonSprite species={foe.species} shiny={foe.shiny} scale={2.2} animated />}
           {ball && <div className={`ball shake-${ball.shakes}`} />}
         </div>
       </div>
 
       <div className="me-zone">
         <div className={`me-sprite ${shake === 'me' ? 'hit' : ''} ${me?.fainted ? 'fainted' : ''}`}>
-          {me && <MonSprite species={me.species} back shiny={me.shiny} scale={2.6} />}
+          {me && <MonSprite species={me.species} back shiny={me.shiny} scale={2.6} animated />}
         </div>
         {me && <HpBox side={me} mine />}
       </div>

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { dexNum, spriteUrl } from '../data/dex'
 import { MAX_ROM_DEX } from '../rom/sprites'
 import { romSpriteUrl } from '../rom/store'
+import AnimSprite from './AnimSprite'
 
 interface Props {
   species: string
@@ -9,13 +10,15 @@ interface Props {
   shiny?: boolean
   scale?: number
   className?: string
+  /** play the Pokémon's own animation (battle screen) instead of showing a still picture */
+  animated?: boolean
 }
 
 /**
  * A Pokémon picture. Pokémon #1-#649 always come from the player's own Pokémon White 2 file (stored only in their browser).
  * Newer Pokémon (#650 and up) are not in that game, so they come from Pokémon Showdown's sprite server while playing.
  */
-export default function MonSprite({ species, back, shiny, scale = 2, className }: Props) {
+export default function MonSprite({ species, back, shiny, scale = 2, className, animated }: Props) {
   const dex = dexNum(species)
   const inRom = dex > 0 && dex <= MAX_ROM_DEX
   const [romUrl, setRomUrl] = useState<string | null>(null)
@@ -27,6 +30,7 @@ export default function MonSprite({ species, back, shiny, scale = 2, className }
     return () => { live = false }
   }, [dex, inRom, back, shiny])
 
+  if (inRom && animated) return <AnimSprite species={species} back={back} shiny={shiny} scale={scale * 0.8} />
   if (inRom) {
     if (!romUrl) return <div className={`sprite-missing ${className ?? ''}`} />
     // the game's pictures are 96 x 96 pixels

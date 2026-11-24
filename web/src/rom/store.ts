@@ -1,6 +1,6 @@
 // Where the pictures taken from the player's own game file are kept: the browser's private storage on THEIR computer.
 // They are never uploaded, and never put into the website or the database.
-import { NdsFile, type RomSource } from './nds'
+import { NdsFile, parseNarc, type RomSource } from './nds'
 import { SPRITE_NARC, decodeAllSprites, spriteKey } from './sprites'
 import { WORLD_WINDOW, extractWorldData, type WorldData } from './worldData'
 import { ITEM_ICON_NARC, decodeItemIcons } from './items'
@@ -41,7 +41,7 @@ async function get<T>(key: string): Promise<T | undefined> {
 }
 
 export interface RomMeta { title: string; gameCode: string; sprites: number; version: number }
-const VERSION = 4 // 4 = pictures + map pieces + item icons
+const VERSION = 5 // 5 = pictures + map pieces + item icons + the Pokémon animation archive
 
 export async function loadWorldData(): Promise<WorldData | undefined> {
   try {
@@ -71,6 +71,7 @@ export async function importRom(file: RomSource, onProgress: (text: string, frac
   }
   onProgress('Reading the Pokémon pictures…', 0.05)
   const narc = await nds.get(SPRITE_NARC)
+  await put('sprites:narc', new Blob([new Uint8Array(narc)]))
   let count = 0
   count = await decodeAllSprites(narc, (d, t) => onProgress(`Converting Pokémon ${d} of ${t}…`, 0.1 + 0.88 * (d / t)), (k, b) => put(`sprite:${k}`, b))
   onProgress('Reading the item icons…', 0.975)
@@ -124,6 +125,19 @@ export async function romItemUrl(id: number): Promise<string | null> {
     const url = URL.createObjectURL(blob)
     urlCache.set(key, url)
     return url
+  } catch {
+    return null
+  }
+}
+let narcFiles: Uint8Array[] | null = null
+/** The 20 files of every Pokémon (kept in the browser) so the animated pictures can be built when they are needed. */
+export async function getSpriteFiles(): Promise<Uint8Array[] | null> {
+  if (narcFiles) return narcFiles
+  try {
+    const blob = await get<Blob>('sprites:narc')
+    if (!blob) return null
+    narcFiles = parseNarc(new Uint8Array(await blob.arrayBuffer()))
+    return narcFiles
   } catch {
     return null
   }
