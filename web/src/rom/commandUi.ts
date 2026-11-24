@@ -12,7 +12,7 @@ function find(d: Uint8Array, tag: string): number {
   return -1
 }
 
-function renderScreen(screen: Uint8Array, gfx: Uint8Array, pal: Array<[number, number, number]>): HTMLCanvasElement | null {
+export function renderScreen(screen: Uint8Array, gfx: Uint8Array, pal: Array<[number, number, number]>): HTMLCanvasElement | null {
   const s = decompress(screen)
   const g = decompress(gfx)
   const si = find(s, 'NRCS')
@@ -57,7 +57,7 @@ function renderScreen(screen: Uint8Array, gfx: Uint8Array, pal: Array<[number, n
 }
 
 /** Cuts a rectangle out and trims the see-through border. */
-function crop(src: HTMLCanvasElement, x: number, y: number, w: number, h: number): HTMLCanvasElement {
+export function crop(src: HTMLCanvasElement, x: number, y: number, w: number, h: number): HTMLCanvasElement {
   const part = document.createElement('canvas')
   part.width = w
   part.height = h

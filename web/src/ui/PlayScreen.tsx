@@ -16,6 +16,7 @@ import BattleScreen, { type BattleKind, type BattleOutcome } from './BattleScree
 import { BagPanel, PcPanel, TeamPanel } from './MenuPanels'
 import SettingsPanel from './SettingsPanel'
 import StarterPick from './StarterPick'
+import MenuButton from './MenuButton'
 
 interface Props {
   look: Look
@@ -209,11 +210,11 @@ function PlayInner({ look, settings, onSettings, onExit, onCustomize, world, bui
       </div>
 
       <div className="hud-top-right">
-        <button className="panel" onClick={() => setPanel('team')}>Team</button>
-        <button className="panel" onClick={() => setPanel('bag')}>Bag</button>
-        <button className="panel" onClick={() => setPanel('pc')}>PC</button>
-        <button className="panel" onClick={() => setPanel('settings')}>Settings</button>
-        <button className="panel" onClick={onExit}>Menu</button>
+        <MenuButton icon={9} label="Team" onClick={() => setPanel('team')} />
+        <MenuButton icon={7} label="Bag" onClick={() => setPanel('bag')} />
+        <MenuButton icon={6} label="PC" onClick={() => setPanel('pc')} />
+        <MenuButton label="Settings" onClick={() => setPanel('settings')} />
+        <MenuButton icon={12} label="Menu" onClick={onExit} />
       </div>
 
       {!battle && (
