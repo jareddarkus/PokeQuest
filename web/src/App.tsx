@@ -1,13 +1,18 @@
 ﻿import { useEffect, useState } from 'react'
 import type { Session } from '@supabase/supabase-js'
-import { supabase, signIn, signUp } from './supabase'
 import '@fontsource/unbounded/900.css' // titles (free, SIL Open Font License, served from our own site, not Google)
 import '@fontsource/lexend/400.css' // normal text (same license)
+import { supabase, signIn, signUp } from './supabase'
+import { useLook, useSettings } from './game/settings'
+import MainMenu from './ui/MainMenu'
+import Customizer from './ui/Customizer'
+import SettingsPanel from './ui/SettingsPanel'
+import PlayScreen from './ui/PlayScreen'
 import './App.css'
 
-type Profile = { username: string; money: number }
+type Screen = 'menu' | 'customize' | 'practice'
 
-function Login() {
+function Login({ onGuest }: { onGuest: () => void }) {
   const [mode, setMode] = useState<'login' | 'signup'>('login')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
@@ -24,51 +29,42 @@ function Login() {
   }
 
   return (
-    <form className="card" onSubmit={submit}>
-      <h1>PokeQuest</h1>
-      <p className="sub">{mode === 'login' ? 'Log in to your trainer' : 'Create your trainer'}</p>
-      <input placeholder="Username" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" />
-      <input
-        placeholder="Password"
-        type="password"
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-        autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-      />
-      {error && <p className="error">{error}</p>}
-      <button disabled={busy}>{mode === 'login' ? 'Log in' : 'Create account'}</button>
-      <button type="button" className="link" onClick={() => setMode(mode === 'login' ? 'signup' : 'login')}>
-        {mode === 'login' ? 'New here? Create an account' : 'Already have an account? Log in'}
-      </button>
-    </form>
-  )
-}
-
-function Home({ session }: { session: Session }) {
-  const [profile, setProfile] = useState<Profile | null>(null)
-
-  useEffect(() => {
-    supabase
-      .from('profiles')
-      .select('username, money')
-      .eq('id', session.user.id)
-      .single()
-      .then(({ data }) => setProfile(data))
-  }, [session.user.id])
-
-  return (
-    <div className="card">
-      <h1>PokeQuest</h1>
-      <p className="sub" id="welcome">{profile ? `Welcome, ${profile.username}! Money: ${profile.money}` : 'Loading your trainer...'}</p>
-      <p>Logged in. The map and battles come next.</p>
-      <button onClick={() => supabase.auth.signOut()}>Log out</button>
+    <div className="fullscreen center menu-bg">
+      <form className="panel card" onSubmit={submit}>
+        <h1>PokeQuest</h1>
+        <p className="sub">{mode === 'login' ? 'Log in to your trainer' : 'Create your trainer'}</p>
+        <input placeholder="Username" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" />
+        <input
+          placeholder="Password"
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+        />
+        {error && <p className="error">{error}</p>}
+        <button className="primary" disabled={busy}>{mode === 'login' ? 'Log in' : 'Create account'}</button>
+        <button type="button" className="link" onClick={() => setMode(mode === 'login' ? 'signup' : 'login')}>
+          {mode === 'login' ? 'New here? Create an account' : 'Already have an account? Log in'}
+        </button>
+        <button type="button" className="link" onClick={onGuest}>Play the practice island without an account</button>
+      </form>
     </div>
   )
 }
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(null)
+  const devJump = import.meta.env.DEV && new URLSearchParams(location.search).has('play') // developer shortcut: ?play
+  const [guest, setGuest] = useState(devJump)
   const [ready, setReady] = useState(false)
+  const [username, setUsername] = useState<string | null>(null)
+  const [screen, setScreen] = useState<Screen>(devJump ? 'practice' : 'menu')
+  const [showSettings, setShowSettings] = useState(false)
+  const [settings, setSettings] = useSettings()
+  const [look, setLook] = useLook()
+  const [lookDone, setLookDone] = useState(() => {
+    try { return localStorage.getItem('pokequest.look.done') === '1' } catch { return false }
+  })
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -79,6 +75,50 @@ export default function App() {
     return () => data.subscription.unsubscribe()
   }, [])
 
+  useEffect(() => {
+    if (!session) { setUsername(null); return }
+    supabase.from('profiles').select('username').eq('id', session.user.id).single().then(({ data }) => setUsername(data?.username ?? null))
+  }, [session])
+
+  const finishLook = () => {
+    try { localStorage.setItem('pokequest.look.done', '1') } catch { /* ignore */ }
+    setLookDone(true)
+    setScreen('menu')
+  }
+  const startMode = (mode: Screen) => setScreen(lookDone ? mode : 'customize')
+
   if (!ready) return null
-  return session ? <Home session={session} /> : <Login />
+  if (!session && !guest) return <Login onGuest={() => setGuest(true)} />
+
+  const logout = async () => {
+    setScreen('menu')
+    if (session) await supabase.auth.signOut()
+    setGuest(false)
+  }
+
+  if (screen === 'customize') return <Customizer look={look} onChange={setLook} onDone={finishLook} />
+  if (screen === 'practice') {
+    return (
+      <PlayScreen
+        look={look}
+        settings={settings}
+        onSettings={setSettings}
+        onExit={() => setScreen('menu')}
+        onCustomize={() => setScreen('customize')}
+      />
+    )
+  }
+  return (
+    <>
+      <MainMenu
+        username={username}
+        onBattleRoyale={() => alert('The online lobby arrives in a later step. Try the Practice Island for now!')}
+        onPractice={() => startMode('practice')}
+        onCustomize={() => setScreen('customize')}
+        onSettings={() => setShowSettings(true)}
+        onLogout={logout}
+      />
+      {showSettings && <SettingsPanel settings={settings} onChange={setSettings} onClose={() => setShowSettings(false)} />}
+    </>
+  )
 }
