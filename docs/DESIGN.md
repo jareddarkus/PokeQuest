@@ -1,12 +1,12 @@
-# PokeQuest - design notes (from the owner's brief, 2026-11-24)
+﻿# PokeQuest - design notes (from the owner's brief, 2026-11-24)
 
-Private, friends-only web game. Main menu: **"Pokémon White 2 Together"** (shared persistent server, PokeMMO-style) and
-**Pokémon Battle Royale** (we build the Battle Royale first).
+Private, friends-only web game. Main menu: **"PokÃ©mon White 2 Together"** (shared persistent server, PokeMMO-style) and
+**PokÃ©mon Battle Royale** (we build the Battle Royale first).
 
 ## Look and feel
-- All 2D, top-down, Pokémon White 2 style. Minimal UI: black panels at 60% opacity, white text.
+- All 2D, top-down, PokÃ©mon White 2 style. Minimal UI: black panels at 60% opacity, white text.
 - Fonts: Unbounded Black (titles, sub-headers), Lexend Regular (text). Self-hosted with `@fontsource` (not hot-linked from Google: German GDPR).
-- Menus (team, bag, Pokémon summary) inspired by White 2's UI. Use White 2 UI/icon art from the player's own ROM; minimalist black UI for anything White 2 doesn't have.
+- Menus (team, bag, PokÃ©mon summary) inspired by White 2's UI. Use White 2 UI/icon art from the player's own ROM; minimalist black UI for anything White 2 doesn't have.
 - Controls: WASD / click. Everything else is clickable. Phone: on-screen D-pad (left by default, swappable to the right in Settings).
 - Settings: zoom (zoomed-out default on desktop), D-pad side, customization button. Detect phone vs desktop (media query + touch) to set defaults.
 - Usernames shown above OTHER players only, never above yourself.
@@ -14,19 +14,19 @@ Private, friends-only web game. Main menu: **"Pokémon White 2 Together"** (shar
 
 ## Art, sound and the ROM rule
 - No Nintendo files in the repo, in Supabase or on any host. The browser reads the art from a game file the player picks on their own machine and keeps it in browser storage only.
-- Owner's files: Pokémon White 2 (Spanish, code IRDS, in a zip) and White 2 (English, IRDO). Pokémon White 2 contains species #1-#649 (Gen 1-5), not Gen 6.
-- Fallback when no game file is loaded: PokéAPI sprites loaded at runtime from their servers + CC0 art.
+- Owner's files: PokÃ©mon White 2 (Spanish, code IRDS, in a zip) and White 2 (English, IRDO). PokÃ©mon White 2 contains species #1-#649 (Gen 1-5), not Gen 6.
+- Fallback when no game file is loaded: PokÃ©API sprites loaded at runtime from their servers + CC0 art.
 
 ## Battle Royale (build first)
 - One big circular island, sea around it, the middle is the highest point (a mountain with stairs). Trees and tall grass everywhere; walking in tall grass triggers encounters at the official rates.
 - Everyone starts in the outer ring. Combat between players is ONLY allowed at the peak (inner ring).
-- Start: 5 Poké Balls and a first-stage starter (exact rule still to decide).
-- Rings: ring 1 wild Pokémon = first stages; ring 2 = second stages; later rings = final stages / stronger. To pass to the next ring you beat a gym leader (4 gyms: N, E, S, W; each has a themed stadium; the leader's type is random per match). Beating the leader teleports you inward; no way back.
+- Start: 5 PokÃ© Balls and a first-stage starter (exact rule still to decide).
+- Rings: ring 1 wild PokÃ©mon = first stages; ring 2 = second stages; later rings = final stages / stronger. To pass to the next ring you beat a gym leader (4 gyms: N, E, S, W; each has a themed stadium; the leader's type is random per match). Beating the leader teleports you inward; no way back.
 - Short matches (about 20 min): all battle XP x10.
-- Item pickups (Poké Ball sprite on the ground) give 5 random items by ring: ring 1 basic (Poké Balls, potions, Exp. Share, type-boost items), ring 2+ better. Evolution stones appear in every ring. Bag has no size limit.
+- Item pickups (PokÃ© Ball sprite on the ground) give 5 random items by ring: ring 1 basic (PokÃ© Balls, potions, Exp. Share, type-boost items), ring 2+ better. Evolution stones appear in every ring. Bag has no size limit.
 - Evolutions: stones for stone evolutions; level-up for level evolutions; time-of-day and friendship evolutions simply evolve on level-up (or a friendship item, to decide); trade evolutions via NPC trades.
-- NPC trainers everywhere: walk, run, stand and look around. 4 tiles of vision: if they see you, you must battle. After the battle, talk to them to trade Pokémon (each NPC trades twice: you give one, get theirs; second trade lets you swap back/forward, e.g. Timburr -> Conkeldurr trade chain).
-- Moves are random from what that Pokémon can learn at its level; you may swap to any move it knows or could have learned; new moves on level-up, also mid-battle.
+- NPC trainers everywhere: walk, run, stand and look around. 4 tiles of vision: if they see you, you must battle. After the battle, talk to them to trade PokÃ©mon (each NPC trades twice: you give one, get theirs; second trade lets you swap back/forward, e.g. Timburr -> Conkeldurr trade chain).
+- Moves are random from what that PokÃ©mon can learn at its level; you may swap to any move it knows or could have learned; new moves on level-up, also mid-battle.
 - Nature and ability are randomized.
 - Music: each ring gets a random town/city track, chosen before the match starts, same for every player in that ring.
 - Anti-cheat: server checks battle moves, items and saves; speed check on movement.
@@ -38,5 +38,17 @@ Private, friends-only web game. Main menu: **"Pokémon White 2 Together"** (shar
 
 ## Accounts and hosting
 - Login: username + password (internal made-up email). Supabase project "PokeQuest", ref uqthugajmqezxyamfsgn, eu-central-1.
-- Repo: github.com/jareddarkus/PokeQuest (private). GitHub Pages on the free plan needs a public repo, so hosting is a decision for the owner.
-- Before any public hosting: add an invite code to sign-up.
+- Repo: github.com/jareddarkus/PokeQuest (public; contains no game files or secrets).
+- Hosting: public repo + GitHub Pages (https://jareddarkus.github.io/PokeQuest/). Sign-up is open (username + password only); the owner removed the invite code on purpose.
+
+## Update 2 (owner, 2026-11-24) - Battle Royale rules, superseding earlier notes where they differ
+- Island: 4 rings, each about 20 tiles thick, centre = peak (mountain with stairs). Spawn: players spread as far apart as possible in the OUTER ring.
+- Ring contents: ring 1 = first forms (and no-evolution Pokémon of similar power), levels 1-10. Ring 2 = second forms, levels about 15-20 (also ring-1 species in stage 2, or stronger no-evolution ones). Ring 3 = final forms and strong Pokémon, legendaries allowed but max 2 per team. Ring 4 = the peak.
+- Players can only fight each other at the peak (touching starts a battle). You can only be eliminated by a player at the peak. Last trainer standing wins.
+- Gym leaders N/E/S/W (random types, themed stadium) gate the next ring; beating one teleports you inward, no way back.
+- Collapse: every 15 s the outermost tiles fall into the water (to be confirmed: one 1-tile-thick band of the outermost ring per 15 s, so a 20-tile ring takes 5 min and the whole match ~20 min).
+- XP x5 (was x10). EVs work like the real games (earned by battling, vitamins like Protein change them), IVs random; IVs, EVs, nature and ability are always visible. Shiny chance 1/200 encounters.
+- Match flow: waiting room -> at least 2 players -> Ready / Cancel -> all ready = start -> 1 minute to pick a starter (any generation, level 5) -> spawn. Spawn items: 5 Poké Balls, 3 Potions, 5 Revives. Out of Pokémon and revives = stuck until you find revives.
+- PC button always on screen (not usable during a battle). Team of 6.
+- Rules: no Z-moves, no Mega Evolution, no Gigantamax, no Terastallization. Battle data from Pokémon Showdown (latest generation data, so Fairy type etc.).
+- Art, 3D models and music come from the player's own Pokémon White 2 file. Invented art is only a last resort for things the ROM does not have (e.g. Gen 6+ species), and the owner prefers not to invent anything.
