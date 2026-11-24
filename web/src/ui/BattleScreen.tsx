@@ -6,6 +6,7 @@ import {
   addEvs, catchChance, evYield, evolve, expGain, gainExp, healMon, levelEvolution, rollCatch, useItemFromBag, type Trainer,
 } from '../game/state'
 import { TYPE_COLOR, type PType } from '../game/world'
+import ItemIcon from './ItemIcon'
 import MonSprite from './MonSprite'
 
 export type BattleKind = 'wild' | 'trainer' | 'gym'
@@ -347,7 +348,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, onEnd }:
             {bagList.length === 0 && <span className="muted">Nothing useful here.</span>}
             {bagList.map(([id, n]) => (
               <button key={id} onClick={() => (ITEMS[id].kind === 'ball' ? throwBall(id) : usePotion(id))}>
-                <span>{ITEMS[id].name} x{n}</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><ItemIcon name={id} size={28} />{ITEMS[id].name} x{n}</span>
                 <small>{ITEMS[id].kind === 'ball' && foeCopies[0] && s().foeActive ? `catch chance about ${Math.round(catchChance({ ...foeCopies[0], hp: s().foeActive!.hp }, ITEMS[id].ballBonus ?? 1, legendaryNames.has(foeCopies[0].species)) * 100)}%` : ITEMS[id].desc}</small>
               </button>
             ))}

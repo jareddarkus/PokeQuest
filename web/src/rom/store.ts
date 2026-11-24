@@ -3,6 +3,7 @@
 import { NdsFile, type RomSource } from './nds'
 import { SPRITE_NARC, decodeAllSprites, spriteKey } from './sprites'
 import { WORLD_WINDOW, extractWorldData, type WorldData } from './worldData'
+import { ITEM_ICON_NARC, decodeItemIcons } from './items'
 
 const DB = 'pokequest-rom'
 const STORE = 'assets'
@@ -40,7 +41,7 @@ async function get<T>(key: string): Promise<T | undefined> {
 }
 
 export interface RomMeta { title: string; gameCode: string; sprites: number; version: number }
-const VERSION = 3 // 3 = pictures + map pieces of window (20,5)
+const VERSION = 4 // 4 = pictures + map pieces + item icons
 
 export async function loadWorldData(): Promise<WorldData | undefined> {
   try {
@@ -72,6 +73,8 @@ export async function importRom(file: RomSource, onProgress: (text: string, frac
   const narc = await nds.get(SPRITE_NARC)
   let count = 0
   count = await decodeAllSprites(narc, (d, t) => onProgress(`Converting Pokémon ${d} of ${t}…`, 0.1 + 0.88 * (d / t)), (k, b) => put(`sprite:${k}`, b))
+  onProgress('Reading the item icons…', 0.975)
+  await decodeItemIcons(await nds.get(ITEM_ICON_NARC), (id, b) => put(`item:${id}`, b))
   onProgress('Reading the island map…', 0.985)
   await put('world', await extractWorldData(nds, WORLD_WINDOW))
   const meta: RomMeta = { title: nds.header.title, gameCode: code, sprites: count, version: VERSION }
@@ -109,3 +112,19 @@ export async function clearRom(): Promise<void> {
   urlCache.clear()
 }
 
+
+/** A picture address for an item icon from the player's game file (item number = the game's item id). */
+export async function romItemUrl(id: number): Promise<string | null> {
+  const key = `item:${id}`
+  const hit = urlCache.get(key)
+  if (hit) return hit
+  try {
+    const blob = await get<Blob>(key)
+    if (!blob) return null
+    const url = URL.createObjectURL(blob)
+    urlCache.set(key, url)
+    return url
+  } catch {
+    return null
+  }
+}

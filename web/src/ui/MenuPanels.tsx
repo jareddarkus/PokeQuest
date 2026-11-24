@@ -4,10 +4,12 @@ import {
 } from '../data/dex'
 import { ITEMS, ITEM_LIST } from '../data/items'
 import {
-  evolve, healMon, rareCandy, reviveMon, statLine, stoneEvolution, useItemFromBag, useVitamin, type Trainer,
+  evolve, healMon, rareCandy, reviveMon, stoneEvolution, useItemFromBag, useVitamin, type Trainer,
 } from '../game/state'
 import { TYPE_COLOR, type PType } from '../game/world'
+import ItemIcon from './ItemIcon'
 import MonSprite from './MonSprite'
+import StatBars from './StatBars'
 
 interface PanelProps {
   trainer: Trainer
@@ -65,17 +67,8 @@ export function Summary({ mon, onChange, onBack }: { mon: Mon; onChange: (m: Mon
         <div><span className="muted">Held item</span> <strong>{mon.item || 'none'}</strong></div>
       </div>
 
-      <table className="stat-table">
-        <thead><tr><th>Stat</th><th>Value</th><th>IV</th><th>EV</th></tr></thead>
-        <tbody>
-          {STAT_IDS.map((s) => (
-            <tr key={s} className={nm.plus === s ? 'plus' : nm.minus === s ? 'minus' : ''}>
-              <td>{STAT_NAMES[s]}</td><td>{statLine(mon, s)}</td><td>{mon.ivs[s]}</td><td>{mon.evs[s]}</td>
-            </tr>
-          ))}
-        </tbody>
-        <tfoot><tr><td colSpan={3}>Total EVs</td><td>{evTotal}</td></tr></tfoot>
-      </table>
+      <StatBars mon={mon} />
+      <div className="muted">Total EVs {evTotal} / 510</div>
 
       <h3>Moves (tap one to swap it)</h3>
       <div className="moves-list">
@@ -215,7 +208,7 @@ export function BagPanel({ trainer, setTrainer, onClose, onMessage }: PanelProps
             {entries.length === 0 && <span className="muted">Your bag is empty. Look for Poké Balls on the ground!</span>}
             {entries.map((d) => (
               <button key={d.id} onClick={() => (needsTarget(d.id) ? setItemId(d.id) : onMessage(d.desc))}>
-                <span>{d.name}</span><span className="muted">x{trainer.bag[d.id]}</span>
+                <ItemIcon name={d.id} /><span>{d.name}</span><span className="muted">x{trainer.bag[d.id]}</span>
                 <small>{d.desc}</small>
               </button>
             ))}

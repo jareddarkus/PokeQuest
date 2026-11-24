@@ -157,3 +157,16 @@ button.big small { opacity: .7; font-size: .75rem; }
 .me-zone .hpbox { bottom: 8%; right: -26%; }
 .me-zone { bottom: 34%; }
 .game-mount { position: absolute; inset: 0; }
+
+/* ---------------------------------------------------------------- stat bars (Smogon colours + EV white + IV grey) */
+.statbars { display: flex; flex-direction: column; gap: 6px; }
+.statrow { display: grid; grid-template-columns: 70px 36px 1fr; gap: 4px 8px; align-items: center; font-size: .82rem; }
+.statrow .statname { opacity: .85; }
+.statrow.plus .statname { color: #ff9d9d; }
+.statrow.minus .statname { color: #9dc7ff; }
+.statrow .statval { text-align: right; font-weight: 600; }
+.statbar { display: flex; height: 12px; background: rgba(255, 255, 255, .12); border-radius: 6px; overflow: hidden; }
+.statbar > div { height: 100%; }
+.statnums { grid-column: 3; font-size: .7rem; opacity: .7; margin-top: -4px; }
+.stat-legend { display: flex; gap: 14px; font-size: .72rem; opacity: .75; margin-top: 2px; }
+.stat-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
