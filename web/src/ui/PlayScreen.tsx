@@ -2,8 +2,17 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import GameView, { type GameEvents, type GameHandle } from '../game/GameView'
 import type { Look } from '../game/character'
 import type { Settings } from '../game/settings'
-import { COLLAPSE_SECONDS, RADIUS, collapseRadius, generateWorld, ringAt } from '../game/world'
+import { ENCOUNTER_RATE, gymTeam, trainerTeam, wildEncounter } from '../game/encounters'
+import { addItems, emptyTrainer, makeStarter, type Trainer } from '../game/state'
+import { ITEMS, STARTING_BAG, rollPickup } from '../data/items'
+import { maxHp, type Mon } from '../data/dex'
+import {
+  C, COLLAPSE_SECONDS, RADIUS, RING_INNER, T, collapseRadius, generateWorld, isWalkable, ringAt, type Dir,
+} from '../game/world'
+import BattleScreen, { type BattleKind, type BattleOutcome } from './BattleScreen'
+import { BagPanel, PcPanel, TeamPanel } from './MenuPanels'
 import SettingsPanel from './SettingsPanel'
+import StarterPick from './StarterPick'
 
 interface Props {
   look: Look
@@ -13,6 +22,9 @@ interface Props {
   onCustomize: () => void
 }
 
+interface ActiveBattle { id?: number; kind: BattleKind; foe: Mon[]; name?: string; onWin?: () => void; npcId?: string }
+let battleCounter = 0
+
 export default function PlayScreen({ look, settings, onSettings, onExit, onCustomize }: Props) {
   const world = useMemo(() => generateWorld(Math.floor(Math.random() * 1e9)), [])
   const spawn = world.spawns[0]
@@ -21,11 +33,22 @@ export default function PlayScreen({ look, settings, onSettings, onExit, onCusto
   const [collapseOn, setCollapseOn] = useState(false)
   const collapseRef = useRef(false)
   collapseRef.current = collapseOn
-  const [showSettings, setShowSettings] = useState(false)
+  const [panel, setPanel] = useState<null | 'settings' | 'team' | 'bag' | 'pc'>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [ring, setRing] = useState(1)
   const [secs, setSecs] = useState(0)
   const [radius, setRadius] = useState(RADIUS)
+  const [trainer, setTrainerState] = useState<Trainer>(() => ({ ...emptyTrainer(), bag: { ...STARTING_BAG } }))
+  const trainerRef = useRef(trainer)
+  const setTrainer = (t: Trainer) => { trainerRef.current = t; setTrainerState(t) }
+  const [battle, setBattle] = useState<ActiveBattle | null>(null)
+  const battleRef = useRef<ActiveBattle | null>(null)
+  battleRef.current = battle
+  const defeatedNpcs = useRef(new Set<string>())
+  const beatenGyms = useRef(new Set<string>())
+  const busy = useRef(false)
+
+  const say = (t: string) => setToast(t)
 
   useEffect(() => {
     if (collapseOn) startRef.current = Date.now()
@@ -44,23 +67,119 @@ export default function PlayScreen({ look, settings, onSettings, onExit, onCusto
 
   useEffect(() => {
     if (!toast) return
-    const id = setTimeout(() => setToast(null), 2600)
+    const id = setTimeout(() => setToast(null), 3200)
     return () => clearTimeout(id)
   }, [toast])
 
+  const nextRingSpot = (x: number, y: number, fromRing: number) => {
+    const a = Math.atan2(y + 0.5 - C, x + 0.5 - C)
+    const base = RING_INNER[fromRing - 1] - 4
+    for (let r = base; r > 0; r--) {
+      for (const off of [0, 1, -1, 2, -2, 3, -3]) {
+        const rr = r + off
+        const px = Math.round(C + Math.cos(a) * rr - 0.5)
+        const py = Math.round(C + Math.sin(a) * rr - 0.5)
+        if (isWalkable(world, px, py) && world.tiles[py * 170 + px] !== T.GymDoor) return { x: px, y: py }
+      }
+    }
+    return { x: C, y: C }
+  }
+
+  const startBattle = (b: ActiveBattle) => {
+    if (busy.current || battleRef.current) return
+    if (!trainerRef.current.team.some((m) => m.hp > 0)) {
+      say('All your Pokémon have fainted! Use a Revive from your bag (or find one).')
+      return
+    }
+    busy.current = true
+    handleRef.current?.setNpcFreeze(b.npcId ?? null)
+    setBattle({ ...b, id: ++battleCounter })
+  }
+
+  const endBattle = (outcome: BattleOutcome, t: Trainer) => {
+    setTrainer(t)
+    const b = battleRef.current
+    setBattle(null)
+    busy.current = false
+    handleRef.current?.setNpcFreeze(null)
+    if (outcome === 'win' && b) {
+      if (b.npcId) { defeatedNpcs.current.add(b.npcId); handleRef.current?.defeatNpc(b.npcId) }
+      b.onWin?.()
+    }
+    if (outcome === 'caught') say('Gotcha! The Pokémon joined you (see Team or PC).')
+    if (outcome === 'lose') say('You blacked out of the fight! Heal up with Revives and Potions.')
+  }
+
   const events: GameEvents = useMemo(
     () => ({
-      onGym: (id) => setToast(`Gym ${id} — gym battles arrive in the next step`),
-      onPickup: (id) => {
-        handleRef.current?.removePickup(id)
-        setToast('You found items! (the bag arrives in the next step)')
+      onStep: (_x, _y, tile) => {
+        if (tile === T.Tall && Math.random() < ENCOUNTER_RATE && trainerRef.current.team.length > 0) {
+          const pos = handleRef.current?.getPos()
+          const r = pos ? ringAt(pos.x, pos.y) : 1
+          void wildEncounter(r).then((mon) => startBattle({ kind: 'wild', foe: [mon] }))
+        }
       },
-      onPushed: (_x, _y, r) => setToast(`The ground crumbled — you were pushed to ring ${r}!`),
-      onNpcSpotted: (id) => setToast(`A trainer spotted you! (${id}) Battles arrive in the next step`),
+      onGym: (id) => {
+        const g = world.gyms.find((q) => q.id === id)
+        if (!g) return
+        if (beatenGyms.current.has(id)) { say(`${g.leader} nods: you already beat this gym.`); return }
+        say(`Gym Leader ${g.leader} (${g.type} type) accepts your challenge!`)
+        void gymTeam(g.type, g.ring).then((team) =>
+          startBattle({
+            kind: 'gym', foe: team, name: `Gym Leader ${g.leader}`,
+            onWin: () => {
+              beatenGyms.current.add(id)
+              const pos = handleRef.current!.getPos()
+              const spot = nextRingSpot(pos.x, pos.y, g.ring)
+              handleRef.current?.teleport(spot.x, spot.y)
+              say(`You beat ${g.leader}! You were taken to ring ${g.ring + 1}.`)
+            },
+          }),
+        )
+      },
+      onPickup: (id) => {
+        const pos = handleRef.current?.getPos()
+        const r = pos ? ringAt(pos.x, pos.y) : 1
+        const items = rollPickup(r, Math.random)
+        handleRef.current?.removePickup(id)
+        setTrainer({ ...trainerRef.current, bag: addItems(trainerRef.current.bag, items) })
+        say('You found: ' + Object.entries(items).map(([k, n]) => `${ITEMS[k]?.name ?? k} x${n}`).join(', '))
+      },
+      onPushed: (_x, _y, r) => say(`The ground crumbled — you were pushed to ring ${r}!`),
+      onNpcSpotted: (npcId) => {
+        if (defeatedNpcs.current.has(npcId) || busy.current) return
+        const npc = world.npcs.find((n) => n.id === npcId)
+        if (!npc) return
+        void trainerTeam(npc.ring).then((team) => startBattle({ kind: 'trainer', foe: team, name: `Trainer ${npc.name}`, npcId }))
+      },
     }),
-    [],
+    [world],
   )
 
+  // developer shortcuts (only on the local test server): ?starter=Name auto-picks, ?testbattle starts a wild battle
+  useEffect(() => {
+    if (!import.meta.env.DEV) return
+    const q = new URLSearchParams(location.search)
+    const s = q.get('starter')
+    if (s && trainerRef.current.team.length === 0) void makeStarter(s).then((m) => setTrainer({ ...trainerRef.current, team: [m] }))
+  }, [])
+  useEffect(() => {
+    if (!import.meta.env.DEV || !new URLSearchParams(location.search).has('testbattle')) return
+    if (trainer.team.length === 0 || battleRef.current) return
+    const id = setTimeout(() => void wildEncounter(1).then((mon) => startBattle({ kind: 'wild', foe: [mon] })), 800)
+    return () => clearTimeout(id)
+  }, [trainer.team.length])
+
+  const pickStarter = async (species: string) => {
+    const mon = await makeStarter(species)
+    setTrainer({ ...trainerRef.current, team: [mon] })
+  }
+
+  if (trainer.team.length === 0 && trainer.pc.length === 0 && !battle) {
+    return <StarterPick onPick={pickStarter} />
+  }
+
+  const alive = trainer.team.filter((m) => m.hp > 0).length
   return (
     <div className="fullscreen">
       <GameView
@@ -72,7 +191,7 @@ export default function PlayScreen({ look, settings, onSettings, onExit, onCusto
         others={() => []}
         events={events}
         handleRef={handleRef}
-        paused={showSettings}
+        paused={panel !== null || battle !== null}
       />
 
       <div className="hud-top-left panel">
@@ -80,23 +199,45 @@ export default function PlayScreen({ look, settings, onSettings, onExit, onCusto
         <span>
           {collapseOn ? `Next band falls in ${Math.ceil(secs)}s · island radius ${Math.max(0, radius)}` : 'Island collapse is off'}
         </span>
+        <span>Team {alive}/{trainer.team.length} fit · {trainer.bag['Poke Ball'] ?? 0} Poké Balls</span>
         <label className="mini">
           <input type="checkbox" checked={collapseOn} onChange={(e) => setCollapseOn(e.target.checked)} /> Test collapse
         </label>
       </div>
 
       <div className="hud-top-right">
-        <button className="panel" disabled>Team</button>
-        <button className="panel" disabled>Bag</button>
-        <button className="panel" disabled>PC</button>
-        <button className="panel" onClick={() => setShowSettings(true)}>Settings</button>
+        <button className="panel" onClick={() => setPanel('team')}>Team</button>
+        <button className="panel" onClick={() => setPanel('bag')}>Bag</button>
+        <button className="panel" onClick={() => setPanel('pc')}>PC</button>
+        <button className="panel" onClick={() => setPanel('settings')}>Settings</button>
         <button className="panel" onClick={onExit}>Menu</button>
       </div>
 
+      {!battle && (
+        <div className="hud-practice panel">
+          <small>Practice tools</small>
+          <button onClick={() => setTrainer({ ...trainer, team: trainer.team.map((m) => ({ ...m, hp: maxHp(m) })) })}>Heal team</button>
+        </div>
+      )}
+
       {toast && <div className="toast panel">{toast}</div>}
-      {showSettings && (
-        <SettingsPanel settings={settings} onChange={onSettings} onClose={() => setShowSettings(false)} onCustomize={onCustomize} />
+      {panel === 'settings' && <SettingsPanel settings={settings} onChange={onSettings} onClose={() => setPanel(null)} onCustomize={onCustomize} />}
+      {panel === 'team' && <TeamPanel trainer={trainer} setTrainer={setTrainer} onClose={() => setPanel(null)} onMessage={say} />}
+      {panel === 'bag' && <BagPanel trainer={trainer} setTrainer={setTrainer} onClose={() => setPanel(null)} onMessage={say} />}
+      {panel === 'pc' && <PcPanel trainer={trainer} setTrainer={setTrainer} onClose={() => setPanel(null)} onMessage={say} />}
+
+      {battle && (
+        <BattleScreen
+          key={battle.id}
+          trainer={trainer}
+          foeTeam={battle.foe}
+          kind={battle.kind}
+          foeName={battle.name}
+          onEnd={endBattle}
+        />
       )}
     </div>
   )
 }
+
+export type { Dir }
