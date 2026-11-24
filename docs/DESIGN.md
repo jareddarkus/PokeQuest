@@ -126,3 +126,6 @@ FOUND (not used yet):
 - a/0/9/8: four dark hex menu rows with icons (Poké Ball, gear, pink, blue) = a list-row style (screens 5-8 with gfx 0 / pal 2).
 - a/2/0/3: Unova town map and Battle Subway map; a/2/9/7: wifi / Dream World picture screens; a/0/3/9: trainer card (28 palettes = card colours, screen 38 + gfx 28 = a strip of 8 trainer mugshots); a/0/1/1 files 380-419: empty button outlines.
 Next ideas if this is picked up again: (1) the "!" emote for trainers spotting the player (cheap, visible in play); (2) the list-row style of a/0/9/8; (3) pair the trainer-card parts by hand.
+
+### "!" emote when a trainer spots you (DONE)
+- a/1/7/1 files 7-18 = 12 speech-bubble emotes (smile, sun, "I won!", pokéball, "Lv.Up!", cat+arrow, down triangle, bottle, "!" = file 15, hearts, lines, grin), 32x32 4bpp, colours = first 16 of palette file 0. `decodeEmotes` (rom/overworld.ts) stores `emote:<file>` + `emote:list`; `game/ow.ts` owEmote(). GameView3D shows the "!" over the trainer for 0.9 s (player frozen), then starts the battle. RomMeta.version 17. Dev-only test hook `window.__pq = {npcs, me}` for teleporting next to a trainer.

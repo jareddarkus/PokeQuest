@@ -2,6 +2,8 @@
 // one 32x32 picture per walking frame, all sharing one palette. We rebuild each as a 12-picture strip:
 //   down (stand, step, step), left (...), right (...), up (...)   (the same order the game code uses for directions 0 1 2 3).
 import { decodeTexture, readTexFile } from './nitro'
+import { decompress } from './nds'
+import { paletteOf } from './items'
 
 export const OVERWORLD_NARC = 'a/0/4/8'
 export const OW_FIRST = 7
@@ -70,6 +72,45 @@ export async function decodeOverworld(files: Uint8Array[], put: (idx: number, bl
       const blob = await new Promise<Blob | null>((res) => strip.toBlob(res, 'image/png'))
       if (blob) { await put(i, blob); ok.push(i) }
     } catch { /* not a walker */ }
+  }
+  return ok
+}
+
+// ---------------------------------------------------------------- emote bubbles (a/1/7/1, files 7-18)
+export const EMOTE_NARC = 'a/1/7/1'
+export const EMOTE_EXCLAIM = 15 // the "!" shown when a trainer spots you
+/** 32x32 speech bubbles (smile, "I won!", "Lv.Up!", "!", ...); colours = the first 16 of palette file 0. */
+export async function decodeEmotes(files: Uint8Array[], put: (idx: number, blob: Blob) => Promise<void>): Promise<number[]> {
+  const pal = paletteOf(files[0])
+  const ok: number[] = []
+  if (!pal) return ok
+  for (let i = 7; i <= 18 && i < files.length; i++) {
+    const d = decompress(files[i])
+    let p = -1
+    for (let k = 0; k + 4 <= d.length; k++) if (d[k] === 0x52 && d[k + 1] === 0x41 && d[k + 2] === 0x48 && d[k + 3] === 0x43) { p = k; break }
+    if (p < 0) continue
+    const px = d.subarray(p + 32, p + 32 + 512)
+    const c = document.createElement('canvas')
+    c.width = 32
+    c.height = 32
+    const ctx = c.getContext('2d')!
+    const img = ctx.createImageData(32, 32)
+    for (let t = 0; t < 16; t++) {
+      const bx = (t % 4) * 8, by = Math.floor(t / 4) * 8
+      for (let y = 0; y < 8; y++) {
+        for (let x = 0; x < 8; x++) {
+          const b = px[t * 32 + y * 4 + (x >> 1)] ?? 0
+          const v = x & 1 ? b >> 4 : b & 15
+          if (v === 0) continue
+          const rgb = pal[v] ?? [255, 0, 255]
+          const o = ((by + y) * 32 + bx + x) * 4
+          img.data[o] = rgb[0]; img.data[o + 1] = rgb[1]; img.data[o + 2] = rgb[2]; img.data[o + 3] = 255
+        }
+      }
+    }
+    ctx.putImageData(img, 0, 0)
+    const blob = await new Promise<Blob | null>((res) => c.toBlob(res, 'image/png'))
+    if (blob) { await put(i, blob); ok.push(i) }
   }
   return ok
 }

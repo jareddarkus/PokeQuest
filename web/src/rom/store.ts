@@ -8,11 +8,11 @@ import { BATTLE_NARC } from './battleScene'
 import { UI_NARC, decodeBattleUi, decodePlates } from './plates'
 import { TRAINER_NARCS, extractColors, snapAll, type RomColors } from './colors'
 import { CLOTH_COLORS, EYE_COLORS, HAIR_COLORS, SKIN_TONES } from '../game/character'
-import { OVERWORLD_NARC, decodeOverworld } from './overworld'
+import { EMOTE_NARC, OVERWORLD_NARC, decodeEmotes, decodeOverworld } from './overworld'
 import { ICON_NARC, decodeIcons } from './icons'
 import { COMMAND_NARC, decodeCommandUi } from './commandUi'
 import { MENU_NARC, decodeMenuUi } from './menuUi'
-import { owList, registerOw } from '../game/ow'
+import { owList, registerEmote, registerOw } from '../game/ow'
 
 const DB = 'pokequest-rom'
 const STORE = 'assets'
@@ -66,11 +66,19 @@ export async function loadOverworldSprites(): Promise<void> {
       registerOw(idx, img)
     }
     owList.sort((a, b) => a - b)
+    for (const idx of (await get<number[]>('emote:list')) ?? []) {
+      const blob = await get<Blob>(`emote:${idx}`)
+      if (!blob) continue
+      const img = new Image()
+      const url = URL.createObjectURL(blob)
+      await new Promise<void>((res) => { img.onload = () => res(); img.onerror = () => res(); img.src = url })
+      registerEmote(idx, img)
+    }
     owLoaded = true
   } catch { /* the game falls back to the drawn characters */ }
 }
 
-const VERSION = 16 // 16 = ... + start menu art;  15 = battle buttons rebuilt;  14 = ... + battle command buttons;  13 = ... + menu icons;  12 = ... + walking characters;  11 = ... + the game's own trainer colours
+const VERSION = 17 // 17 = ... + emote bubbles;  16 = ... + start menu art;  15 = battle buttons rebuilt;  14 = ... + battle command buttons;  13 = ... + menu icons;  12 = ... + walking characters;  11 = ... + the game's own trainer colours
 
 let colorsApplied = false
 /** Makes the colour choices of the character maker use the colours the game really uses (snaps each to the nearest real one). */
@@ -138,6 +146,7 @@ export async function importRom(file: RomSource, onProgress: (text: string, frac
   onProgress('Reading the walking characters…', 0.984)
   const ow = await decodeOverworld(parseNarc(await nds.get(OVERWORLD_NARC)), (i, b) => put(`ow:${i}`, b))
   await put('ow:list', ow)
+  await put('emote:list', await decodeEmotes(parseNarc(await nds.get(EMOTE_NARC)), (i, b) => put(`emote:${i}`, b)))
   onProgress('Reading the island map…', 0.985)
   await put('world', await extractWorldData(nds, WORLD_WINDOW))
   const meta: RomMeta = { title: nds.header.title, gameCode: code, sprites: count, version: VERSION }

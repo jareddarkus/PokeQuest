@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import type { BuiltWorld } from '../rom/chunkWorld'
 import { drawCharacter, lookSprite, randomLook, type Look } from './character'
-import { owFrame } from './ow'
+import { owEmote, owFrame } from './ow'
 import { safeTileFor, type GameEvents, type GameHandle, type OtherPlayer } from './GameView'
 import { hash2 } from './rng'
 import type { Settings } from './settings'
@@ -216,6 +216,23 @@ export default function GameView3D(props: Props) {
     fit(mySprite)
     scene.add(mySprite)
 
+    let alert: { n: NpcRuntime; t: number } | null = null
+    let bubble: THREE.Sprite | null = null
+    const em = owEmote(15)
+    if (em) {
+      const tex = new THREE.Texture(em)
+      tex.needsUpdate = true
+      tex.magFilter = THREE.NearestFilter
+      tex.minFilter = THREE.NearestFilter
+      tex.colorSpace = THREE.SRGBColorSpace
+      bubble = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, alphaTest: 0.1, depthTest: false }))
+      bubble.scale.set(1.3, 1.3, 1)
+      bubble.center.set(0.5, 0)
+      bubble.renderOrder = 10
+      bubble.visible = false
+      scene.add(bubble)
+    }
+
     const removed = new Set<string>()
     const npcs: NpcRuntime[] = world.npcs.map((s) => {
       const look = randomLook(s.look)
@@ -224,6 +241,7 @@ export default function GameView3D(props: Props) {
       scene.add(sp)
       return { spec: s, x: s.x, y: s.y, fx: s.x, fy: s.y, dir: s.dir, moving: 0, fromX: s.x, fromY: s.y, timer: 1 + hash2(s.x, s.y, 3) * 3, defeated: false, frozen: false, look, sprite: sp }
     })
+    if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__pq = { npcs, me } // developer test hook
     const otherSprites = new Map<string, { body: THREE.Sprite; label: THREE.Sprite }>()
     let paused = false
     const held = new Set<string>()
@@ -335,12 +353,22 @@ export default function GameView3D(props: Props) {
             }
           }
         }
-        if (me.t >= 1) {
+        if (alert) { // a trainer has spotted you: the "!" bubble shows for a moment, then the battle begins
+          alert.t -= dt
+          bubble!.position.set(alert.n.fx + 0.5, heightAt(alert.n.fx + 0.5, alert.n.fy + 0.5) + 1.7, alert.n.fy + 0.5)
+          if (alert.t <= 0) {
+            const id = alert.n.spec.id
+            alert = null
+            bubble!.visible = false
+            p.events.onNpcSpotted?.(id)
+          }
+        }
+        if (me.t >= 1 && !alert) {
           const d = wantedDir()
           if (d !== null) tryStep(d, elapsed)
         }
         for (const n of npcs) {
-          if (n.defeated || n.frozen) continue
+          if (n.defeated || n.frozen || (alert && alert.n === n && n.moving === 0)) continue
           if (n.moving > 0) {
             n.moving = Math.min(1, n.moving + dt / (n.spec.behavior === 'run' ? 0.1 : 0.22))
             n.fx = n.fromX + (n.x - n.fromX) * n.moving
@@ -370,7 +398,12 @@ export default function GameView3D(props: Props) {
               const sx = n.x + DX[n.dir] * k
               const sy = n.y + DY[n.dir] * k
               if (!isWalkable(world, sx, sy) && tileAt(world, sx, sy) !== T.GymDoor) break
-              if (sx === me.x && sy === me.y && me.t >= 1) { p.events.onNpcSpotted?.(n.spec.id); break }
+              if (sx === me.x && sy === me.y && me.t >= 1 && !alert) {
+                const em = owEmote(15) // the game's own "!" bubble
+                if (em && bubble) { alert = { n, t: 0.9 }; bubble.visible = true; break }
+                p.events.onNpcSpotted?.(n.spec.id)
+                break
+              }
             }
           }
         }

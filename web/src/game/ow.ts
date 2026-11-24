@@ -28,3 +28,8 @@ export function owFrame(idx: number, dir: number, frame: number): HTMLCanvasElem
   frameCache.set(key, c)
   return c
 }
+
+// emote bubbles (speech bubbles with a symbol), 32x32
+const emotes = new Map<number, HTMLImageElement>()
+export function registerEmote(idx: number, img: HTMLImageElement) { emotes.set(idx, img) }
+export const owEmote = (idx: number): HTMLImageElement | undefined => emotes.get(idx)
