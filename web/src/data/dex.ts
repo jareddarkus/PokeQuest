@@ -216,12 +216,15 @@ export function spriteId(species: string): string {
   return Dex.species.get(species).spriteid
 }
 
-/** Pokémon Showdown's own animated Pokémon sprite pictures, loaded while the game runs (never stored by us). */
-export function spriteUrl(species: string, opts: { back?: boolean; shiny?: boolean } = {}, fallback = false): string {
+/**
+ * Pokémon Showdown's pixel-art pictures in the style of Pokémon Black / White (used for Pokémon that are not in Pokémon White 2):
+ * stage 0 = animated picture (where one exists), 1 = still picture, 2 = the 3D picture (last resort). Loaded while the game runs, never stored by us.
+ */
+export function spriteUrl(species: string, opts: { back?: boolean; shiny?: boolean } = {}, stage = 0): string {
   const sp = Dex.species.get(species)
-  const dir = !fallback && sp.num <= 649 ? 'gen5ani' : 'ani'
   const suffix = `${opts.back ? '-back' : ''}${opts.shiny ? '-shiny' : ''}`
-  return `https://play.pokemonshowdown.com/sprites/${dir}${suffix}/${sp.spriteid}.gif`
+  const dir = stage === 0 ? 'gen5ani' : stage === 1 ? 'gen5' : 'ani'
+  return `https://play.pokemonshowdown.com/sprites/${dir}${suffix}/${sp.spriteid}.${stage === 1 ? 'png' : 'gif'}`
 }
 
 export function rngFrom(seed: number) {

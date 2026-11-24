@@ -282,3 +282,7 @@ button.big small { opacity: .7; font-size: .75rem; }
 .foe-zone .hp2 { left: 8px; top: 10px; }
 .me-zone .hp2 { right: 8px; bottom: calc(var(--menu-h, 288px) + 74px); }
 @media (min-width: 1000px) { .me-zone .hp2 { bottom: 14px; right: 14px; } }
+
+/* a Pokémon with only a still pixel picture breathes gently so it does not look frozen */
+.mon-sprite.pix.still { animation: pixidle 1.6s ease-in-out infinite; }
+@keyframes pixidle { 0%, 100% { transform: scale(1, 1); } 50% { transform: scale(1.015, 0.97); } }

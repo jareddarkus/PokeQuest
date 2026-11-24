@@ -207,3 +207,11 @@ Next ideas if this is picked up again: (1) the "!" emote for trainers spotting t
 - PC: the 24 box wallpapers = `a/1/1/7` map 13 with tiles 14..37 and colours 38..61 (`screen:pc:<k>`, box n uses wallpaper n mod 24). The box grid (6 x 5), the banner text and the arrows are ours; the PC bottom-screen layout (`a/1/4/1`) is not used.
 - Message frames: `a/0/0/5` file 8 = nine tiles (3 x 3) of a window frame; colours 1 = dark (battle messages), 3 = white (dialogue toasts); drawn as a 9-slice border-image (`ui/DsFrame.tsx`). The scroll-shaped frame (file 6) and the "more text" arrow (file 11) are not used yet.
 - RomMeta.version 34.
+
+### Review round 7 (2026-11-24): keys, language, pixel sprites, Bag
+- Keys: right = A, down = B, left = Y, up = X. Ground balls drawn at real size (picture width / 16 tiles). Placeholder "X" characters (identical pictures that appear 4+ times in `a/0/4/8`) are left out of the import (version 35).
+- Spanish is the default language (`src/i18n.ts`, Settings > Language): official name tables from PokeAPI (`data/es.json`), a sentence dictionary + patterns, applied to the page text as it appears. Gaps: text baked into the game's pictures (FIGHT / BAG buttons, type plates), canvas signs. Many strings may still be English.
+- Pokémon without a picture in the game file (Gen 6+): Showdown's BW-style pixel pictures (animated gif where one exists, else still with a gentle idle), sizes in `data/pixelSprites.json`.
+- Bag: shared `ui/BagScreen.tsx` (description box on top, dark list rows, pockets at the bottom), also used inside battles. HP/EXP gauges moved clear of their labels. Follower: animated game-file sprite (canvas) or Showdown pixel picture (page element).
+- Animation parts of other poses are now placed from the table (Oshawott fixed); `?animtest&frames` lists animations whose body pieces split (not fully reviewed).
+- NOT verified: run-animation frame timing (the files hold only textures; the timing is in game code), the follower in the browser, Spanish on every screen, all 649 animations after the pose fix.

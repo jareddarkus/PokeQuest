@@ -27,6 +27,13 @@ function footGap(sp: AnimatedSprite): number {
   return gap
 }
 
+/** The animation of a Pokémon if it has been built already (see warmAnim), with the empty rows under its feet. */
+export function getAnim(species: string, back: boolean, shiny: boolean): { sprite: AnimatedSprite; gap: number } | null {
+  const key = `${dexNum(species)}:${back ? 'b' : 'f'}:${shiny ? 's' : 'n'}`
+  const sp = cache.get(key)
+  return sp ? { sprite: sp, gap: footGap(sp) } : null
+}
+
 /** Builds the animation of a Pokémon in advance (it takes a moment), so that it shows up at once when the battle begins. */
 export async function warmAnim(species: string, back: boolean, shiny: boolean): Promise<void> {
   const dex = dexNum(species)

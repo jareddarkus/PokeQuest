@@ -18,6 +18,53 @@ export default function AnimTest() {
       await nds.open()
       ;(globalThis as { __pqDebug?: boolean }).__pqDebug = q.has('debug')
       const files = parseNarc(await nds.get('a/0/0/4'))
+      if (q.has('frames')) { // look for broken frames: pieces that fly apart or vanish during the animation (compared with the first frame)
+        const from = Number(q.get('from') ?? 1), to = Number(q.get('to') ?? 649)
+        const tmp = document.createElement('canvas'); tmp.width = 96; tmp.height = 96
+        const tctx = tmp.getContext('2d', { willReadFrequently: true })!
+        const stats = (t: number, sp: NonNullable<ReturnType<typeof buildAnimatedSprite>>) => {
+          tctx.clearRect(0, 0, 96, 96); sp.draw(tctx, t)
+          const d = tctx.getImageData(0, 0, 96, 96).data
+          const m = new Uint8Array(96 * 96); let count = 0
+          for (let i = 0; i < 96 * 96; i++) if (d[i * 4 + 3] > 100) { m[i] = 1; count++ }
+          // pieces: connected groups of pixels, allowing a gap of 1 pixel
+          const seen = new Uint8Array(96 * 96); let comps = 0; let largest = 0
+          for (let i = 0; i < 96 * 96; i++) {
+            if (!m[i] || seen[i]) continue
+            comps++; const st = [i]; seen[i] = 1; let size = 0
+            while (st.length) {
+              const p = st.pop()!; size++; const x = p % 96, y = (p / 96) | 0
+              for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+                const nx = x + dx, ny = y + dy
+                if (nx < 0 || ny < 0 || nx >= 96 || ny >= 96) continue
+                const k = ny * 96 + nx
+                if (m[k] && !seen[k]) { seen[k] = 1; st.push(k) }
+              }
+            }
+            if (size > largest) largest = size
+          }
+          return { count, comps, frac: largest / Math.max(1, count) }
+        }
+        const bad: string[] = []
+        for (let d = from; d <= to; d++) {
+          for (const front of [true, false]) {
+            const sp = buildAnimatedSprite(files, d * 20, front, false)
+            if (!sp || sp.mismatch > 0.25) continue
+            const s0 = stats(0, sp)
+            let worst = 0, minFrac = s0.frac
+            const n = Math.min(120, Math.max(30, sp.loopLength))
+            for (let k = 0; k < n; k++) {
+              const st = stats((k * sp.loopLength) / n, sp)
+              worst = Math.max(worst, Math.abs(st.count - s0.count) / Math.max(1, s0.count))
+              minFrac = Math.min(minFrac, st.frac)
+            }
+            if (s0.frac - minFrac > 0.18 || worst > 0.6) bad.push(`#${d}${front ? 'f' : 'b'}(body ${s0.frac.toFixed(2)}->${minFrac.toFixed(2)} area ${worst.toFixed(2)})`)
+          }
+          if (d % 20 === 0) { setInfo(`checking ${d}/${to}… bad so far: ${bad.join(' ')}`); await new Promise((r) => setTimeout(r, 0)) }
+        }
+        setInfo(`BAD: ${bad.join(' ')}`)
+        return
+      }
       if (q.has('all')) { // check every Pokémon: how close is the first animation picture to the game's still picture?
         const rows: Array<{ d: number; front: number; back: number; of: string; ob: string }> = []
         const from = Number(q.get('from') ?? 1), to = Number(q.get('to') ?? 649)

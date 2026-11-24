@@ -69,7 +69,27 @@ export function buildStrip(raw: Uint8Array): HTMLCanvasElement | null {
 /** Decodes every normal walking character; `put` stores each strip under its file number. Returns the numbers. */
 export async function decodeOverworld(files: Uint8Array[], put: (idx: number, blob: Blob) => Promise<void>): Promise<number[]> {
   const ok: number[] = []
+  // The game file holds a number of identical "X" pictures for characters that do not exist (dummy entries): any picture that appears
+  // four or more times is such a placeholder and is left out, so no character is ever drawn as a big black X.
+  const hashOf = (c: HTMLCanvasElement): string => {
+    const d = c.getContext('2d')!.getImageData(0, 0, c.width, c.height).data
+    let h = 2166136261
+    for (let k = 0; k < d.length; k += 7) h = Math.imul(h ^ d[k], 16777619)
+    return `${c.width}x${c.height}:${h >>> 0}`
+  }
+  const seen = new Map<string, number>()
+  const hashes = new Map<number, string>()
   for (let i = OW_FIRST; i <= OW_LAST && i < files.length; i++) {
+    try {
+      const strip = buildStrip(files[i])
+      if (!strip) continue
+      const h = hashOf(strip)
+      hashes.set(i, h)
+      seen.set(h, (seen.get(h) ?? 0) + 1)
+    } catch { /* not a walker */ }
+  }
+  for (const [i, h] of hashes) {
+    if ((seen.get(h) ?? 0) >= 4) continue
     try {
       const strip = buildStrip(files[i])
       if (!strip) continue

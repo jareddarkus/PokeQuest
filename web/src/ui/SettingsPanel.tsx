@@ -13,6 +13,14 @@ export default function SettingsPanel({ settings, onChange, onClose, onCustomize
       <div className="panel modal" onClick={(e) => e.stopPropagation()}>
         <h2>Settings</h2>
 
+        <div className="row">
+          <span>Language</span>
+          <div className="seg">
+            <button className={settings.language === 'es' ? 'on' : ''} onClick={() => onChange({ language: 'es' })}>Español</button>
+            <button className={settings.language === 'en' ? 'on' : ''} onClick={() => onChange({ language: 'en' })}>English</button>
+          </div>
+        </div>
+
         <label className="row">
           <span>Zoom (left = see more of the map)</span>
           <input

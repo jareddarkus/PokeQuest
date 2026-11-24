@@ -5,18 +5,17 @@ import { ITEMS } from '../data/items'
 import {
   addEvs, catchChance, evYield, evolve, expGain, gainExp, healMon, levelEvolution, rollCatch, useItemFromBag, type Trainer,
 } from '../game/state'
-import ItemIcon from './ItemIcon'
 import { useUiUrl } from './CmdButton'
 import { useFrameStyle } from './DsFrame'
 import StatusIcon from './StatusIcon'
 import BattleBackdrop from './BattleBackdrop'
 import type { BattleLayout } from '../rom/battleScene'
-import MonSprite from './MonSprite'
+import MonSprite, { preloadPixel } from './MonSprite'
 import { CommandScreen, MoveScreen, dsScale } from './DsMenu'
+import BagScreen from './BagScreen'
 import { Dex } from '@pkmn/sim'
 import { music } from '../audio/music'
 import { warmAnim } from './AnimSprite'
-import { loadHdSprite } from './hdSprite'
 import { MoveFx, FX_NAMES } from './moveFx'
 
 export type BattleKind = 'wild' | 'trainer' | 'gym'
@@ -48,7 +47,8 @@ function HpBox({ side, mine, exp }: { side: Side; mine: boolean; exp?: number })
   const u = (n: number) => n * K
   // positions in DS pixels: the name bar on top, the strip below it (yours starts further left)
   const stripX = mine ? 8 : 14, stripY = 12
-  const gx = stripX + (mine ? 41 : 29), gy = stripY + (mine ? 2 : 2), gw = mine ? 70 : 64
+  // the "HP" label of the strip ends at column 36 (yours: 48) of the strip picture: the gauge starts after it, the EXP bar after the "EXP" label (ends at column 33)
+  const gx = stripX + (mine ? 50 : 38), gy = stripY + 2, gw = mine ? 66 : 64
   const text: React.CSSProperties = { position: 'absolute', color: '#101010', fontWeight: 700, lineHeight: 1, fontSize: u(8), whiteSpace: 'nowrap', textShadow: '0 1px 0 rgba(255,255,255,.35)' }
   return (
     <div className={`hp2 ${mine ? 'mine' : 'foe'}`} style={{ width: u(136), height: u(mine ? 40 : 26) }}>
@@ -62,8 +62,8 @@ function HpBox({ side, mine, exp }: { side: Side; mine: boolean; exp?: number })
         <div style={{ position: 'absolute', left: 0, top: u(2), height: u(1), width: `${frac * 100}%`, background: fill[1], transition: 'width .5s ease' }} />
       </div>
       {mine && (
-        <div style={{ position: 'absolute', left: u(gx - 12), top: u(stripY + 10), width: u(gw + 12), height: u(2), background: '#212121' }}>
-          <div style={{ position: 'absolute', left: 0, top: 0, height: u(2), width: `${expFrac * 100}%`, background: '#38b6f5', transition: 'width .5s ease' }} />
+        <div style={{ position: 'absolute', left: u(stripX + 36), top: u(stripY + 10), width: u(80), height: u(3), background: '#212121', boxShadow: '0 0 0 1px #000' }}>
+          <div style={{ position: 'absolute', left: 0, top: u(1), height: u(1), width: `${expFrac * 100}%`, background: '#38b6f5', transition: 'width .5s ease' }} />
         </div>
       )}
       {mine && <span style={{ ...text, right: u(8), top: u(29), color: '#fff', textShadow: '1px 1px 0 #000, -1px 0 0 #000, 0 -1px 0 #000' }}>{Math.max(0, side.hp)}/{side.maxHp}</span>}
@@ -214,9 +214,9 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, onEnd }:
       for (const [m, back] of [[mine, true], [theirs, false]] as const) {
         if (!m) continue
         const d = dexNum(m.species)
-        jobs.push(d > 0 && d <= 649 ? warmAnim(m.species, back, !!m.shiny) : loadHdSprite(d))
+        jobs.push(d > 0 && d <= 649 ? warmAnim(m.species, back, !!m.shiny) : Promise.resolve(preloadPixel(m.species, back, !!m.shiny)))
       }
-      for (const m of foeCopies.slice(1)) { const d = dexNum(m.species); if (d > 649) void loadHdSprite(d) }
+      for (const m of foeCopies.slice(1)) { const d = dexNum(m.species); if (d > 649) preloadPixel(m.species, false, !!m.shiny) }
       await Promise.race([Promise.all(jobs), sleep(3000)])
     }
     if (kind !== 'wild') setText(`${foeName ?? 'A trainer'} wants to battle!`)
@@ -393,11 +393,6 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, onEnd }:
     void sleep(900).then(() => s().passTurn())
   }
 
-  const bagList = Object.entries(bag).filter(([id]) => {
-    const d = ITEMS[id]
-    return d && ((d.kind === 'ball' && kind === 'wild') || d.kind === 'heal')
-  })
-
   return (
     <div className="fullscreen battle" style={{ ["--menu-h" as string]: `${192 * S}px` }}>
       <div className={`stage-cam ${mode === 'fight' ? 'zoom' : ''}`}>
@@ -461,15 +456,18 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, onEnd }:
         )}
 
         {mode === 'bag' && req && (
-          <div className="panel battle-menu list">
-            {bagList.length === 0 && <span className="muted">Nothing useful here.</span>}
-            {bagList.map(([id, n]) => (
-              <button key={id} onClick={() => (ITEMS[id].kind === 'ball' ? throwBall(id) : usePotion(id))}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><ItemIcon name={id} size={28} />{ITEMS[id].name} x{n}</span>
-                <small>{ITEMS[id].kind === 'ball' && foeCopies[0] && s().foeActive ? `catch chance about ${Math.round(catchChance({ ...foeCopies[0], hp: s().foeActive!.hp }, ITEMS[id].ballBonus ?? 1, legendaryNames.has(foeCopies[0].species)) * 100)}%` : ITEMS[id].desc}</small>
-              </button>
-            ))}
-            <button className="back" onClick={() => setMode('menu')}>Back</button>
+          <div style={{ position: 'fixed', inset: 0, zIndex: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,.45)' }}>
+            <div style={{ background: '#0c0c10', padding: 8, borderRadius: 10 }}>
+              <BagScreen
+                bag={bag}
+                pockets={kind === 'wild' ? [1, 2] : [1]}
+                only={(d) => (d.kind === 'ball' && kind === 'wild') || d.kind === 'heal'}
+                canUse={(d) => (d.kind === 'ball' && kind === 'wild') || d.kind === 'heal'}
+                onUse={(id) => { setMode('wait'); if (ITEMS[id].kind === 'ball') throwBall(id); else usePotion(id) }}
+                onClose={() => setMode('menu')}
+                describe={(d) => (d.kind === 'ball' && foeCopies[0] && s().foeActive ? `Catch chance about ${Math.round(catchChance({ ...foeCopies[0], hp: s().foeActive!.hp }, d.ballBonus ?? 1, legendaryNames.has(foeCopies[0].species)) * 100)}%.` : null)}
+              />
+            </div>
           </div>
         )}
       </div>

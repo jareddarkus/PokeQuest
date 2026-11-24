@@ -7,6 +7,7 @@ export interface Settings {
   showDpad: boolean
   musicVolume: number // 0..1
   sfxVolume: number
+  language: 'es' | 'en'
 }
 
 export function isTouchDevice(): boolean {
@@ -23,6 +24,7 @@ export function defaultSettings(): Settings {
     showDpad: touch,
     musicVolume: 0.5,
     sfxVolume: 0.7,
+    language: 'es',
   }
 }
 

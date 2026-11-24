@@ -10,8 +10,9 @@ import { safeTileFor, type GameEvents, type GameHandle, type OtherPlayer } from 
 import { hash2 } from './rng'
 import { dexNum } from '../data/dex'
 import { MAX_ROM_DEX } from '../rom/sprites'
-import { romSpriteUrl } from '../rom/store'
-import { hdHeightFactor, loadHdSprite } from '../ui/hdSprite'
+import { getAnim, warmAnim } from '../ui/AnimSprite'
+import { pixelDom } from '../ui/MonSprite'
+import type { AnimatedSprite } from '../rom/anim'
 import type { Settings } from './settings'
 import {
   DX, DY, RING_INNER, SIZE, T, TYPE_COLOR, collapseRadius, dist, isWalkable, tileAt, type Dir, type NpcSpec, type World,
@@ -276,7 +277,8 @@ export default function GameView3D(props: Props) {
     for (const pk of world.pickups) {
       const s = new THREE.Sprite(ballMat)
       s.center.set(0.5, 0.1)
-      s.scale.set(ballImg ? 1.1 : 0.5, ballImg ? 1.1 : 0.5, 1)
+      const bs = ballImg ? ballImg.width / 16 : 0.5 // the picture is drawn at its real size: 16 pixels = one tile
+      s.scale.set(bs, bs, 1)
       s.renderOrder = 3
       s.position.set(pk.x + 0.5, heightAt(pk.x + 0.5, pk.y + 0.5) + 0.05, pk.y + 0.5)
       scene.add(s)
@@ -295,46 +297,48 @@ export default function GameView3D(props: Props) {
     const myShadow = makeShadow(scene)
     const npcShadows = new Map<NpcRuntime, THREE.Mesh>()
 
-    // the follower: the first Pokémon of the team walks one tile behind you (it steps onto the tile you just left)
-    const fol = { x: me.x, y: me.y, fromX: me.x, fromY: me.y, t: 1, stepSec: WALK_SECONDS, key: '', h: 1, loading: false, sprite: new THREE.Sprite(new THREE.SpriteMaterial({ transparent: true, alphaTest: 0.1, depthWrite: false })), shadow: makeShadow(scene, 0.8) }
+    // the follower: the first Pokémon of the team walks one tile behind you (it steps onto the tile you just left).
+    // From the game file: the Pokémon's own animation, drawn on a small canvas. Newer Pokémon: Showdown's pixel picture as a page element.
+    const fol = {
+      x: me.x, y: me.y, fromX: me.x, fromY: me.y, t: 1, stepSec: WALK_SECONDS, key: '', mode: 'none' as 'none' | 'rom' | 'dom',
+      sprite: new THREE.Sprite(new THREE.SpriteMaterial({ transparent: true, alphaTest: 0.1, depthWrite: false })), shadow: makeShadow(scene, 0.8),
+      anim: null as AnimatedSprite | null, canvas: document.createElement('canvas'), tex: null as THREE.CanvasTexture | null,
+      dom: null as { wrap: HTMLElement; w: number; h: number } | null,
+    }
+    fol.canvas.width = 96; fol.canvas.height = 96
     fol.sprite.visible = false
-    fol.sprite.center.set(0.5, 0)
     fol.sprite.renderOrder = 3
     scene.add(fol.sprite)
+    const clearFollower = () => {
+      fol.mode = 'none'; fol.anim = null; fol.sprite.visible = false
+      if (fol.dom) { fol.dom.wrap.remove(); fol.dom = null }
+    }
     const loadFollower = (species: string, shiny: boolean) => {
       const key = `${species}|${shiny}`
+      clearFollower()
       fol.key = key
-      fol.sprite.visible = false
-      fol.sprite.material.map = null
-      fol.sprite.material.needsUpdate = true
       const dx = dexNum(species)
-      const apply = (img: HTMLImageElement, height: (fraction: number) => number) => {
-        if (fol.key !== key) return
-        // trim the see-through border so the Pokémon stands on the ground
-        const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight
-        const cx = c.getContext('2d', { willReadFrequently: true })!
-        cx.drawImage(img, 0, 0)
-        const d = cx.getImageData(0, 0, c.width, c.height).data
-        let x0 = c.width, y0 = c.height, x1 = -1, y1 = -1
-        for (let y = 0; y < c.height; y++) for (let x = 0; x < c.width; x++) if (d[(y * c.width + x) * 4 + 3] > 40) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y }
-        if (x1 < 0) return
-        const t = document.createElement('canvas'); t.width = x1 - x0 + 1; t.height = y1 - y0 + 1
-        t.getContext('2d')!.drawImage(c, x0, y0, t.width, t.height, 0, 0, t.width, t.height)
-        const tex = new THREE.CanvasTexture(t)
-        tex.magFilter = THREE.NearestFilter; tex.minFilter = THREE.NearestFilter; tex.colorSpace = THREE.SRGBColorSpace
-        fol.sprite.material.map = tex
-        fol.sprite.material.needsUpdate = true
-        fol.h = Math.max(0.5, Math.min(1.7, height(t.height / c.height)))
-        fol.sprite.userData.ratio = t.width / t.height
-        fol.sprite.visible = true
-      }
-      const img = new Image()
-      img.crossOrigin = 'anonymous'
       if (dx > 0 && dx <= MAX_ROM_DEX) {
-        // from the game file: the size on screen follows the size of the Pokémon in its 96 x 96 picture
-        void romSpriteUrl(dx, false, shiny).then((u) => { if (!u) return; img.onload = () => apply(img, (f) => f * 1.9); img.src = u })
+        void warmAnim(species, false, shiny).then(() => {
+          if (fol.key !== key) return
+          const a = getAnim(species, false, shiny)
+          if (!a) return
+          fol.anim = a.sprite
+          fol.sprite.center.set(0.5, a.gap / 96)
+          fol.tex = new THREE.CanvasTexture(fol.canvas)
+          fol.tex.magFilter = THREE.NearestFilter; fol.tex.minFilter = THREE.NearestFilter; fol.tex.colorSpace = THREE.SRGBColorSpace
+          fol.sprite.material.map = fol.tex
+          fol.sprite.material.needsUpdate = true
+          fol.mode = 'rom'
+        })
       } else {
-        void loadHdSprite(dx).then((h) => { if (!h) return; img.onload = () => apply(img, () => Math.min(1.5, hdHeightFactor(species) * 1.5)); img.src = h.url })
+        const px = pixelDom(species, shiny)
+        const wrap = document.createElement('div')
+        wrap.style.cssText = `position:absolute;left:0;top:0;pointer-events:none;z-index:2;transform-origin:50% 100%;width:${px.w}px;height:${px.h}px;will-change:transform`
+        wrap.appendChild(px.el)
+        mount.appendChild(wrap)
+        fol.dom = { wrap, w: px.w, h: px.h }
+        fol.mode = 'dom'
       }
     }
 
@@ -380,7 +384,7 @@ export default function GameView3D(props: Props) {
     }
     propsRef.current.handleRef.current = handle
 
-    // W A S D walk. The arrow keys are the buttons of the game: left = A (talk / pick up), down = B (hold to run), up = X (menu), right = Y.
+    // W A S D walk. The arrow keys are the buttons of the game: right = A (talk / pick up), down = B (hold to run), up = X (menu), left = Y.
     const keyDir = (k: string): Dir | null => {
       switch (k) {
         case 'w': return 3
@@ -403,9 +407,9 @@ export default function GameView3D(props: Props) {
       const kd = keyDir(k)
       if (kd !== null) { if (!held.has(k)) { held.add(k); tapRef.current = kd }; e.preventDefault(); return }
       if (k === 'arrowdown' || k === 'shift') { held.add('b'); e.preventDefault(); return }
-      if (k === 'arrowleft') { if (!e.repeat) doAction(); e.preventDefault(); return }
+      if (k === 'arrowright') { if (!e.repeat) doAction(); e.preventDefault(); return }
       if (k === 'arrowup') { if (!e.repeat) propsRef.current.events.onMenuKey?.(); e.preventDefault(); return }
-      if (k === 'arrowright') e.preventDefault()
+      if (k === 'arrowleft') e.preventDefault() // Y: not used yet
     }
     const onKeyUp = (e: KeyboardEvent) => {
       const k = e.key.toLowerCase()
@@ -582,20 +586,35 @@ export default function GameView3D(props: Props) {
       myShadow.position.set(px + 0.5, ph + 0.03, py + 0.5)
       // the follower
       const fs = p.follower
-      if (fs && `${fs.species}|${fs.shiny}` !== fol.key && !fol.loading) { fol.loading = true; loadFollower(fs.species, fs.shiny); fol.loading = false }
-      if (!fs) { fol.sprite.visible = false; fol.key = '' }
+      if (fs && `${fs.species}|${fs.shiny}` !== fol.key) loadFollower(fs.species, fs.shiny)
+      if (!fs && fol.key) { clearFollower(); fol.key = '' }
       fol.stepSec = me.stepSec
       if (fol.t < 1) fol.t = Math.min(1, fol.t + dt / fol.stepSec)
-      fol.sprite.visible = !!fs && !!fol.sprite.material.map && fol.key !== ''
-      fol.shadow.visible = fol.sprite.visible
-      if (fol.sprite.visible) {
+      const folVisible = !!fs && fol.mode !== 'none'
+      fol.shadow.visible = folVisible
+      fol.sprite.visible = folVisible && fol.mode === 'rom'
+      if (folVisible) {
         const fx = fol.fromX + (fol.x - fol.fromX) * fol.t
         const fy = fol.fromY + (fol.y - fol.fromY) * fol.t
         const fh = heightAt(fx + 0.5, fy + 0.5)
         const hop = fol.t < 1 ? Math.abs(Math.sin(fol.t * Math.PI)) * 0.12 : 0
-        fol.sprite.scale.set(fol.h * (fol.sprite.userData.ratio ?? 1), fol.h, 1)
-        place(fol.sprite, camera, fx + 0.5, fh + 0.05 + hop, fy + 0.5)
         fol.shadow.position.set(fx + 0.5, fh + 0.03, fy + 0.5)
+        if (fol.mode === 'rom' && fol.anim) {
+          const cx = fol.canvas.getContext('2d')!
+          cx.clearRect(0, 0, 96, 96)
+          fol.anim.draw(cx, (now / 1000) * 60)
+          if (fol.tex) fol.tex.needsUpdate = true
+          fol.sprite.scale.set(1.9, 1.9, 1) // 96 picture pixels = 1.9 tiles
+          place(fol.sprite, camera, fx + 0.5, fh + 0.05 + hop, fy + 0.5)
+        } else if (fol.mode === 'dom' && fol.dom) {
+          const w = mount.clientWidth, h = mount.clientHeight
+          const a = new THREE.Vector3(fx + 0.5, fh + 0.05 + hop, fy + 0.5).project(camera)
+          const b = new THREE.Vector3(fx + 1.5, fh + 0.05 + hop, fy + 0.5).project(camera)
+          const sx = (a.x * 0.5 + 0.5) * w, sy = (-a.y * 0.5 + 0.5) * h
+          const tile = Math.abs((b.x - a.x) * 0.5 * w)
+          const k = (tile * 1.9) / 96 // 96 picture pixels = 1.9 tiles, like the pictures from the game file
+          fol.dom.wrap.style.transform = `translate(${sx - fol.dom.w / 2}px, ${sy - fol.dom.h}px) scale(${k})`
+        }
       }
       const fr = Math.floor(now / (1000 / 30)) // water pictures: 30 a second (a calm pace; the exact speed of the original is not known)
       for (const a of animatedTextures) a.tex.offset.set(valueAt(a.anim.moveS, fr), valueAt(a.anim.moveT, fr)) // moving water
@@ -653,6 +672,7 @@ export default function GameView3D(props: Props) {
       window.removeEventListener('blur', onBlur)
       window.removeEventListener('resize', resize)
       propsRef.current.handleRef.current = null
+      clearFollower()
       renderer.dispose()
       if (renderer.domElement.parentElement === mount) mount.removeChild(renderer.domElement)
     }

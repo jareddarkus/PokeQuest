@@ -277,7 +277,13 @@ export function buildAnimatedSprite(files: Uint8Array[], base: number, front: bo
           const cell = cellOf(f0.idx)
           // the same part of the first pose: the one with the same animation, else the first one that starts with the same picture
           const same = parts.find((p) => p.node.anim === node.anim) ?? parts.find((p) => anims[p.node.anim]?.frames[0].idx === f0.idx)
-          const rest: [number, number] = same ? [same.rest[0] + (node.x - same.node.x), same.rest[1] + (node.y - same.node.y)] : [49 + node.x, 71 + node.y]
+          // other poses: the table position of the part (like the first pose), plus the nudge that was needed for the same part in the first pose
+          const abs: [number, number] = [gx + ox + node.x + f0.tx, gy + oy + node.y + f0.ty]
+          let rest: [number, number] = abs
+          if (same) {
+            const sf0 = anims[same.node.anim]?.frames[0]
+            if (sf0) rest = [abs[0] + (same.rest[0] - (gx + ox + same.node.x + sf0.tx)), abs[1] + (same.rest[1] - (gy + oy + same.node.y + sf0.ty))]
+          }
           return { cell, anim, node, rest }
         }).filter((p): p is PartInfo => p !== null)
         return reverseParts ? list.reverse() : list

@@ -13,6 +13,7 @@ import { getRomMeta } from './rom/store'
 import { music } from './audio/music'
 import LobbyScreen from './ui/LobbyScreen'
 import type { MatchInfo } from './net/useLobby'
+import { setLang, startTranslator } from './i18n'
 import './App.css'
 
 type Screen = 'menu' | 'customize' | 'practice' | 'lobby' | 'match'
@@ -77,6 +78,8 @@ export default function App() {
   }, [])
   const [settings, setSettings] = useSettings()
   const [look, setLook] = useLook()
+  useEffect(() => { startTranslator() }, [])
+  useEffect(() => { setLang(settings.language ?? 'es') }, [settings.language])
   const [lookDone, setLookDone] = useState(() => {
     try { return localStorage.getItem('pokequest.look.done') === '1' } catch { return false }
   })
