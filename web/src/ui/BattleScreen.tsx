@@ -5,11 +5,9 @@ import { ITEMS } from '../data/items'
 import {
   addEvs, catchChance, evYield, evolve, expGain, gainExp, healMon, levelEvolution, rollCatch, useItemFromBag, type Trainer,
 } from '../game/state'
-import { TYPE_COLOR, type PType } from '../game/world'
 import ItemIcon from './ItemIcon'
 import HpBar from './HpBar'
 import StatusIcon from './StatusIcon'
-import TypePlate from './TypePlate'
 import BattleBackdrop from './BattleBackdrop'
 import type { BattleLayout } from '../rom/battleScene'
 import MonSprite from './MonSprite'
