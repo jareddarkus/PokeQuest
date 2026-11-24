@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  NATURES, STAT_IDS, STAT_NAMES, allSpecies, learnableMoves, maxHp, moveInfo, natureMods, speciesTypes, type Mon,
+  NATURES, STAT_IDS, STAT_NAMES, allSpecies, learnableMoves, maxHp, moveInfo, natureMods, speciesTypes, statsOf, type Mon,
 } from '../data/dex'
 import { ITEMS, ITEM_LIST } from '../data/items'
 import {
@@ -12,6 +12,7 @@ import ItemIcon from './ItemIcon'
 import MonSprite, { MonIcon } from './MonSprite'
 import StatBars from './StatBars'
 import TypePlate from './TypePlate'
+import { DsScreen, DsText, dsK } from './DsScreen'
 
 interface PanelProps {
   trainer: Trainer
@@ -38,6 +39,31 @@ function TypeChips({ species }: { species: string }) {
     </span>
   )
 }
+/** The stats page drawn on the game's own summary background: labels on the black column (red = the nature raises it, blue = lowers it), numbers on the white panel. */
+function StatsScreen({ mon }: { mon: Mon }) {
+  const K = dsK(2)
+  const st = statsOf(mon)
+  const nm = natureMods(mon.nature)
+  const lo = mon.level ** 3, hi = (mon.level + 1) ** 3
+  return (
+    <div style={{ display: 'flex', justifyContent: 'center', margin: '8px 0' }}>
+      <DsScreen bg="sum:stats" K={K}>
+        {STAT_IDS.map((id, i) => (
+          <div key={id}>
+            <DsText x={14} y={9 + i * 14.6} K={K} color={nm.plus === id ? '#ff6a5a' : nm.minus === id ? '#6ab4ff' : '#fff'}>{STAT_NAMES[id]}</DsText>
+            <DsText x={82} y={9 + i * 14.6} w={52} K={K} align="right" color="#181820">{id === 'hp' ? `${mon.hp}/${st.hp}` : st[id]}</DsText>
+            <span style={{ position: 'absolute', left: 140 * K, top: (11 + i * 14.6) * K, width: Math.min(56, (st[id] / 400) * 56 + 4) * K, height: 3 * K, background: id === 'hp' ? '#2fdc5a' : '#4a90e0' }} />
+          </div>
+        ))}
+        <DsText x={12} y={113} K={K} color="#181820">{mon.nature} nature</DsText>
+        <DsText x={12} y={125} K={K}>{mon.ability}</DsText>
+        <DsText x={60} y={158} w={100} K={K} color="#fff" size={7}>EXP {mon.exp}  next {Math.max(0, hi - mon.exp)}</DsText>
+        <span style={{ position: 'absolute', left: 55 * K, top: 168 * K, width: 95 * K * Math.max(0, Math.min(1, (mon.exp - lo) / Math.max(1, hi - lo))), height: 2 * K, background: '#38b6f5' }} />
+      </DsScreen>
+    </div>
+  )
+}
+
 // ---------------------------------------------------------------- summary (stats, nature, ability, moves)
 export function Summary({ mon, onChange, onBack }: { mon: Mon; onChange: (m: Mon) => void; onBack: () => void }) {
   const [pickFor, setPickFor] = useState<number | null>(null)
@@ -66,6 +92,7 @@ export function Summary({ mon, onChange, onBack }: { mon: Mon; onChange: (m: Mon
         <div><span className="muted">Held item</span> <strong>{mon.item || 'none'}</strong></div>
       </div>
 
+      <StatsScreen mon={mon} />
       <StatBars mon={mon} />
       <div className="muted">Total EVs {evTotal} / 510</div>
 
@@ -198,35 +225,55 @@ export function BagPanel({ trainer, setTrainer, onClose, onMessage }: PanelProps
 
   const needsTarget = (id: string) => ['heal', 'revive', 'vitamin', 'candy', 'stone', 'held'].includes(ITEMS[id].kind)
 
+  // the Bag is drawn on the game's own Bag backgrounds, one colour per pocket
+  const POCKETS = [
+    { name: 'Items', bg: 'bag:dark', kinds: ['stone', 'held', 'passive'] },
+    { name: 'Medicine', bg: 'bag:blue', kinds: ['heal', 'revive', 'vitamin', 'candy'] },
+    { name: 'Poké Balls', bg: 'bag:red', kinds: ['ball'] },
+  ]
+  const [pocket, setPocket] = useState(2)
+  const [sel, setSel] = useState<string | null>(null)
+  const K = dsK(3)
+  const list = entries.filter((d) => POCKETS[pocket].kinds.includes(d.kind))
+  const shown = sel ?? list[0]?.id ?? null
+  const rowH = 26
+
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="panel modal wide" onClick={(e) => e.stopPropagation()}>
-        <h2>Bag</h2>
-        {!itemId ? (
-          <div className="item-list">
-            {entries.length === 0 && <span className="muted">Your bag is empty. Look for Poké Balls on the ground!</span>}
-            {entries.map((d) => (
-              <button key={d.id} onClick={() => (needsTarget(d.id) ? setItemId(d.id) : onMessage(d.desc))}>
-                <ItemIcon name={d.id} /><span>{d.name}</span><span className="muted">x{trainer.bag[d.id]}</span>
-                <small>{d.desc}</small>
-              </button>
-            ))}
-          </div>
-        ) : (
-          <>
-            <p className="sub">Use {ITEMS[itemId].name} on…</p>
-            <div className="mon-list">
-              {trainer.team.map((m, i) => (
-                <button key={m.uid} className={m.hp <= 0 ? 'fainted' : ''} onClick={() => apply(i)}>
-                  <MonIcon species={m.species} shiny={m.shiny} />
-                  <div><strong>{m.species}</strong> <span className="muted">Lv {m.level}{m.item ? ` · ${m.item}` : ''}</span><HpLine m={m} /></div>
+      <div className="bag-frame" onClick={(e) => e.stopPropagation()} style={{ background: '#0c0c10', padding: 8, borderRadius: 10, boxShadow: '0 8px 40px rgba(0,0,0,.6)' }}>
+        <DsScreen bg={POCKETS[itemId ? 1 : pocket].bg} K={K}>
+          {/* pocket tabs */}
+          {!itemId && POCKETS.map((p, i) => (
+            <button key={p.name} onClick={() => { setPocket(i); setSel(null) }} style={{ position: 'absolute', left: (6 + i * 78) * K, top: 3 * K, width: 74 * K, height: 15 * K, border: 'none', borderRadius: 3 * K, cursor: 'pointer', fontWeight: 700, fontSize: 8 * K, color: '#fff', background: i === pocket ? 'rgba(0,0,0,.75)' : 'rgba(0,0,0,.35)', outline: i === pocket ? '1px solid #fff' : 'none' }}>{p.name}</button>
+          ))}
+          {itemId && <DsText x={8} y={6} K={K}>Use {ITEMS[itemId].name} on…</DsText>}
+          {!itemId ? (
+            <div style={{ position: 'absolute', left: 6 * K, top: 22 * K, width: 234 * K, height: (rowH * 4 + 6) * K, overflowY: 'auto' }}>
+              {list.length === 0 && <div style={{ color: '#fff', fontSize: 8 * K, padding: 6 * K, textShadow: '1px 1px 0 #000' }}>{entries.length === 0 ? 'Your bag is empty. Look for Poké Balls on the ground!' : 'Nothing in this pocket.'}</div>}
+              {list.map((d) => (
+                <button key={d.id} onClick={() => setSel(d.id)} onDoubleClick={() => needsTarget(d.id) && setItemId(d.id)} style={{ display: 'flex', alignItems: 'center', width: '100%', height: rowH * K, marginBottom: 2 * K, padding: `0 ${6 * K}px`, border: 'none', borderRadius: 3 * K, cursor: 'pointer', background: shown === d.id ? 'rgba(255,255,255,.28)' : 'rgba(0,0,0,.42)', color: '#fff', fontWeight: 700, fontSize: 8 * K, textAlign: 'left', gap: 6 * K }}>
+                  <ItemIcon name={d.id} size={22 * K} /><span style={{ flex: 1 }}>{d.name}</span><span>x{trainer.bag[d.id]}</span>
                 </button>
               ))}
             </div>
-            <button onClick={() => setItemId(null)}>Back</button>
-          </>
-        )}
-        <button onClick={onClose}>Close</button>
+          ) : (
+            <div style={{ position: 'absolute', left: 6 * K, top: 22 * K, width: 234 * K, height: (rowH * 4 + 6) * K, overflowY: 'auto' }}>
+              {trainer.team.map((m, i) => (
+                <button key={m.uid} onClick={() => apply(i)} style={{ display: 'flex', alignItems: 'center', width: '100%', height: rowH * K, marginBottom: 2 * K, padding: `0 ${6 * K}px`, border: 'none', borderRadius: 3 * K, cursor: 'pointer', background: 'rgba(0,0,0,.42)', color: m.hp <= 0 ? '#aaa' : '#fff', fontWeight: 700, fontSize: 8 * K, textAlign: 'left', gap: 6 * K }}>
+                  <MonIcon species={m.species} shiny={m.shiny} size={22 * K} /><span style={{ flex: 1 }}>{m.species} Lv{m.level}{m.item ? ` · ${m.item}` : ''}</span><span>{m.hp}/{maxHp(m)}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {/* description */}
+          <div style={{ position: 'absolute', left: 6 * K, top: 152 * K, width: 196 * K, height: 36 * K, background: 'rgba(0,0,0,.6)', borderRadius: 3 * K, padding: 4 * K, color: '#fff', fontSize: 7.5 * K, fontWeight: 600, lineHeight: 1.25 }}>
+            {itemId ? 'Choose a Pokémon.' : shown ? ITEMS[shown].desc : ''}
+          </div>
+          {!itemId && shown && needsTarget(shown) && (
+            <button onClick={() => setItemId(shown)} style={{ position: 'absolute', left: 206 * K, top: 152 * K, width: 44 * K, height: 17 * K, border: 'none', borderRadius: 3 * K, cursor: 'pointer', fontWeight: 700, fontSize: 8 * K, background: '#ffd84a', color: '#222' }}>Use</button>
+          )}
+          <button onClick={() => (itemId ? setItemId(null) : onClose())} style={{ position: 'absolute', left: 206 * K, top: (shown && needsTarget(shown) && !itemId ? 171 : 152) * K, width: 44 * K, height: 17 * K, border: 'none', borderRadius: 3 * K, cursor: 'pointer', fontWeight: 700, fontSize: 8 * K, background: 'rgba(255,255,255,.85)', color: '#222' }}>{itemId ? 'Back' : 'Close'}</button>
+        </DsScreen>
       </div>
     </div>
   )

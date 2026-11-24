@@ -12,6 +12,7 @@ import { EMOTE_NARC, OVERWORLD_NARC, decodeEmotes, decodeFieldBall, decodeOverwo
 import { ICON_NARC, decodeIcons } from './icons'
 import { FX_NARC, decodeFx } from './fx'
 import { decodeHpBoxes } from './hpBox'
+import { BAG_NARC, SUMMARY_NARC, decodeScreens } from './screens'
 import { COMMAND_NARC, decodeCommandUi } from './commandUi'
 import { MENU_NARC, decodeMenuUi } from './menuUi'
 import { extractMusic, type MusicIndex } from './sdat'
@@ -88,7 +89,7 @@ export async function loadOverworldSprites(): Promise<void> {
   } catch { /* the game falls back to the drawn characters */ }
 }
 
-const VERSION = 30 // 30 = ... + HP boxes;  29 = ... + potion/vitamin colours;  28 = ... + move-effect shapes;  27 = ... + all item icons by file;  26 = ... + item ball;  25 = ... + running pictures;  24 = ... + water animation data;  23 = ... + sound effects and cries;  22 = ... + menu backdrops;  21 = ... + music;  20 = gym buildings;  19 = buildings fixed;  18 = ... + buildings;  17 = ... + emote bubbles;  16 = ... + start menu art;  15 = battle buttons rebuilt;  14 = ... + battle command buttons;  13 = ... + menu icons;  12 = ... + walking characters;  11 = ... + the game's own trainer colours
+const VERSION = 31 // 31 = ... + Bag and Summary backgrounds;  30 = ... + HP boxes;  29 = ... + potion/vitamin colours;  28 = ... + move-effect shapes;  27 = ... + all item icons by file;  26 = ... + item ball;  25 = ... + running pictures;  24 = ... + water animation data;  23 = ... + sound effects and cries;  22 = ... + menu backdrops;  21 = ... + music;  20 = gym buildings;  19 = buildings fixed;  18 = ... + buildings;  17 = ... + emote bubbles;  16 = ... + start menu art;  15 = battle buttons rebuilt;  14 = ... + battle command buttons;  13 = ... + menu icons;  12 = ... + walking characters;  11 = ... + the game's own trainer colours
 
 let colorsApplied = false
 /** Makes the colour choices of the character maker use the colours the game really uses (snaps each to the nearest real one). */
@@ -149,6 +150,7 @@ export async function importRom(file: RomSource, onProgress: (text: string, frac
   await decodeCommandUi(commandNarc, (name, b) => put(`ui:${name}`, b))
   try { await decodeHpBoxes(parseNarc(commandNarc), /^IR[DB]/.test(code), (name, b) => put(`ui:${name}`, b)) } catch { /* the page draws plain boxes */ }
   await decodeMenuUi(await nds.get(MENU_NARC), (name, b) => put(`ui:${name}`, b))
+  try { await decodeScreens(await nds.get(BAG_NARC), await nds.get(SUMMARY_NARC), (name, b) => put(`ui:${name}`, b)) } catch { /* the menus keep a plain look */ }
   onProgress('Reading the menu icons…', 0.981)
   await decodeIcons(parseNarc(await nds.get(ICON_NARC)), async (dex) => (await get<Blob>(`sprite:${spriteKey(dex, false, false)}`)) ?? null, (dex, b) => put(`icon:${dex}`, b))
   onProgress('Reading the trainer colours…', 0.982)
