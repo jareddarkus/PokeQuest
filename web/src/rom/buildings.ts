@@ -64,11 +64,11 @@ export function choosePack(ids: number[], packs: Array<Pack | null>): number {
 /** The real gym buildings of the game (pack, model). Each gym of the island gets one. */
 export const GYM_MODELS: Array<{ pack: number; model: number }> = [
   { pack: 35, model: 30 }, // c04_gym_01
-  { pack: 6, model: 40 }, // c04_gym_02
+  // (c04_gym_02 left out: its door is not in the middle of the building)
   { pack: 9, model: 34 }, // c06_gym_01
   { pack: 12, model: 38 }, // c8_gym_01
   { pack: 12, model: 41 }, // c8_gym_02
-  { pack: 23, model: 30 }, // c03_gym_01
+  // (c03_gym_01 left out: no door on its front)
   { pack: 52, model: 31 }, // c12_gym_01
   { pack: 54, model: 32 }, // c13_gym_01
   { pack: 57, model: 32 }, // c14_gym_01

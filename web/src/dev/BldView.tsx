@@ -5,6 +5,7 @@ import { devRomSource } from '../rom/devSource'
 import { NdsFile, parseNarc } from '../rom/nds'
 import { buildModelObject } from '../rom/mapModel'
 import { readModelName, readModels, readTexFile } from '../rom/nitro'
+import { GYM_MODELS } from '../rom/buildings'
 
 /** Offsets of every BMD0 inside an 'AB' container (start of each model up to the next one). */
 function splitModels(d: Uint8Array): Uint8Array[] {
@@ -34,12 +35,14 @@ export default function BldView() {
         return
       }
       const pack = Number(q.get('pack') ?? 0)
+      const from = Number(q.get('from') ?? 0)
+      const jobs = q.has('gyms') ? GYM_MODELS.map((g) => ({ pack: g.pack, idx: g.model })) : Array.from({ length: Number(q.get('n') ?? 12) }, (_, k) => ({ pack, idx: from + k }))
+      const n = jobs.length
       const models = splitModels(packs[pack])
-      const tex = readTexFile(texs[pack])
-      const from = Number(q.get('from') ?? 0), n = Number(q.get('n') ?? 12)
       const names: string[] = []
       const w = ref.current!.clientWidth, h = ref.current!.clientHeight
       renderer = new THREE.WebGLRenderer({ antialias: false })
+      if (stop) return
       renderer.setSize(w, h)
       renderer.setScissorTest(true)
       ref.current!.appendChild(renderer.domElement)
@@ -47,10 +50,11 @@ export default function BldView() {
       const cw = Math.floor(w / cols), ch = Math.floor(h / Math.ceil(n / cols))
       const scenes: Array<{ scene: THREE.Scene; cam: THREE.PerspectiveCamera; x: number; y: number }> = []
       for (let k = 0; k < n; k++) {
-        const raw = models[from + k]
+        const raw = splitModels(packs[jobs[k].pack])[jobs[k].idx]
+        const tex = readTexFile(texs[jobs[k].pack])
         if (!raw) break
         const nm = readModelName(raw) ?? '?'
-        names.push(`${from + k}:${nm}`)
+        names.push(`${jobs[k].pack}.${jobs[k].idx}:${nm}`)
         const scene = new THREE.Scene()
         scene.background = new THREE.Color('#7fb4e0')
         scene.add(new THREE.AmbientLight('#ffffff', 1.2))
@@ -62,7 +66,7 @@ export default function BldView() {
           const r = Math.max(s.x, s.y, s.z, 0.5)
           scene.add(obj)
           const cam = new THREE.PerspectiveCamera(35, cw / ch, 0.1, 500)
-          cam.position.set(c.x + r * 1.1, c.y + r * 1.0, c.z + r * 1.6)
+          if (q.has('front')) cam.position.set(c.x, c.y + r * 0.15, c.z + r * 2.4); else cam.position.set(c.x + r * 1.1, c.y + r * 1.0, c.z + r * 1.6)
           cam.lookAt(c)
           scenes.push({ scene, cam, x: (k % cols) * cw, y: h - (Math.floor(k / cols) + 1) * ch })
         } catch { names[names.length - 1] += ' (failed)' }
@@ -79,7 +83,7 @@ export default function BldView() {
       }
       draw()
     })()
-    return () => { stop = true; renderer?.dispose() }
+    return () => { stop = true; renderer?.domElement.remove(); renderer?.dispose() }
   }, [])
   return (
     <div style={{ position: 'fixed', inset: 0 }}>

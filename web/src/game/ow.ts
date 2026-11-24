@@ -15,16 +15,16 @@ export const hasOw = (idx: number | undefined) => idx !== undefined && strips.ha
 
 const frameCache = new Map<string, HTMLCanvasElement>()
 /** One 32x32 picture: dir 0 down, 1 left, 2 right, 3 up; frame 0 stand, 1 / 2 step. */
-export function owFrame(idx: number, dir: number, frame: number): HTMLCanvasElement | null {
+export function owFrame(idx: number, dir: number, frame: number, run = false): HTMLCanvasElement | null {
   const img = strips.get(idx)
   if (!img) return null
-  const key = `${idx}|${dir}|${frame}`
+  const key = `${idx}|${dir}|${frame}|${run ? 1 : 0}`
   let c = frameCache.get(key)
   if (c) return c
   c = document.createElement('canvas')
   c.width = OW_FRAME
   c.height = OW_FRAME
-  c.getContext('2d')!.drawImage(img, (dir * 3 + frame) * OW_FRAME, 0, OW_FRAME, OW_FRAME, 0, 0, OW_FRAME, OW_FRAME)
+  c.getContext('2d')!.drawImage(img, ((run ? 12 : 0) + dir * 3 + frame) * OW_FRAME, 0, OW_FRAME, OW_FRAME, 0, 0, OW_FRAME, OW_FRAME)
   frameCache.set(key, c)
   return c
 }
@@ -33,3 +33,8 @@ export function owFrame(idx: number, dir: number, frame: number): HTMLCanvasElem
 const emotes = new Map<number, HTMLImageElement>()
 export function registerEmote(idx: number, img: HTMLImageElement) { emotes.set(idx, img) }
 export const owEmote = (idx: number): HTMLImageElement | undefined => emotes.get(idx)
+
+// the item ball on the ground
+let fieldBall: HTMLImageElement | undefined
+export function registerBall(img: HTMLImageElement) { fieldBall = img }
+export const owBall = (): HTMLImageElement | undefined => fieldBall

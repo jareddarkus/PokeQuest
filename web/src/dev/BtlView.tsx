@@ -17,7 +17,7 @@ export default function BtlView() {
       if (!src) { setInfo('no dev ROM route'); return }
       const nds = new NdsFile(src)
       await nds.open()
-      const files = parseNarc(await nds.get('a/0/1/1'))
+      const files = parseNarc(await nds.get(q.get('narc') ?? 'a/0/1/1'))
       const scene = new THREE.Scene()
       scene.background = new THREE.Color('#7fc4ee')
       const names: string[] = []

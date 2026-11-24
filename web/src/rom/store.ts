@@ -8,12 +8,13 @@ import { BATTLE_NARC } from './battleScene'
 import { UI_NARC, decodeBattleUi, decodePlates } from './plates'
 import { TRAINER_NARCS, extractColors, snapAll, type RomColors } from './colors'
 import { CLOTH_COLORS, EYE_COLORS, HAIR_COLORS, SKIN_TONES } from '../game/character'
-import { EMOTE_NARC, OVERWORLD_NARC, decodeEmotes, decodeOverworld } from './overworld'
+import { EMOTE_NARC, OVERWORLD_NARC, decodeEmotes, decodeFieldBall, decodeOverworld } from './overworld'
 import { ICON_NARC, decodeIcons } from './icons'
+import { FX_NARC, decodeFx } from './fx'
 import { COMMAND_NARC, decodeCommandUi } from './commandUi'
 import { MENU_NARC, decodeMenuUi } from './menuUi'
 import { extractMusic, type MusicIndex } from './sdat'
-import { owList, registerEmote, registerOw } from '../game/ow'
+import { owList, registerBall, registerEmote, registerOw } from '../game/ow'
 
 const DB = 'pokequest-rom'
 const STORE = 'assets'
@@ -67,6 +68,13 @@ export async function loadOverworldSprites(): Promise<void> {
       registerOw(idx, img)
     }
     owList.sort((a, b) => a - b)
+    const ballBlob = await get<Blob>('field:ball')
+    if (ballBlob) {
+      const img = new Image()
+      const url = URL.createObjectURL(ballBlob)
+      await new Promise<void>((res) => { img.onload = () => res(); img.onerror = () => res(); img.src = url })
+      registerBall(img)
+    }
     for (const idx of (await get<number[]>('emote:list')) ?? []) {
       const blob = await get<Blob>(`emote:${idx}`)
       if (!blob) continue
@@ -79,7 +87,7 @@ export async function loadOverworldSprites(): Promise<void> {
   } catch { /* the game falls back to the drawn characters */ }
 }
 
-const VERSION = 24 // 24 = ... + water animation data;  23 = ... + sound effects and cries;  22 = ... + menu backdrops;  21 = ... + music;  20 = gym buildings;  19 = buildings fixed;  18 = ... + buildings;  17 = ... + emote bubbles;  16 = ... + start menu art;  15 = battle buttons rebuilt;  14 = ... + battle command buttons;  13 = ... + menu icons;  12 = ... + walking characters;  11 = ... + the game's own trainer colours
+const VERSION = 29 // 29 = ... + potion/vitamin colours;  28 = ... + move-effect shapes;  27 = ... + all item icons by file;  26 = ... + item ball;  25 = ... + running pictures;  24 = ... + water animation data;  23 = ... + sound effects and cries;  22 = ... + menu backdrops;  21 = ... + music;  20 = gym buildings;  19 = buildings fixed;  18 = ... + buildings;  17 = ... + emote bubbles;  16 = ... + start menu art;  15 = battle buttons rebuilt;  14 = ... + battle command buttons;  13 = ... + menu icons;  12 = ... + walking characters;  11 = ... + the game's own trainer colours
 
 let colorsApplied = false
 /** Makes the colour choices of the character maker use the colours the game really uses (snaps each to the nearest real one). */
@@ -145,9 +153,14 @@ export async function importRom(file: RomSource, onProgress: (text: string, frac
   for (const p of TRAINER_NARCS) { try { trainerNarcs.push(await nds.get(p)) } catch { /* not in this version */ } }
   await put('colors', extractColors(trainerNarcs))
   onProgress('Reading the walking characters…', 0.984)
-  const ow = await decodeOverworld(parseNarc(await nds.get(OVERWORLD_NARC)), (i, b) => put(`ow:${i}`, b))
+  const owFiles = parseNarc(await nds.get(OVERWORLD_NARC))
+  const ow = await decodeOverworld(owFiles, (i, b) => put(`ow:${i}`, b))
+  const ballPic = await decodeFieldBall(owFiles)
+  if (ballPic) await put('field:ball', ballPic)
   await put('ow:list', ow)
   await put('emote:list', await decodeEmotes(parseNarc(await nds.get(EMOTE_NARC)), (i, b) => put(`emote:${i}`, b)))
+  onProgress('Reading the move effects…', 0.9843)
+  try { await decodeFx(await nds.get(FX_NARC), (name, b) => put(`ui:fx:${name}`, b)) } catch { /* the battle uses plain flashes */ }
   onProgress('Reading the music…', 0.9845)
   try { await put('music:index', await extractMusic(nds, (id, d) => put(`music:${id}`, d))) } catch { /* no sound archive: the game stays quiet */ }
   onProgress('Reading the island map…', 0.985)

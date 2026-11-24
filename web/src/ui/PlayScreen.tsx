@@ -17,6 +17,7 @@ import { BagPanel, PcPanel, TeamPanel } from './MenuPanels'
 import SettingsPanel from './SettingsPanel'
 import StarterPick from './StarterPick'
 import MenuButton from './MenuButton'
+import PartyBar from './PartyBar'
 import ChatPanel from './ChatPanel'
 import { useMatchPlayers } from '../net/useMatchPlayers'
 import { useChat } from './useChat'
@@ -51,6 +52,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
   const waiting = !!royale && now < t0 // everybody waits for the others until the match really begins
   const collapseRef = useRef(false)
   collapseRef.current = collapseOn
+  const [menuOpen, setMenuOpen] = useState(false)
   const [panel, setPanel] = useState<null | 'settings' | 'team' | 'bag' | 'pc' | 'chat'>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [ring, setRing] = useState(1)
@@ -139,6 +141,8 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
 
   const events: GameEvents = useMemo(
     () => ({
+      onMenuKey: () => setMenuOpen((o) => !o),
+      onMoveStart: () => setMenuOpen(false), // walking closes the menu again
       onStep: (_x, _y, tile) => {
         if (tile === T.Tall && Math.random() < ENCOUNTER_RATE && trainerRef.current.team.length > 0) {
           const pos = handleRef.current?.getPos()
@@ -165,6 +169,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
         )
       },
       onPickup: (id) => {
+        void music.playSfx('se:getting')
         const pos = handleRef.current?.getPos()
         const r = pos ? ringAt(pos.x, pos.y) : 1
         const items = rollPickup(r, Math.random)
@@ -236,13 +241,20 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
       </div>
 
       <div className="hud-top-right">
-        <MenuButton icon={9} label="Team" onClick={() => setPanel('team')} />
-        <MenuButton icon={7} label="Bag" onClick={() => setPanel('bag')} />
-        <MenuButton icon={6} label="PC" onClick={() => setPanel('pc')} />
-        <MenuButton icon={5} label="Chat" badge={chat.unread} onClick={() => setPanel('chat')} />
-        <MenuButton icon={13} label="Settings" onClick={() => setPanel('settings')} />
-        <MenuButton icon={11} label="Menu" onClick={onExit} />
+        {menuOpen && (
+          <>
+            <MenuButton icon={12} label="Team" onClick={() => { setPanel('team'); setMenuOpen(false) }} />
+            <MenuButton icon={7} label="Bag" onClick={() => { setPanel('bag'); setMenuOpen(false) }} />
+            <MenuButton icon={6} label="PC" onClick={() => { setPanel('pc'); setMenuOpen(false) }} />
+            <MenuButton icon={5} label="Chat" badge={chat.unread} onClick={() => { setPanel('chat'); setMenuOpen(false) }} />
+            <MenuButton icon={13} label="Settings" onClick={() => { setPanel('settings'); setMenuOpen(false) }} />
+            <MenuButton icon={11} label="Exit" onClick={onExit} />
+          </>
+        )}
+        <MenuButton icon={9} label="Menu" badge={menuOpen ? 0 : chat.unread} onClick={() => setMenuOpen((o) => !o)} />
       </div>
+
+      <PartyBar team={trainer.team} onOpen={() => setPanel('team')} />
 
       {waiting && <div className="match-wait panel"><strong>Get ready!</strong><span>The match begins in {Math.max(0, Math.ceil((t0 - now) / 1000))} seconds. Everybody is picking a starter…</span></div>}
 

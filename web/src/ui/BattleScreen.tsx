@@ -14,6 +14,9 @@ import MonSprite from './MonSprite'
 import { CommandScreen, MoveScreen, dsScale } from './DsMenu'
 import { Dex } from '@pkmn/sim'
 import { music } from '../audio/music'
+import { warmAnim } from './AnimSprite'
+import { loadHdSprite } from './hdSprite'
+import { MoveFx, FX_NAMES } from './moveFx'
 
 export type BattleKind = 'wild' | 'trainer' | 'gym'
 export type BattleOutcome = 'win' | 'lose' | 'caught' | 'ran'
@@ -66,7 +69,13 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, onEnd }:
   const caughtRef = useRef<Mon | null>(null)
   const ranRef = useRef(false)
   const [shake, setShake] = useState<'me' | 'foe' | null>(null)
-  const [layout, setLayout] = useState<BattleLayout | null>(null)
+  const [lunge, setLunge] = useState<'me' | 'foe' | null>(null)
+  const shadowFor = (species: string) => Math.max(0.6, Math.min(1.25, 0.55 + 0.25 * Math.sqrt(Dex.species.get(species).heightm || 1)))
+  const [layout, setLayoutState] = useState<BattleLayout | null>(null)
+  const layoutRef = useRef<BattleLayout | null>(null)
+  const setLayout = (l: BattleLayout) => { layoutRef.current = l; setLayoutState(l) }
+  const fxCanvas = useRef<HTMLCanvasElement>(null)
+  const fxRef = useRef<MoveFx | null>(null)
   const environment = 'grass'
   const [ball, setBall] = useState<null | { shakes: number }>(null)
   const legendaryNames = useMemo(() => new Set(allSpecies().filter((s) => s.legendary).map((s) => s.name)), [])
@@ -120,7 +129,21 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, onEnd }:
         case 'move': {
           const num = Dex.moves.get(ev.move).num
           if (num) void music.playSfx(`mv:${num}`)
-          setShake(ev.side === 'p1' ? 'foe' : 'me'); await sleep(250); setShake(null); break
+          const mv = Dex.moves.get(ev.move)
+          const L = layoutRef.current, fx = fxRef.current
+          const contact = mv.category === 'Physical' && !!mv.flags.contact
+          const selfT = mv.target === 'self' || mv.target === 'allySide' || mv.target === 'allies' || mv.target === 'adjacentAllyOrSelf'
+          const hitSide = ev.side === 'p1' ? 'foe' : 'me'
+          if (contact) { setLunge(ev.side === 'p1' ? 'me' : 'foe'); await sleep(130) }
+          if (fx?.ready && L) {
+            const centre = (a: { x: number; y: number; w: number }) => ({ x: a.x, y: a.y + a.w * 0.1 - a.w * 0.38 })
+            const from = ev.side === 'p1' ? L.me : L.foe, to = ev.side === 'p1' ? L.foe : L.me
+            await fx.play({ type: mv.type, category: mv.category as 'Physical' | 'Special' | 'Status', contact, name: mv.name, selfTarget: selfT }, centre(from), centre(to), to.w * 0.85)
+          } else if (!contact) await sleep(260)
+          setLunge(null)
+          if (mv.category !== 'Status') { setShake(hitSide); await sleep(280); setShake(null) } else await sleep(350)
+          await sleep(fx?.ready ? 350 : 0)
+          break
         }
         case 'faint': {
           const upd = (s: Side | null): Side | null => (s && s.uid === ev.uid ? { ...s, fainted: true, hp: 0 } : s)
@@ -137,6 +160,20 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, onEnd }:
     showMenuIfReady()
   }
 
+  // the move-effect player (pictures from the game file)
+  useEffect(() => {
+    const c = fxCanvas.current
+    if (!c) return
+    const size = () => { c.width = c.clientWidth; c.height = c.clientHeight }
+    size()
+    window.addEventListener('resize', size)
+    const fx = new MoveFx(c)
+    fxRef.current = fx
+    if (import.meta.env.DEV) (window as unknown as { __fx?: MoveFx }).__fx = fx // developer hook for testing the effects
+    void fx.load(FX_NAMES)
+    return () => { window.removeEventListener('resize', size); fx.stop(); fxRef.current = null }
+  }, [])
+
   // ---------------------------------------------------------------- start the battle
   useEffect(() => {
     // (React may run this effect twice while developing: start from a clean slate each time)
@@ -144,17 +181,34 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, onEnd }:
     queue.current = []
     pumping.current = false
     reqRef.current = null
-    const s = new BattleSession(playerTeam, foeCopies)
-    s.isTrainerBattle = kind !== 'wild'
-    sessionRef.current = s
-    s.onEvents((evs) => { queue.current.push(...evs); void pump() })
-    s.onRequest((r) => {
-      reqRef.current = r
-      if (!pumping.current && queue.current.length === 0) showMenuIfReady()
-    })
+    let cancelled = false
+    let s: BattleSession | null = null
+    // first get the pictures of the Pokémon ready (so they do not pop up late), but never wait longer than 3 seconds
+    const prepare = async () => {
+      const mine = playerTeam[0], theirs = foeCopies[0]
+      const jobs: Array<Promise<unknown>> = []
+      for (const [m, back] of [[mine, true], [theirs, false]] as const) {
+        if (!m) continue
+        const d = dexNum(m.species)
+        jobs.push(d > 0 && d <= 649 ? warmAnim(m.species, back, !!m.shiny) : loadHdSprite(d))
+      }
+      for (const m of foeCopies.slice(1)) { const d = dexNum(m.species); if (d > 649) void loadHdSprite(d) }
+      await Promise.race([Promise.all(jobs), sleep(3000)])
+    }
     if (kind !== 'wild') setText(`${foeName ?? 'A trainer'} wants to battle!`)
-    s.start()
-    return () => { endedRef.current = true; s.destroy() }
+    void prepare().then(() => {
+      if (cancelled) return
+      s = new BattleSession(playerTeam, foeCopies)
+      s.isTrainerBattle = kind !== 'wild'
+      sessionRef.current = s
+      s.onEvents((evs) => { queue.current.push(...evs); void pump() })
+      s.onRequest((r) => {
+        reqRef.current = r
+        if (!pumping.current && queue.current.length === 0) showMenuIfReady()
+      })
+      s.start()
+    })
+    return () => { cancelled = true; endedRef.current = true; s?.destroy() }
   }, [])
 
   // ---------------------------------------------------------------- after the battle
@@ -322,26 +376,35 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, onEnd }:
 
   return (
     <div className="fullscreen battle" style={{ ["--menu-h" as string]: `${192 * S}px` }}>
+      <div className={`stage-cam ${mode === 'fight' ? 'zoom' : ''}`}>
       <BattleBackdrop env={environment} onLayout={setLayout} />
+      <canvas ref={fxCanvas} className="fx-canvas" />
 
+
+      {layout && foe && (
+        <>
+          <div className="stage-shadow" style={{ left: layout.foe.x, top: layout.foe.y + layout.foe.w * 0.03, width: layout.foe.w * 0.78 * shadowFor(foe.species) }} />
+          <div className={`stage-sprite ${shake === 'foe' ? 'hit' : ''} ${foe.fainted ? 'fainted' : ''} ${lunge === 'foe' ? 'lunge-foe' : ''}`} style={{ left: layout.foe.x, top: layout.foe.y + layout.foe.w * 0.1, width: layout.foe.w }}>
+            {!ball && <MonSprite species={foe.species} shiny={foe.shiny} scale={(layout.foe.w * 1.05) / 76.8} platform={layout.foe.w} animated />}
+            {ball && <div className={`ball shake-${ball.shakes}`} />}
+          </div>
+        </>
+      )}
+      {layout && me && (
+        <>
+          <div className="stage-shadow" style={{ left: layout.me.x, top: layout.me.y + layout.me.w * 0.03, width: layout.me.w * 0.78 * shadowFor(me.species) }} />
+          <div className={`stage-sprite ${shake === 'me' ? 'hit' : ''} ${me.fainted ? 'fainted' : ''} ${lunge === 'me' ? 'lunge-me' : ''}`} style={{ left: layout.me.x, top: layout.me.y + layout.me.w * 0.1, width: layout.me.w }}>
+            <MonSprite species={me.species} back shiny={me.shiny} scale={(layout.me.w * 0.92) / 76.8} platform={layout.me.w} animated />
+          </div>
+        </>
+      )}
+      </div>
       <div className="foe-zone">
         {foe && <HpBox side={foe} mine={false} />}
       </div>
       <div className="me-zone">
         {me && <HpBox side={me} mine />}
       </div>
-
-      {layout && foe && (
-        <div className={`stage-sprite ${shake === 'foe' ? 'hit' : ''} ${foe.fainted ? 'fainted' : ''}`} style={{ left: layout.foe.x, top: layout.foe.y, width: layout.foe.w }}>
-          {!ball && <MonSprite species={foe.species} shiny={foe.shiny} scale={layout.foe.w / 124} animated />}
-          {ball && <div className={`ball shake-${ball.shakes}`} />}
-        </div>
-      )}
-      {layout && me && (
-        <div className={`stage-sprite ${shake === 'me' ? 'hit' : ''} ${me.fainted ? 'fainted' : ''}`} style={{ left: layout.me.x, top: layout.me.y, width: layout.me.w }}>
-          <MonSprite species={me.species} back shiny={me.shiny} scale={layout.me.w / 124} animated />
-        </div>
-      )}
       <div className="battle-bottom">
         <div className="panel battle-text">{text}</div>
 

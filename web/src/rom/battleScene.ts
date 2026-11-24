@@ -16,7 +16,7 @@ export const ENVIRONMENTS: Record<string, BattleEnvironment> = {
 // where things stand (in map tiles) and how the camera looks at them; tuned by eye to look like the game
 const FOE_PLATFORM = { x: 0.52, z: -0.62, scale: 0.85 }
 const ME_PLATFORM = { x: -0.4, z: 0.3, scale: 1.12 }
-const CAMERA = { fov: 36, pos: [0, 0.6, 1.75], target: [0, 0.24, -0.2] } as const
+const CAMERA = { fov: 33, pos: [0, 0.56, 1.5], target: [0, 0.22, -0.2] } as const
 
 export interface BattleLayout {
   foe: { x: number; y: number; w: number }

@@ -18,6 +18,8 @@ export interface OtherPlayer {
 }
 
 export interface GameEvents {
+  /** the X button (up arrow) was pressed: open or close the menu */
+  onMenuKey?: () => void
   /** the player finished walking onto a tile */
   onStep?: (x: number, y: number, tile: number) => void
   onPickup?: (id: string) => void

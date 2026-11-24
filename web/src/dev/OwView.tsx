@@ -27,6 +27,12 @@ export default function OwView() {
       ctx.fillStyle = '#334'; ctx.fillRect(0, 0, c.width, c.height)
       ctx.font = '11px monospace'
       const notes: string[] = []
+      if (q.has('names')) { // every file with its first texture name and number of textures
+        const out: string[] = []
+        files.forEach((f, i) => { try { const t = readTexFile(f); if (t && t.texs.length) out.push(`${i}:${t.texs[0].name}x${t.texs.length}`) } catch { /* not a texture file */ } })
+        setInfo(out.join(' '))
+        return
+      }
       const only = q.get('frames')
       if (only !== null) { // every frame of one file, in order
         for (const [fi, idxS] of only.split(',').entries()) {
@@ -36,7 +42,7 @@ export default function OwView() {
             const tx = decodeTexture(tex, t.pals[0])
             const off = document.createElement('canvas'); off.width = tx.width; off.height = tx.height
             off.getContext('2d')!.putImageData(new ImageData(new Uint8ClampedArray(tx.rgba), tx.width, tx.height), 0, 0)
-            const x = (k % cols) * cell, y = (fi * 4 + Math.floor(k / cols)) * (cell + 14)
+            const x = (k % cols) * cell, y = (fi + Math.floor(k / cols)) * (cell + 14)
             ctx.imageSmoothingEnabled = false
             ctx.fillStyle = '#ff0'; ctx.fillText(`${idxS}.${k}`, x + 2, y + 11)
             ctx.drawImage(off, x + 1, y + 13, tx.width * scale, tx.height * scale)

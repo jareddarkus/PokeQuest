@@ -78,6 +78,7 @@ export function CommandScreen({ S, onFight, onBag, onPokemon, onRun, pokemonOff,
   S: number; onFight: () => void; onBag: () => void; onPokemon: () => void; onRun: () => void; pokemonOff: boolean; runOff: boolean
 }) {
   const bg = useUiUrl('menu:bg')
+  const fight = useUiUrl('cmd:fight')
   const bag = useUiUrl('cmd:bag'), poke = useUiUrl('cmd:pokemon'), run = useUiUrl('cmd:run')
   const Btn = ({ img, x, y, w, h, label, onClick, off }: { img: string | null; x: number; y: number; w: number; h: number; label: string; onClick: () => void; off?: boolean }) => (
     <button className="ds-btn" aria-label={label} disabled={off} onClick={() => { decide(); onClick() }} style={{ left: x * S, top: y * S, width: w * S, height: h * S, opacity: off ? 0.4 : 1 }}>
@@ -86,7 +87,9 @@ export function CommandScreen({ S, onFight, onBag, onPokemon, onRun, pokemonOff,
   )
   return (
     <div className="ds-screen" style={{ width: 256 * S, height: 192 * S, backgroundImage: bg ? `url(${bg})` : undefined }}>
-      <button className="ds-btn" aria-label="Fight" onClick={() => { decide(); onFight() }} style={{ left: 60 * S, top: 62 * S, width: 136 * S, height: 70 * S }} />
+      <button className="ds-btn" aria-label="Fight" onClick={() => { decide(); onFight() }} style={{ left: 84 * S, top: 86 * S, width: 89 * S, height: 21 * S }}>
+        {fight ? <img className="ds-fight-label" src={fight} alt="Fight" draggable={false} style={{ width: '100%', height: '100%' }} /> : null}
+      </button>
       <Btn img={bag} x={6} y={142} w={93} h={46} label="Bag" onClick={onBag} />
       <Btn img={run} x={96} y={150} w={64} h={37} label="Run" onClick={onRun} off={runOff} />
       <Btn img={poke} x={157} y={142} w={93} h={46} label="Pokémon" onClick={onPokemon} off={pokemonOff} />

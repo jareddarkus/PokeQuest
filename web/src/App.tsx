@@ -20,15 +20,18 @@ type Screen = 'menu' | 'customize' | 'practice' | 'lobby' | 'match'
 function Login({ onGuest }: { onGuest: () => void }) {
   const [mode, setMode] = useState<'login' | 'signup'>('login')
   const [username, setUsername] = useState('')
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
+    if (mode === 'signup' && (!username.trim() || !email.trim() || !password)) { setError('Please fill in all three fields: username, email and password.'); return }
+    if (mode === 'signup' && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim())) { setError('That email address does not look right.'); return }
     setBusy(true)
     setError(null)
-    const problem = mode === 'login' ? await signIn(username, password) : await signUp(username, password)
+    const problem = mode === 'login' ? await signIn(username, password) : await signUp(username.trim(), email.trim(), password)
     setError(problem)
     setBusy(false)
   }
@@ -38,13 +41,15 @@ function Login({ onGuest }: { onGuest: () => void }) {
       <form className="panel card" onSubmit={submit}>
         <h1>PokeQuest</h1>
         <p className="sub">{mode === 'login' ? 'Log in to your trainer' : 'Create your trainer'}</p>
-        <input placeholder="Username" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" />
+        <input placeholder="Username" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" required />
+        {mode === 'signup' && <input placeholder="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" required />}
         <input
           placeholder="Password"
           type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+          required
         />
         {error && <p className="error">{error}</p>}
         <button className="primary" disabled={busy}>{mode === 'login' ? 'Log in' : 'Create account'}</button>

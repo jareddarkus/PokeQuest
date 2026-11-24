@@ -2,11 +2,10 @@ import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import type { BuiltWorld } from '../rom/chunkWorld'
 import { drawCharacter, lookSprite, randomLook, type Look } from './character'
-import { owEmote, owFrame } from './ow'
+import { owBall, owEmote, owFrame } from './ow'
 import { GYM_MODELS } from '../rom/buildings'
 import { animatedTextures } from '../rom/mapModel'
 import { valueAt } from '../rom/texanim'
-import { romItemUrl } from '../rom/store'
 import { safeTileFor, type GameEvents, type GameHandle, type OtherPlayer } from './GameView'
 import { hash2 } from './rng'
 import type { Settings } from './settings'
@@ -28,7 +27,9 @@ interface Props {
   paused: boolean
 }
 
-const STEP_SECONDS = 0.16
+const WALK_SECONDS = 16 / 60 // one tile = 16 pictures at 60 a second when walking (like the DS games)
+const RUN_SECONDS = 8 / 60 // ... and 8 when running (hold B = the down arrow, or Shift)
+const TURN_SECONDS = 0.1 // turning on the spot before the first step
 // The camera of the overworld: it looks at the player from the south, tilted down (tuned by eye to match White 2).
 const CAM_PITCH = 52 * (Math.PI / 180)
 const CAM_FOV = 28
@@ -49,6 +50,7 @@ interface NpcRuntime {
   frozen: boolean
   look: Look
   sprite: THREE.Sprite
+  stp: number // which foot comes next (0 / 1)
 }
 
 function walkableFor(world: World, x: number, y: number, elapsed: number | null): boolean {
@@ -59,6 +61,7 @@ function walkableFor(world: World, x: number, y: number, elapsed: number | null)
 
 /** Real game characters are 32x32 pictures (2 tiles wide, feet near the bottom); the drawn placeholders are smaller. */
 function fit(sp: THREE.Sprite) {
+  sp.renderOrder = 3 // drawn after the shadows (renderOrder 1)
   if (sp.material.userData.real) { sp.center.set(0.5, 0.1); sp.scale.set(2, 2, 1) }
   else { sp.center.set(0.5, 0.05); sp.scale.set(1.15, 1.45, 1) }
 }
@@ -75,14 +78,30 @@ function makeShadow(scene: THREE.Scene, size = 1): THREE.Mesh {
 /** Real game characters are drawn a little higher so their feet do not sink into the ground (the picture leans back with the camera). */
 const lift = (sp: THREE.Sprite) => (sp.material.userData.real ? 0.2 : 0)
 
+/**
+ * The picture of a character is a flat card that leans back with the camera, so its top can poke into a wall behind it (and the
+ * grass in front hides too much of it). Sliding the card towards the camera along the line of sight changes nothing on the screen
+ * (we make it a little smaller to compensate) but puts it in front of the wall.
+ */
+const PUSH = 0.9
+const _v = new THREE.Vector3()
+function place(sp: THREE.Sprite, camera: THREE.Camera, x: number, y: number, z: number) {
+  _v.set(x, y, z)
+  const toCam = camera.position.clone().sub(_v)
+  const dist = toCam.length()
+  const d = Math.min(PUSH, dist * 0.4)
+  sp.position.copy(_v.addScaledVector(toCam.normalize(), d))
+  sp.scale.multiplyScalar((dist - d) / dist)
+}
+
 const spriteCache = new Map<string, THREE.SpriteMaterial>()
-function charMaterial(look: Look, dir: Dir, frame: number): THREE.SpriteMaterial {
+function charMaterial(look: Look, dir: Dir, frame: number, run = false): THREE.SpriteMaterial {
   const real = lookSprite(look)
-  const key = real !== undefined ? `real|${real}|${dir}|${frame}` : `${JSON.stringify(look)}|${dir}|${frame}`
+  const key = real !== undefined ? `real|${real}|${dir}|${frame}|${run ? 1 : 0}` : `${JSON.stringify(look)}|${dir}|${frame}`
   let m = spriteCache.get(key)
   if (m) return m
   if (real !== undefined) {
-    const t = new THREE.CanvasTexture(owFrame(real, dir, frame)!)
+    const t = new THREE.CanvasTexture(owFrame(real, dir, frame, run)!)
     t.magFilter = THREE.NearestFilter
     t.minFilter = THREE.NearestFilter
     t.colorSpace = THREE.SRGBColorSpace
@@ -163,6 +182,8 @@ export default function GameView3D(props: Props) {
   const propsRef = useRef(props)
   propsRef.current = props
   const dpadRef = useRef<Dir | null>(null)
+  const actionRef = useRef<() => void>(() => {})
+  const bRef = useRef(false)
   const tapRef = useRef<Dir | null>(null)
 
   useEffect(() => {
@@ -231,24 +252,26 @@ export default function GameView3D(props: Props) {
     })
 
     const ballMat = ballMaterial()
-    // every item on the ground is drawn with the game's own Poké Ball picture (item icon 4)
-    void romItemUrl(4).then((url) => {
-      if (!url) return
-      new THREE.TextureLoader().load(url, (tex) => {
-        tex.magFilter = THREE.NearestFilter
-        tex.minFilter = THREE.NearestFilter
-        tex.colorSpace = THREE.SRGBColorSpace
-        ballMat.map = tex
-        ballMat.color.set(0xffffff)
-        ballMat.needsUpdate = true
-        for (const sp of pickupSprites.values()) { sp.scale.set(0.75, 0.75, 1); sp.center.set(0.5, 0.2) }
-      })
-    })
+    // every item on the ground is drawn with the game's own item ball (a/0/4/8 file 115)
+    const ballImg = owBall()
+    if (ballImg) {
+      const tex = new THREE.Texture(ballImg)
+      tex.needsUpdate = true
+      tex.magFilter = THREE.NearestFilter
+      tex.minFilter = THREE.NearestFilter
+      tex.colorSpace = THREE.SRGBColorSpace
+      ballMat.map = tex
+      ballMat.color.set(0xffffff)
+      ballMat.alphaTest = 0.1
+      ballMat.transparent = true
+      ballMat.needsUpdate = true
+    }
     const pickupSprites = new Map<string, THREE.Sprite>()
     for (const pk of world.pickups) {
       const s = new THREE.Sprite(ballMat)
-      s.center.set(0.5, 0)
-      s.scale.set(0.5, 0.5, 1)
+      s.center.set(0.5, 0.1)
+      s.scale.set(ballImg ? 1.1 : 0.5, ballImg ? 1.1 : 0.5, 1)
+      s.renderOrder = 3
       s.position.set(pk.x + 0.5, heightAt(pk.x + 0.5, pk.y + 0.5) + 0.05, pk.y + 0.5)
       scene.add(s)
       pickupSprites.set(pk.id, s)
@@ -256,6 +279,7 @@ export default function GameView3D(props: Props) {
 
     const me = {
       x: propsRef.current.startTile.x, y: propsRef.current.startTile.y, fromX: 0, fromY: 0, t: 1, dir: 0 as Dir, step: 0,
+      stepSec: WALK_SECONDS, run: false, idle: 1, turn: 0,
     }
     me.fromX = me.x
     me.fromY = me.y
@@ -290,7 +314,7 @@ export default function GameView3D(props: Props) {
       const sp = new THREE.Sprite(charMaterial(look, s.dir, 0))
       fit(sp)
       scene.add(sp)
-      return { spec: s, x: s.x, y: s.y, fx: s.x, fy: s.y, dir: s.dir, moving: 0, fromX: s.x, fromY: s.y, timer: 1 + hash2(s.x, s.y, 3) * 3, defeated: false, frozen: false, look, sprite: sp }
+      return { spec: s, x: s.x, y: s.y, fx: s.x, fy: s.y, dir: s.dir, moving: 0, fromX: s.x, fromY: s.y, timer: 1 + hash2(s.x, s.y, 3) * 3, defeated: false, frozen: false, look, sprite: sp, stp: 0 }
     })
     if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__pq = { npcs, me, world, built, rayDown: (x: number, y: number, z: number) => { const maps = built.group.children.filter((c) => !c.userData.building); const rc = new THREE.Raycaster(); rc.set(new THREE.Vector3(x, y, z), new THREE.Vector3(0, -1, 0)); return rc.intersectObjects(maps, true).slice(0, 5).map((h) => [(h.object as THREE.Mesh).material instanceof THREE.Material ? ((h.object as THREE.Mesh).material as THREE.Material).name : '?', +h.point.y.toFixed(2)]) }, group: built.group, overlap: () => { const maps = built.group.children.filter((c) => !c.userData.building); const rc = new THREE.Raycaster(); return built.group.children.filter((c) => c.userData.building).map((c) => { const b = c.userData.building; rc.set(new THREE.Vector3(b.x, b.y + 4, b.z), new THREE.Vector3(0, -1, 0)); const hits = rc.intersectObjects(maps, true); return { m: b.model, pack: b.pack, x: b.x, z: b.z, y: b.y, top: hits.length ? +hits[0].point.y.toFixed(2) : null } }) }, pick: (nx: number, ny: number) => { const rc = new THREE.Raycaster(); rc.setFromCamera(new THREE.Vector2(nx, ny), camera); return rc.intersectObjects(built.group.children, true).slice(0, 4).map((h) => (h.object as THREE.Mesh).material as THREE.Material).map((m) => m.name) } } // developer test hook
     const otherSprites = new Map<string, { body: THREE.Sprite; label: THREE.Sprite; shadow: THREE.Mesh }>()
@@ -307,38 +331,52 @@ export default function GameView3D(props: Props) {
     }
     propsRef.current.handleRef.current = handle
 
+    // W A S D walk. The arrow keys are the buttons of the game: left = A (talk / pick up), down = B (hold to run), up = X (menu), right = Y.
     const keyDir = (k: string): Dir | null => {
       switch (k) {
-        case 'w': case 'arrowup': return 3
-        case 's': case 'arrowdown': return 0
-        case 'a': case 'arrowleft': return 1
-        case 'd': case 'arrowright': return 2
+        case 'w': return 3
+        case 's': return 0
+        case 'a': return 1
+        case 'd': return 2
       }
       return null
     }
+    const doAction = () => { // button A: use whatever is right in front of you (an item on the ground)
+      if (me.t < 1 || paused || propsRef.current.paused) return
+      const pk = world.pickups.find((q) => q.x === me.x + DX[me.dir] && q.y === me.y + DY[me.dir] && !removed.has(q.id))
+      if (pk) propsRef.current.events.onPickup?.(pk.id)
+    }
+    actionRef.current = doAction
     const onKeyDown = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return
       const k = e.key.toLowerCase()
       const kd = keyDir(k)
-      if (kd !== null) { held.add(k); tapRef.current = kd; e.preventDefault() }
+      if (kd !== null) { if (!held.has(k)) { held.add(k); tapRef.current = kd }; e.preventDefault(); return }
+      if (k === 'arrowdown' || k === 'shift') { held.add('b'); e.preventDefault(); return }
+      if (k === 'arrowleft') { if (!e.repeat) doAction(); e.preventDefault(); return }
+      if (k === 'arrowup') { if (!e.repeat) propsRef.current.events.onMenuKey?.(); e.preventDefault(); return }
+      if (k === 'arrowright') e.preventDefault()
     }
-    const onKeyUp = (e: KeyboardEvent) => { held.delete(e.key.toLowerCase()) }
+    const onKeyUp = (e: KeyboardEvent) => {
+      const k = e.key.toLowerCase()
+      if (k === 'arrowdown' || k === 'shift') held.delete('b')
+      held.delete(k)
+    }
     const onBlur = () => held.clear()
     window.addEventListener('keydown', onKeyDown)
     window.addEventListener('keyup', onKeyUp)
     window.addEventListener('blur', onBlur)
 
-    const wantedDir = (): Dir | null => {
-      if (dpadRef.current !== null) return dpadRef.current
+    // the direction asked for right now: the key held longest ago... no: the one pressed last that is still down, or a quick tap that has not been used yet
+    const wantedDir = (): { dir: Dir | null; held: boolean } => {
+      if (dpadRef.current !== null) return { dir: dpadRef.current, held: true }
       const keys = Array.from(held)
       for (let i = keys.length - 1; i >= 0; i--) {
         const d = keyDir(keys[i])
-        if (d !== null) return d
+        if (d !== null) return { dir: d, held: true }
       }
-      const tap = tapRef.current
-      tapRef.current = null
-      return tap
+      return { dir: tapRef.current, held: false }
     }
 
     const resize = () => {
@@ -358,7 +396,7 @@ export default function GameView3D(props: Props) {
       me.dir = d
       const nx = me.x + DX[d]
       const ny = me.y + DY[d]
-      if (!walkableFor(world, nx, ny, elapsed) || npcAt(nx, ny)) {
+      if (!walkableFor(world, nx, ny, elapsed) || npcAt(nx, ny) || pickupAt(nx, ny)) {
         if (tileAt(world, nx, ny) === T.GymDoor) {
           const g = world.gyms.find((q) => q.doorX === nx && q.doorY === ny)
           if (g) propsRef.current.events.onGym?.(g.id)
@@ -371,6 +409,9 @@ export default function GameView3D(props: Props) {
       me.x = nx
       me.y = ny
       me.t = 0
+      me.stepSec = held.has('b') || bRef.current ? RUN_SECONDS : WALK_SECONDS
+      me.run = me.stepSec === RUN_SECONDS
+      me.idle = 0
       me.step ^= 1
       propsRef.current.events.onMoveStart?.(nx, ny, d)
     }
@@ -392,12 +433,10 @@ export default function GameView3D(props: Props) {
 
       if (!paused && !p.paused) {
         if (me.t < 1) {
-          me.t = Math.min(1, me.t + dt / STEP_SECONDS)
+          me.t = Math.min(1, me.t + dt / me.stepSec)
           if (me.t >= 1) {
             const tile = tileAt(world, me.x, me.y)
             p.events.onStep?.(me.x, me.y, tile)
-            const pk = world.pickups.find((q) => q.x === me.x && q.y === me.y && !removed.has(q.id))
-            if (pk) p.events.onPickup?.(pk.id)
             if (tile === T.GymDoor) {
               const g = world.gyms.find((q) => q.doorX === me.x && q.doorY === me.y)
               if (g) p.events.onGym?.(g.id)
@@ -414,14 +453,27 @@ export default function GameView3D(props: Props) {
             p.events.onNpcSpotted?.(id)
           }
         }
+        if (me.t >= 1) me.idle += dt
         if (me.t >= 1 && !alert) {
-          const d = wantedDir()
-          if (d !== null) tryStep(d, elapsed)
+          const w = wantedDir()
+          if (w.dir === null) { me.turn = 0 }
+          else if (w.dir !== me.dir && me.idle > 0.06) {
+            // standing still and asking for another direction: first turn on the spot (a quick tap only turns)
+            me.dir = w.dir
+            me.turn = TURN_SECONDS
+            tapRef.current = null
+          } else if (me.turn > 0) {
+            me.turn -= dt
+          } else {
+            tryStep(w.dir, elapsed)
+            tapRef.current = null
+          }
+          if (!w.held && tapRef.current === null) me.turn = Math.min(me.turn, 0)
         }
         for (const n of npcs) {
           if (n.defeated || n.frozen || (alert && alert.n === n && n.moving === 0)) continue
           if (n.moving > 0) {
-            n.moving = Math.min(1, n.moving + dt / (n.spec.behavior === 'run' ? 0.17 : 0.32))
+            n.moving = Math.min(1, n.moving + dt / (n.spec.behavior === 'run' ? 0.2 : WALK_SECONDS))
             n.fx = n.fromX + (n.x - n.fromX) * n.moving
             n.fy = n.fromY + (n.y - n.fromY) * n.moving
             if (n.moving >= 1) { n.moving = 0; n.fx = n.x; n.fy = n.y }
@@ -438,9 +490,9 @@ export default function GameView3D(props: Props) {
                 n.dir = d
                 const homeOk = Math.abs(nx - n.spec.x) <= 7 && Math.abs(ny - n.spec.y) <= 7
                 if (homeOk && walkableFor(world, nx, ny, elapsed) && tileAt(world, nx, ny) !== T.GymDoor && !(nx === me.x && ny === me.y) && !npcAt(nx, ny) && !pickupAt(nx, ny)) {
-                  n.fromX = n.x; n.fromY = n.y; n.x = nx; n.y = ny; n.moving = 0.001
+                  n.fromX = n.x; n.fromY = n.y; n.x = nx; n.y = ny; n.moving = 0.001; n.stp ^= 1
                 }
-                n.timer = b === 'run' ? 0.05 + Math.random() * 0.4 : 0.4 + Math.random() * 1.6
+                n.timer = b === 'run' ? 0.5 + Math.random() * 1.5 : 0.8 + Math.random() * 2.2
               }
             }
           }
@@ -464,19 +516,24 @@ export default function GameView3D(props: Props) {
       const px = me.fromX + (me.x - me.fromX) * me.t
       const py = me.fromY + (me.y - me.fromY) * me.t
       const ph = heightAt(px + 0.5, py + 0.5)
-      mySprite.material = charMaterial(p.look, me.dir, me.t < 1 ? 1 + me.step : 0)
+      // the camera first (the characters are placed relative to it)
+      const dst = CAM_DISTANCE / Math.max(0.3, p.settings.zoom)
+      camera.position.set(px + 0.5, ph + Math.sin(CAM_PITCH) * dst, py + 0.5 + Math.cos(CAM_PITCH) * dst)
+      camera.lookAt(px + 0.5, ph + 0.6, py + 0.5)
+      // walking: the foot picture for the first half of a tile, standing for the second half; the foot changes with every tile
+      mySprite.material = charMaterial(p.look, me.dir, me.t < 1 && me.t < 0.5 ? 1 + me.step : 0, me.run)
       fit(mySprite)
-      mySprite.position.set(px + 0.5, ph + lift(mySprite), py + 0.5)
+      place(mySprite, camera, px + 0.5, ph + lift(mySprite), py + 0.5)
       myShadow.position.set(px + 0.5, ph + 0.03, py + 0.5)
       const fr = Math.floor(now / (1000 / 30)) // water pictures: 30 a second (a calm pace; the exact speed of the original is not known)
       for (const a of animatedTextures) a.tex.offset.set(valueAt(a.anim.moveS, fr), valueAt(a.anim.moveT, fr)) // moving water
       for (const n of npcs) {
         n.sprite.visible = !n.defeated || true
-        const frame = n.moving > 0 ? 1 + (Math.floor(n.moving * 2) % 2) : 0
-        n.sprite.material = charMaterial(n.look, n.dir, frame)
+        const frame = n.moving > 0 && n.moving < 0.5 ? 1 + n.stp : 0
+        n.sprite.material = charMaterial(n.look, n.dir, frame, n.spec.behavior === 'run')
         fit(n.sprite)
         const nh = heightAt(n.fx + 0.5, n.fy + 0.5)
-        n.sprite.position.set(n.fx + 0.5, nh + lift(n.sprite), n.fy + 0.5)
+        place(n.sprite, camera, n.fx + 0.5, nh + lift(n.sprite), n.fy + 0.5)
         let sh = npcShadows.get(n)
         if (!sh) { sh = makeShadow(scene); npcShadows.set(n, sh) }
         sh.position.set(n.fx + 0.5, nh + 0.03, n.fy + 0.5)
@@ -496,19 +553,15 @@ export default function GameView3D(props: Props) {
           e = { body, label, shadow: makeShadow(scene) }
           otherSprites.set(o.id, e)
         }
-        e.body.material = charMaterial(o.look, o.dir, o.moving ? 1 + (Math.floor(now / 150) % 2) : 0)
+        e.body.material = charMaterial(o.look, o.dir, o.moving ? (Math.floor(now / 133) % 2 ? 0 : 1 + (Math.floor(now / 266) % 2)) : 0)
         fit(e.body)
         const h = heightAt(o.x + 0.5, o.y + 0.5)
-        e.body.position.set(o.x + 0.5, h + lift(e.body), o.y + 0.5)
+        place(e.body, camera, o.x + 0.5, h + lift(e.body), o.y + 0.5)
         e.shadow.position.set(o.x + 0.5, h + 0.03, o.y + 0.5)
         e.label.position.set(o.x + 0.5, h + 1.5, o.y + 0.5)
       }
       for (const [id, e] of otherSprites) if (!seen.has(id)) { scene.remove(e.body, e.label, e.shadow); otherSprites.delete(id) }
 
-      // the camera
-      const dst = CAM_DISTANCE / Math.max(0.3, p.settings.zoom)
-      camera.position.set(px + 0.5, ph + Math.sin(CAM_PITCH) * dst, py + 0.5 + Math.cos(CAM_PITCH) * dst)
-      camera.lookAt(px + 0.5, ph + 0.6, py + 0.5)
 
       // the collapsing island
       const u = built.uniforms
@@ -556,6 +609,12 @@ export default function GameView3D(props: Props) {
               {name === 'up' ? '▲' : name === 'down' ? '▼' : name === 'left' ? '◀' : '▶'}
             </button>
           ))}
+        </div>
+      )}
+      {s.showDpad && (
+        <div className={`abpad ${s.dpadSide === 'left' ? 'right' : 'left'}`} onContextMenu={(e) => e.preventDefault()}>
+          <button onPointerDown={() => actionRef.current()} aria-label="A">A</button>
+          <button onPointerDown={() => { bRef.current = true }} onPointerUp={() => { bRef.current = false }} onPointerCancel={() => { bRef.current = false }} onPointerLeave={() => { bRef.current = false }} aria-label="B">B</button>
         </div>
       )}
     </>

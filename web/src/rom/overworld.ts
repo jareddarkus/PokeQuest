@@ -40,22 +40,26 @@ export function buildStrip(raw: Uint8Array): HTMLCanvasElement | null {
   const frames = t.texs.map((tex) => decodeTexture(tex, t.pals[0]))
   if (frames.some((f) => f.width !== OW_FRAME || f.height !== OW_FRAME)) return null
   const f = frames.map(frameCanvas)
-  let slots: HTMLCanvasElement[] // order: down x3, left x3, right x3, up x3
-  if (n === 7) {
-    // 0 up, 1 up step, 2 down, 3 down step, 4 side, 5 side step, 6 side step; the other foot / other side is the mirror image
-    const up = [f[0], f[1], mirrored(f[1])]
-    const down = [f[2], f[3], mirrored(f[3])]
-    const side = [f[4], f[5], f[6]] // these look to one side; the other side is the mirror image
-    slots = [...down, ...side, ...side.map(mirrored), ...up]
-  } else {
-    const up = [f[0], f[1], f[2]]
-    const down = [f[3], f[4], f[5]]
-    const a = [f[6], f[7], f[8]]
-    const b = [f[9], f[10], f[11]]
-    slots = FIRST_SIDE_IS_LEFT ? [...down, ...a, ...b, ...up] : [...down, ...b, ...a, ...up]
+  const make = (g: HTMLCanvasElement[]): HTMLCanvasElement[] => {
+    // order: down x3, left x3, right x3, up x3 (stand, step, step)
+    if (n === 7) {
+      // 0 up, 1 up step, 2 down, 3 down step, 4 side, 5 side step, 6 side step; the other foot / other side is the mirror image
+      const up = [g[0], g[1], mirrored(g[1])]
+      const down = [g[2], g[3], mirrored(g[3])]
+      const side = [g[4], g[5], g[6]]
+      return [...down, ...side, ...side.map(mirrored), ...up]
+    }
+    const up = [g[0], g[1], g[2]]
+    const down = [g[3], g[4], g[5]]
+    const a = [g[6], g[7], g[8]]
+    const b = [g[9], g[10], g[11]]
+    return FIRST_SIDE_IS_LEFT ? [...down, ...a, ...b, ...up] : [...down, ...b, ...a, ...up]
   }
+  const walk = make(f.slice(0, n === 7 ? 7 : 12))
+  const run = n === 24 ? make(f.slice(12, 24)) : walk // only the 24-picture files (the heroes) have separate running pictures
+  const slots = [...walk, ...run]
   const strip = document.createElement('canvas')
-  strip.width = OW_FRAME * 12
+  strip.width = OW_FRAME * 24
   strip.height = OW_FRAME
   const ctx = strip.getContext('2d')!
   slots.forEach((s, i) => ctx.drawImage(s, i * OW_FRAME, 0))
@@ -113,4 +117,12 @@ export async function decodeEmotes(files: Uint8Array[], put: (idx: number, blob:
     if (blob) { await put(i, blob); ok.push(i) }
   }
   return ok
+}
+
+/** The item ball lying on the ground (file 115 of a/0/4/8, one 32x32 picture). */
+export async function decodeFieldBall(files: Uint8Array[]): Promise<Blob | null> {
+  const t = readTexFile(files[115])
+  if (!t || !t.texs.length || !t.pals.length) return null
+  const c = frameCanvas(decodeTexture(t.texs[0], t.pals[0]))
+  return new Promise<Blob | null>((res) => c.toBlob(res, 'image/png'))
 }

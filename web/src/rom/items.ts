@@ -59,19 +59,34 @@ function iconCanvas(chr: Uint8Array, pal: Array<[number, number, number]>): HTML
   return canvas
 }
 
-/** Decodes every item icon. `put` stores one picture under the item number. */
+/** Decodes every item icon: `put` stores one picture under the number of its file in the archive (icon file numbers: 2 Master Ball, 4 Ultra, 6 Great, 8 Poké Ball, 24 Potion ...). */
 export async function decodeItemIcons(narcData: Uint8Array, put: (id: number, blob: Blob) => Promise<void>): Promise<number> {
   const files = parseNarc(narcData)
   let n = 0
-  for (let id = 1; id * 2 + 1 < files.length; id++) {
+  for (let i = 0; i < files.length; i++) {
     try {
-      const pal = paletteOf(files[id * 2 + 1])
-      if (!pal || files[id * 2].length === 0) continue
-      const c = iconCanvas(files[id * 2], pal)
+      if (files[i].length < 40) continue
+      const d = decompress(files[i])
+      if (find(d, 'RAHC') < 0) continue
+      const pal = paletteOf(files[i + 1]) ?? (i > 0 ? paletteOf(files[i - 1]) : null)
+      if (!pal) continue
+      const c = iconCanvas(files[i], pal)
       if (!c) continue
       const blob = await new Promise<Blob | null>((res) => c.toBlob(res, 'image/png'))
-      if (blob) { await put(id, blob); n++ }
+      if (blob) { await put(i, blob); n++ }
     } catch { /* not an icon */ }
+  }
+  // Some items use the same picture with another set of colours (all the potions, the vitamins ...): picture file + colour file, stored as picture * 1000 + colours
+  for (const [chr, pl] of EXTRA_ICONS) {
+    try {
+      const pal = paletteOf(files[pl])
+      const c = pal ? iconCanvas(files[chr], pal) : null
+      const blob = c ? await new Promise<Blob | null>((res) => c.toBlob(res, 'image/png')) : null
+      if (blob) { await put(chr * 1000 + pl, blob); n++ }
+    } catch { /* leave it out */ }
   }
   return n
 }
+
+/** [picture file, colour file] pairs found by comparing with the game's own item pictures: Super Potion, Hyper Potion, Max Potion, Iron, Calcium, Zinc, Carbos */
+export const EXTRA_ICONS: Array<[number, number]> = [[24, 37], [24, 36], [33, 35], [85, 87], [85, 89], [85, 94], [85, 88]]
