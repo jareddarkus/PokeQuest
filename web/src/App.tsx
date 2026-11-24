@@ -1,6 +1,8 @@
 ﻿import { useEffect, useState } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase, signIn, signUp } from './supabase'
+import '@fontsource/unbounded/900.css' // titles (free, SIL Open Font License, served from our own site, not Google)
+import '@fontsource/lexend/400.css' // normal text (same license)
 import './App.css'
 
 type Profile = { username: string; money: number }
