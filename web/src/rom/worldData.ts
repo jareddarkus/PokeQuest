@@ -16,6 +16,7 @@ export interface WorldData {
   textures: Record<number, Uint8Array>
   buildings?: ChunkBuildings[]
   packs?: Record<number, { bld: Uint8Array; tex: Uint8Array }>
+  anims?: Uint8Array[] // texture animation files (water ...), a/0/6/8
 }
 
 export async function extractWorldData(nds: NdsFile, win: WorldWindow, onProgress?: (t: string) => void): Promise<WorldData> {
@@ -62,6 +63,8 @@ export async function extractWorldData(nds: NdsFile, win: WorldWindow, onProgres
     }
   }
   for (const g of GYM_MODELS) if (!usedPacks[g.pack] && packFiles[g.pack]) usedPacks[g.pack] = { bld: new Uint8Array(packFiles[g.pack]), tex: new Uint8Array(packTex[g.pack]) }
-  return { window: win, chunks, textures, buildings, packs: usedPacks }
+  let anims: Uint8Array[] = []
+  try { anims = parseNarc(await nds.get('a/0/6/8')).map((f) => new Uint8Array(f)) } catch { /* no animations */ }
+  return { window: win, chunks, textures, buildings, packs: usedPacks, anims }
 }
 

@@ -218,3 +218,11 @@ button.big small { opacity: .7; font-size: .75rem; }
 .chat-msg.mine b { color: #ffd37a; }
 .chat-input { display: flex; gap: 8px; }
 .chat-input input { flex: 1; padding: 8px 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,.25); background: rgba(0,0,0,.45); color: #fff; font: inherit; }
+
+/* phones: the top-right buttons show only their icons so they do not cover the game */
+@media (max-width: 640px) {
+  .hud-top-right { flex-direction: column; gap: 4px; max-width: none; }
+  .hud-top-right .menu-slab { width: 56px; height: 44px; padding: 4px 4px 4px 8px; }
+  .hud-top-right .menu-slab > span:not(.menu-badge) { display: none; }
+  .hud-top-left { max-width: 62vw; }
+}

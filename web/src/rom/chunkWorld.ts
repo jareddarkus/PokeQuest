@@ -2,6 +2,7 @@
 import * as THREE from 'three'
 import { buildModelObject, type ClipUniforms } from './mapModel'
 import { parsePack } from './buildings'
+import { parseTextureAnim, type MatAnim } from './texanim'
 import { readModels, readTexFile, type Model } from './nitro'
 import type { WorldData } from './worldData'
 
@@ -116,6 +117,17 @@ export function buildChunkWorld(data: WorldData): BuiltWorld {
     uCut: { value: 999 }, uCenter: { value: new THREE.Vector2(size / 2, size / 2) }, uTime: { value: 0 }, uWarn: { value: 0 },
   }
   const texCache = new Map<number, ReturnType<typeof readTexFile>>()
+  const animSets = (data.anims ?? []).map((f) => parseTextureAnim(f))
+  /** the texture animation file that fits a map piece best (most material names in common) */
+  const animFor = (names: string[]): Map<string, MatAnim> | undefined => {
+    let best: Map<string, MatAnim> | undefined
+    let bestN = 0
+    for (const set of animSets) {
+      const n = names.filter((x) => set.has(x)).length
+      if (n > bestN) { bestN = n; best = set }
+    }
+    return best
+  }
   const waterHeights: number[] = []
 
   for (const c of data.chunks) {
@@ -129,7 +141,7 @@ export function buildChunkWorld(data: WorldData): BuiltWorld {
     const ox = (c.gx - data.window.x0) * 32
     const oz = (c.gy - data.window.y0) * 32
     if (tex) {
-      const obj = buildModelObject(model, tex, uniforms)
+      const obj = buildModelObject(model, tex, uniforms, animFor(model.materials.map((x) => x.name)))
       obj.position.set(ox + 16, 0, oz + 16)
       group.add(obj)
     }

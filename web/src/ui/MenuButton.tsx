@@ -1,4 +1,5 @@
 import { useUiUrl } from './CmdButton'
+import { music } from '../audio/music'
 
 /** A button drawn like the game's Start menu: a dark slab with a menu icon at the left (pictures from the player's own game file). */
 export default function MenuButton({ icon, label, onClick, badge }: { icon?: number; label: string; onClick: () => void; badge?: number }) {
@@ -8,7 +9,7 @@ export default function MenuButton({ icon, label, onClick, badge }: { icon?: num
   return (
     <button
       className="menu-slab"
-      onClick={onClick}
+      onClick={() => { void music.playSfx('se:open'); onClick() }}
       style={{ background: `url(${slab}) center / 100% 100% no-repeat`, imageRendering: 'pixelated' }}
     >
       {pic ? <img src={pic} alt="" draggable={false} style={{ width: 32, height: 32, imageRendering: 'pixelated', flex: 'none' }} /> : <span style={{ width: 32, flex: 'none' }} />}

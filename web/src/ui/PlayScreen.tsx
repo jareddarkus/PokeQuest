@@ -61,6 +61,7 @@ function PlayInner({ username, look, settings, onSettings, onExit, onCustomize, 
   // the real songs of the game: route music by ring, battle music by kind of battle
   const song = battle ? (battle.kind === 'gym' ? 'gymLeader' : battle.kind === 'trainer' ? 'trainer' : 'wild') : ring <= 1 ? 'field1' : ring === 2 ? 'field2' : 'field3'
   useEffect(() => { music.setVolume(settings.musicVolume) }, [settings.musicVolume])
+  useEffect(() => { music.setSfxVolume(settings.sfxVolume) }, [settings.sfxVolume])
   useEffect(() => { void music.play(song) }, [song])
   useEffect(() => () => music.stop(), [])
 
@@ -225,8 +226,8 @@ function PlayInner({ username, look, settings, onSettings, onExit, onCustomize, 
         <MenuButton icon={7} label="Bag" onClick={() => setPanel('bag')} />
         <MenuButton icon={6} label="PC" onClick={() => setPanel('pc')} />
         <MenuButton icon={5} label="Chat" badge={chat.unread} onClick={() => setPanel('chat')} />
-        <MenuButton label="Settings" onClick={() => setPanel('settings')} />
-        <MenuButton icon={12} label="Menu" onClick={onExit} />
+        <MenuButton icon={13} label="Settings" onClick={() => setPanel('settings')} />
+        <MenuButton icon={11} label="Menu" onClick={onExit} />
       </div>
 
       {!battle && (

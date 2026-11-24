@@ -2,6 +2,9 @@ import { useEffect, useState } from 'react'
 import { TYPE_COLOR, type PType } from '../game/world'
 import { useUiUrl } from './CmdButton'
 import TypePlate from './TypePlate'
+import { music } from '../audio/music'
+const decide = () => { void music.playSfx('se:decide') }
+const cancel = () => { void music.playSfx('se:cancel') }
 
 /** The size of the "bottom screen" of the DS in screen pixels (the game's pictures are 256 x 192). */
 export function dsScale(): number {
@@ -58,7 +61,7 @@ function MoveButton({ mv, x, y, S, onClick }: { mv: MoveView; x: number; y: numb
     <button
       className="ds-move"
       disabled={off}
-      onClick={onClick}
+      onClick={() => { decide(); onClick() }}
       style={{ left: x * S, top: y * S, width: 127 * S, height: 46 * S, background: frame ? `url(${frame}) center / 100% 100% no-repeat` : '#222', opacity: off ? 0.45 : 1 }}
     >
       <span className="ds-move-name" style={{ fontSize: 8.5 * S }}>{mv.name}</span>
@@ -77,13 +80,13 @@ export function CommandScreen({ S, onFight, onBag, onPokemon, onRun, pokemonOff,
   const bg = useUiUrl('menu:bg')
   const bag = useUiUrl('cmd:bag'), poke = useUiUrl('cmd:pokemon'), run = useUiUrl('cmd:run')
   const Btn = ({ img, x, y, w, h, label, onClick, off }: { img: string | null; x: number; y: number; w: number; h: number; label: string; onClick: () => void; off?: boolean }) => (
-    <button className="ds-btn" aria-label={label} disabled={off} onClick={onClick} style={{ left: x * S, top: y * S, width: w * S, height: h * S, opacity: off ? 0.4 : 1 }}>
+    <button className="ds-btn" aria-label={label} disabled={off} onClick={() => { decide(); onClick() }} style={{ left: x * S, top: y * S, width: w * S, height: h * S, opacity: off ? 0.4 : 1 }}>
       {img ? <img src={img} alt={label} draggable={false} style={{ width: '100%', height: '100%' }} /> : label}
     </button>
   )
   return (
     <div className="ds-screen" style={{ width: 256 * S, height: 192 * S, backgroundImage: bg ? `url(${bg})` : undefined }}>
-      <button className="ds-btn" aria-label="Fight" onClick={onFight} style={{ left: 60 * S, top: 62 * S, width: 136 * S, height: 70 * S }} />
+      <button className="ds-btn" aria-label="Fight" onClick={() => { decide(); onFight() }} style={{ left: 60 * S, top: 62 * S, width: 136 * S, height: 70 * S }} />
       <Btn img={bag} x={6} y={142} w={93} h={46} label="Bag" onClick={onBag} />
       <Btn img={run} x={96} y={150} w={64} h={37} label="Run" onClick={onRun} off={runOff} />
       <Btn img={poke} x={157} y={142} w={93} h={46} label="Pokémon" onClick={onPokemon} off={pokemonOff} />
@@ -99,7 +102,7 @@ export function MoveScreen({ S, moves, onMove, onBack }: { S: number; moves: Mov
   return (
     <div className="ds-screen" style={{ width: 256 * S, height: 192 * S, backgroundImage: bg ? `url(${bg})` : undefined }}>
       {moves.slice(0, 4).map((mv, i) => <MoveButton key={mv.id} mv={mv} x={pos[i][0]} y={pos[i][1]} S={S} onClick={() => onMove(i)} />)}
-      <button className="ds-btn" aria-label="Back" onClick={onBack} style={{ left: 88 * S, top: 136 * S, width: 80 * S, height: 44 * S }}>
+      <button className="ds-btn" aria-label="Back" onClick={() => { cancel(); onBack() }} style={{ left: 88 * S, top: 136 * S, width: 80 * S, height: 44 * S }}>
         {back ? <img src={back} alt="Back" draggable={false} style={{ width: '100%', height: '100%' }} /> : 'Back'}
       </button>
     </div>

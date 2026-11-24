@@ -11,6 +11,9 @@ class MusicManager {
   private enabled = true
   private busy = false
   private analyser: AnalyserNode | null = null
+  private sfx: GainNode | null = null
+  private sfxVolume = 0.7
+  private files = new Map<number, Uint8Array>()
 
   private ensure(): AudioContext | null {
     try {
@@ -22,6 +25,10 @@ class MusicManager {
         this.analyser = this.ctx.createAnalyser()
         this.analyser.fftSize = 2048
         this.master.connect(this.analyser)
+        this.sfx = this.ctx.createGain()
+        this.sfx.gain.value = this.sfxVolume
+        this.sfx.connect(this.ctx.destination)
+        this.sfx.connect(this.analyser)
       }
       if (this.ctx.state === 'suspended') void this.ctx.resume()
       return this.ctx
@@ -39,6 +46,38 @@ class MusicManager {
   }
 
   state(): string { return `${this.ctx?.state ?? 'none'} / ${this.current?.key ?? '-'}` }
+
+  setSfxVolume(v: number) {
+    this.sfxVolume = v
+    if (this.sfx) this.sfx.gain.value = v
+  }
+
+  private async file(id: number): Promise<Uint8Array | null> {
+    const hit = this.files.get(id)
+    if (hit) return hit
+    const f = await loadMusicFile(id)
+    if (f) this.files.set(id, f)
+    return f
+  }
+
+  /** Plays a short sound once: 'se:select', 'se:hit', 'mv:52' (the sound of a move), 'cry:6' (a Pokémon's cry), or a jingle like 'win'. */
+  async playSfx(key: string) {
+    if (!this.enabled || this.sfxVolume <= 0.001) return
+    try {
+      const ctx = this.ensure()
+      if (!ctx || !this.sfx) return
+      const index = await loadMusicIndex()
+      const info = index?.[key]
+      if (!info) return
+      const [seq, bank, ...waves] = await Promise.all([this.file(info.seq), this.file(info.bank), ...info.waves.map((w) => (w >= 0 ? this.file(w) : Promise.resolve(null)))])
+      if (!seq || !bank) return
+      const p = new SongPlayer(ctx, this.sfx, seq, bank, waves, info.vol, false)
+      p.start()
+      window.setTimeout(() => p.stop(0.3), key.startsWith('cry:') ? 3500 : 6000) // a safety stop
+    } catch { /* sounds are optional */ }
+  }
+
+  cry(dex: number) { return this.playSfx(`cry:${dex}`) }
 
   setVolume(v: number) {
     this.volume = v
@@ -69,7 +108,7 @@ class MusicManager {
       const index = await loadMusicIndex()
       const info = index?.[key]
       if (!info) return
-      const [seq, bank, ...waves] = await Promise.all([loadMusicFile(info.seq), loadMusicFile(info.bank), ...info.waves.map((w) => (w >= 0 ? loadMusicFile(w) : Promise.resolve(null)))])
+      const [seq, bank, ...waves] = await Promise.all([this.file(info.seq), this.file(info.bank), ...info.waves.map((w) => (w >= 0 ? this.file(w) : Promise.resolve(null)))])
       if (!seq || !bank || this.wanted !== key) return
       this.current?.player.stop(0.4)
       const player = new SongPlayer(ctx, this.master, seq, bank, waves, info.vol, loop, then ? () => { void this.play(then) } : undefined)

@@ -10,6 +10,7 @@ import SettingsPanel from './ui/SettingsPanel'
 import PlayScreen from './ui/PlayScreen'
 import RomGate from './ui/RomGate'
 import { getRomMeta } from './rom/store'
+import { music } from './audio/music'
 import './App.css'
 
 type Screen = 'menu' | 'customize' | 'practice'
@@ -85,6 +86,13 @@ export default function App() {
     if (!session) { setUsername(null); return }
     supabase.from('profiles').select('username').eq('id', session.user.id).single().then(({ data }) => setUsername(data?.username ?? null))
   }, [session])
+
+  // the title music plays in the menus (the game takes over while you play)
+  useEffect(() => {
+    music.setVolume(settings.musicVolume)
+    music.setSfxVolume(settings.sfxVolume)
+    if (screen !== 'practice') void music.play('title')
+  }, [screen, settings.musicVolume, settings.sfxVolume, rom])
 
   const finishLook = () => {
     try { localStorage.setItem('pokequest.look.done', '1') } catch { /* ignore */ }

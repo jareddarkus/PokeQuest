@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { BattleSession, type BattleEvent, type Request } from '../battle/engine'
-import { allSpecies, maxHp, statsOf, type Mon } from '../data/dex'
+import { allSpecies, dexNum, maxHp, statsOf, type Mon } from '../data/dex'
 import { ITEMS } from '../data/items'
 import {
   addEvs, catchChance, evYield, evolve, expGain, gainExp, healMon, levelEvolution, rollCatch, useItemFromBag, type Trainer,
@@ -12,6 +12,8 @@ import BattleBackdrop from './BattleBackdrop'
 import type { BattleLayout } from '../rom/battleScene'
 import MonSprite from './MonSprite'
 import { CommandScreen, MoveScreen, dsScale } from './DsMenu'
+import { Dex } from '@pkmn/sim'
+import { music } from '../audio/music'
 
 export type BattleKind = 'wild' | 'trainer' | 'gym'
 export type BattleOutcome = 'win' | 'lose' | 'caught' | 'ran'
@@ -70,6 +72,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, onEnd }:
   const legendaryNames = useMemo(() => new Set(allSpecies().filter((s) => s.legendary).map((s) => s.name)), [])
 
   const teamRef = useRef(playerTeam)
+  const hpOf = useRef<Record<string, number>>({})
 
   const showMenuIfReady = () => {
     if (endedRef.current) return
@@ -88,16 +91,24 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, onEnd }:
     while (queue.current.length) {
       const ev = queue.current.shift()!
       switch (ev.kind) {
-        case 'text': setText(ev.text); await sleep(950); break
+        case 'text':
+          if (/super effective/i.test(ev.text)) void music.playSfx('se:hitStrong')
+          else if (/not very effective/i.test(ev.text)) void music.playSfx('se:hitWeak')
+          setText(ev.text); await sleep(950); break
         case 'switch': {
           const s: Side = { uid: ev.uid, species: ev.species, level: ev.level, hp: ev.hp, maxHp: ev.maxHp, shiny: ev.shiny, fainted: false }
           if (ev.side === 'p1') setMe(s); else setFoe(s)
+          hpOf.current[ev.uid] = ev.hp
+          void music.cry(dexNum(ev.species))
           await sleep(500)
           break
         }
         case 'hp': {
           const upd = (s: Side | null): Side | null => (s && s.uid === ev.uid ? { ...s, hp: ev.hp, maxHp: ev.hp === 0 ? s.maxHp : ev.maxHp, status: ev.status ?? s.status } : s)
           if (ev.side === 'p1') setMe(upd); else setFoe(upd)
+          if (ev.uid in hpOf.current && ev.hp < hpOf.current[ev.uid]) void music.playSfx('se:hit')
+          else if (ev.uid in hpOf.current && ev.hp > hpOf.current[ev.uid]) void music.playSfx('se:heal')
+          hpOf.current[ev.uid] = ev.hp
           await sleep(550)
           break
         }
@@ -106,10 +117,15 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, onEnd }:
           if (ev.side === 'p1') setMe(upd); else setFoe(upd)
           break
         }
-        case 'move': setShake(ev.side === 'p1' ? 'foe' : 'me'); await sleep(250); setShake(null); break
+        case 'move': {
+          const num = Dex.moves.get(ev.move).num
+          if (num) void music.playSfx(`mv:${num}`)
+          setShake(ev.side === 'p1' ? 'foe' : 'me'); await sleep(250); setShake(null); break
+        }
         case 'faint': {
           const upd = (s: Side | null): Side | null => (s && s.uid === ev.uid ? { ...s, fainted: true, hp: 0 } : s)
           if (ev.side === 'p1') setMe(upd); else setFoe(upd)
+          void music.playSfx('se:faint')
           await sleep(700)
           break
         }
@@ -152,6 +168,8 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, onEnd }:
     const hasShare = (t.bag['Exp Share'] ?? 0) > 0
 
     if (winner === 'p1') {
+      music.stop()
+      void music.playSfx('win')
       for (const d of s.defeated) {
         const alive = working.filter((m) => m.hp > 0)
         for (let i = 0; i < working.length; i++) {
@@ -166,6 +184,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, onEnd }:
           setText(`${upd.species} gained ${amount} Exp. Points!`)
           await sleep(900)
           if (res.levelsGained > 0) {
+            void music.playSfx('se:lvup')
             setText(`${upd.species} grew to Lv. ${upd.level}!`)
             await sleep(1100)
             for (const mv of res.newMoves) {
@@ -226,6 +245,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, onEnd }:
     const ok = mine >= theirs || Math.random() < 0.55
     setMode('wait'); setReq(null)
     if (ok) {
+      void music.playSfx('se:run')
       ranRef.current = true
       endedRef.current = true
       setText('Got away safely!')
@@ -248,16 +268,20 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, onEnd }:
     const res = rollCatch(target, def.ballBonus ?? 1, isLeg, Math.random)
     void (async () => {
       setText(`You threw a ${def.name}!`)
+      void music.playSfx('se:throw')
       setBall({ shakes: 0 })
       await sleep(900)
       for (let i = 0; i < res.shakes; i++) {
         setBall({ shakes: i + 1 })
+        void music.playSfx('se:shake')
         setText('.'.repeat(i + 1))
         await sleep(800)
       }
       if (res.caught) {
         setBall(null)
         setText(`Gotcha! ${foeMon.species} was caught!`)
+        music.stop()
+        void music.playSfx('caught')
         caughtRef.current = { ...foeMon, hp: Math.max(1, live.hp), uid: foeMon.uid }
         endedRef.current = true
         s().syncBack()

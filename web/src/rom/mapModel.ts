@@ -1,6 +1,7 @@
 // Turns a decoded White 2 map model (+ its textures) into something three.js can draw.
 import * as THREE from 'three'
 import { decodeTexture, readModels, readTexFile, type Model } from './nitro'
+import type { MatAnim } from './texanim'
 
 /** One tile of the game world is 16 units in the DS map files. */
 export const TILE_UNITS = 16
@@ -13,13 +14,12 @@ export interface ClipUniforms {
   uWarn: { value: number } // 1 = tint the band that is about to fall
 }
 
-/** Textures of water (sea, rivers, fountains): the game scrolls them to make the water move. */
-export const waterTextures = new Set<THREE.Texture>()
-const WATER_NAME = /mizu|zanami|kawa|water|hunsui|nami|river|lake|pond/i
+/** Textures that move (water, rivers, fountains) with the animation the game file gives them. */
+export const animatedTextures: Array<{ tex: THREE.Texture; anim: MatAnim }> = []
 
 const textureCache = new WeakMap<object, Map<string, THREE.Texture>>()
 
-export function buildModelObject(model: Model, tex: NonNullable<ReturnType<typeof readTexFile>>, clip?: ClipUniforms): THREE.Group {
+export function buildModelObject(model: Model, tex: NonNullable<ReturnType<typeof readTexFile>>, clip?: ClipUniforms, anims?: Map<string, MatAnim>): THREE.Group {
   const group = new THREE.Group()
   let cache = textureCache.get(tex)
   if (!cache) { cache = new Map(); textureCache.set(tex, cache) }
@@ -50,16 +50,19 @@ export function buildModelObject(model: Model, tex: NonNullable<ReturnType<typeo
           t.flipY = false
           t.needsUpdate = true
           ;(t as THREE.Texture & { hasAlpha?: boolean }).hasAlpha = d.hasAlpha
-          if (WATER_NAME.test(m.name) || WATER_NAME.test(m.texture ?? '')) {
-            t.wrapS = THREE.RepeatWrapping
-            t.wrapT = THREE.RepeatWrapping
-            waterTextures.add(t)
-          }
           cache!.set(key, t)
           map = t
         }
       }
       transparent = !!(map as (THREE.Texture & { hasAlpha?: boolean }) | null)?.hasAlpha
+    }
+    const anim = m ? anims?.get(m.name) : undefined
+    if (map && anim) { // a moving texture gets its own copy (so that others using the same picture stay still)
+      map = map.clone()
+      map.wrapS = THREE.RepeatWrapping
+      map.wrapT = THREE.RepeatWrapping
+      map.needsUpdate = true
+      animatedTextures.push({ tex: map, anim })
     }
     const mat = new THREE.MeshBasicMaterial({
       map: map ?? undefined, vertexColors: true, transparent: transparent || (m?.alpha ?? 1) < 1, alphaTest: transparent ? 0.4 : 0,

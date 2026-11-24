@@ -6,6 +6,7 @@ export const SDAT_PATH = 'swan_sound_data.sdat'
 
 /** The songs the game uses: our name -> the name of the song in the sound archive. */
 export const SONGS: Record<string, string> = {
+  title: 'SEQ_BGM_TITLE',
   field1: 'SEQ_BGM_R_A',
   field2: 'SEQ_BGM_R_B_SU',
   field3: 'SEQ_BGM_R_C_SU',
@@ -17,6 +18,14 @@ export const SONGS: Record<string, string> = {
   gymLeader: 'SEQ_BGM_VS_GYMLEADER',
   win: 'SEQ_BGM_WIN1',
   caught: 'SEQ_ME_POKEGET',
+}
+
+/** Short sound effects of the game (menus, battle). */
+export const SOUNDS: Record<string, string> = {
+  select: 'SEQ_SE_SELECT1', decide: 'SEQ_SE_DECIDE1', cancel: 'SEQ_SE_CANCEL1', open: 'SEQ_SE_OPEN1', close: 'SEQ_SE_CLOSE1',
+  hitStrong: 'SEQ_SE_KOUKA_H', hit: 'SEQ_SE_KOUKA_M', hitWeak: 'SEQ_SE_KOUKA_L',
+  throw: 'SEQ_SE_NAGERU', shake: 'SEQ_SE_BOWA1', click: 'SEQ_SE_KON', run: 'SEQ_SE_NIGERU', faint: 'SEQ_SE_DEAD',
+  exp: 'SEQ_SE_EXP', lvup: 'SEQ_SE_LVUP', heal: 'SEQ_SE_RECOVERY', lowhp: 'SEQ_SE_HINSHI', getting: 'SEQ_SE_GETTING', beep: 'SEQ_SE_BEEP',
 }
 
 export interface SongInfo { seq: number; bank: number; waves: number[]; vol: number }
@@ -52,11 +61,11 @@ export async function extractMusic(nds: NdsFile, put: (id: number, data: Uint8Ar
     const [off, size] = fileRange(id)
     await put(id, await nds.getRange(SDAT_PATH, off, size))
   }
-  for (const [key, name] of Object.entries(SONGS)) {
-    const sid = byName.get(name)
-    if (sid === undefined) continue
+  const addSeq = async (key: string, sid: number, bankOverride?: { seqFile: number; bankId: number }) => {
     const r = rec(0, sid)
-    const seqFile = u16(tables, r), bankId = u16(tables, r + 4), vol = tables[r + 6]
+    const seqFile = bankOverride ? bankOverride.seqFile : u16(tables, r)
+    const bankId = bankOverride ? bankOverride.bankId : u16(tables, r + 4)
+    const vol = tables[r + 6]
     const br = rec(2, bankId)
     const bankFile = u16(tables, br)
     const waves: number[] = []
@@ -68,6 +77,38 @@ export async function extractMusic(nds: NdsFile, put: (id: number, data: Uint8Ar
     await save(bankFile)
     for (const w of waves) if (w >= 0) await save(w)
     index[key] = { seq: seqFile, bank: bankFile, waves, vol }
+  }
+  for (const [key, name] of Object.entries(SONGS)) {
+    const sid = byName.get(name)
+    if (sid !== undefined) await addSeq(key, sid)
+  }
+  for (const [key, name] of Object.entries(SOUNDS)) {
+    const sid = byName.get(name)
+    if (sid !== undefined) await addSeq(`se:${key}`, sid)
+  }
+  // the sound of every move that has one: SEQ_SE_W<move number>_<part>; we keep the first part
+  const moveSeq = new Map<number, [string, number]>()
+  for (const [name, sid] of byName) {
+    const m = /^SEQ_SE_W(\d{3})_(\d\d)$/.exec(name)
+    if (!m) continue
+    const n = Number(m[1])
+    const cur = moveSeq.get(n)
+    if (!cur || name < cur[0]) moveSeq.set(n, [name, sid])
+  }
+  for (const [n, [, sid]] of moveSeq) await addSeq(`mv:${n}`, sid)
+  // Pokémon cries: every Pokémon has its own instrument bank (BANK_PV001... / BANK_PMWB_494...) played by the one song SEQ_PV
+  const bankNames = u32(tables, symb + 8 + 2 * 4)
+  const bcount = u32(tables, symb + bankNames)
+  const pv = byName.get('SEQ_PV')
+  if (pv !== undefined) {
+    const pvSeqFile = u16(tables, rec(0, pv))
+    for (let i = 0; i < bcount; i++) {
+      const no = u32(tables, symb + bankNames + 4 + i * 4)
+      if (!no) continue
+      const nm = cstr(tables, symb + no)
+      const m = /^BANK_PV(\d{3})$/.exec(nm) ?? /^BANK_PMWB_(\d{3})$/.exec(nm)
+      if (m) await addSeq(`cry:${Number(m[1])}`, pv, { seqFile: pvSeqFile, bankId: i })
+    }
   }
   return index
 }

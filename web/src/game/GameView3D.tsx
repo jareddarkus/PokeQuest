@@ -4,7 +4,8 @@ import type { BuiltWorld } from '../rom/chunkWorld'
 import { drawCharacter, lookSprite, randomLook, type Look } from './character'
 import { owEmote, owFrame } from './ow'
 import { GYM_MODELS } from '../rom/buildings'
-import { waterTextures } from '../rom/mapModel'
+import { animatedTextures } from '../rom/mapModel'
+import { valueAt } from '../rom/texanim'
 import { romItemUrl } from '../rom/store'
 import { safeTileFor, type GameEvents, type GameHandle, type OtherPlayer } from './GameView'
 import { hash2 } from './rng'
@@ -467,9 +468,8 @@ export default function GameView3D(props: Props) {
       fit(mySprite)
       mySprite.position.set(px + 0.5, ph + lift(mySprite), py + 0.5)
       myShadow.position.set(px + 0.5, ph + 0.03, py + 0.5)
-      for (const [tex, i] of [...waterTextures].map((t, k) => [t, k] as const)) { // moving water
-        tex.offset.set(((now / 1000) * 0.02 + i * 0.13) % 1, ((now / 1000) * 0.012) % 1)
-      }
+      const fr = Math.floor(now / (1000 / 30)) // water pictures: 30 a second (a calm pace; the exact speed of the original is not known)
+      for (const a of animatedTextures) a.tex.offset.set(valueAt(a.anim.moveS, fr), valueAt(a.anim.moveT, fr)) // moving water
       for (const n of npcs) {
         n.sprite.visible = !n.defeated || true
         const frame = n.moving > 0 ? 1 + (Math.floor(n.moving * 2) % 2) : 0
