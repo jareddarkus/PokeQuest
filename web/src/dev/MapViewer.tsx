@@ -48,6 +48,34 @@ export default function MapViewer() {
       const scene = new THREE.Scene()
       scene.background = new THREE.Color('#7fc4ee')
       scene.add(obj)
+      // optional overlay: ?perm=behavior (or flags / incl / dist) colours every tile by its walk/block data
+      const permMode = q.get('perm')
+      if (permMode) {
+        const offs: number[] = []
+        const n = dv.getUint16(2, true)
+        for (let k = 0; k < n + 1; k++) offs.push(dv.getUint32(4 + k * 4, true))
+        const p = offs[Number(q.get('sec') ?? 1)]
+        const pw = dv.getUint16(p, true)
+        const ph = dv.getUint16(p + 2, true)
+        const field = permMode === 'flags' ? 6 : permMode === 'incl' ? 0 : permMode === 'dist' ? 2 : 4
+        const vals = new Map<number, number>()
+        const colors = new Map<number, THREE.Color>()
+        const rowMajorZ = q.get('swap') === null
+        for (let t = 0; t < pw * ph; t++) {
+          const v = dv.getUint16(p + 4 + t * 8 + field, true)
+          vals.set(v, (vals.get(v) ?? 0) + 1)
+          if (!colors.has(v)) colors.set(v, new THREE.Color().setHSL(((v * 0.61803) % 1), 0.9, 0.5))
+          if (q.get('only') !== null && Number(q.get('only')) !== v) continue
+          const tx = rowMajorZ ? t % pw : Math.floor(t / ph)
+          const tz = rowMajorZ ? Math.floor(t / pw) : t % ph
+          const geo = new THREE.PlaneGeometry(0.9, 0.9)
+          geo.rotateX(-Math.PI / 2)
+          const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: colors.get(v)!, transparent: true, opacity: 0.55 }))
+          mesh.position.set(tx - pw / 2 + 0.5, 1.2, tz - ph / 2 + 0.5)
+          scene.add(mesh)
+        }
+        setInfo((s) => s + ' · ' + permMode + ': ' + Array.from(vals).map(([v, c]) => `${v}(${c})=#${colors.get(v)!.getHexString()}`).join(' '))
+      }
       const cam = new THREE.PerspectiveCamera(30, w / h, 0.1, 500)
       const pitch = Number(q.get('pitch') ?? 55) * Math.PI / 180
       const dist = Number(q.get('dist') ?? 22)

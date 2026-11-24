@@ -1,22 +1,22 @@
-// The Battle Royale island. 4 rings of 20 tiles each, the peak in the middle. Built from a seed so every
-// player in a match gets exactly the same island.
-import { hash2, mulberry32, pick, valueNoise } from './rng'
+// The Battle Royale island: 5 x 5 real Pokémon White 2 map chunks (160 x 160 tiles) cut into a circle of 4 rings.
+// The ground, trees, water and tall grass come from the game file; this file adds rings, gyms, trainers and items.
+import { hash2, mulberry32, pick } from './rng'
 
 export const T = {
   Water: 0,
   Sand: 1,
   Grass: 2,
   Tall: 3,
-  Tree: 4,
-  Cliff: 5,
+  Tree: 4, // blocked (trees, rocks, fences, walls ...)
+  Cliff: 5, // blocked (cliffs and the ring barriers)
   GymWall: 6,
   GymDoor: 7,
 } as const
 export type Tile = (typeof T)[keyof typeof T]
 
-export const SIZE = 170 // tiles per side
+export const SIZE = 160 // tiles per side (5 chunks of 32)
 export const C = SIZE / 2 // centre
-export const RADIUS = 80 // the island edge
+export const RADIUS = 78 // the island edge
 export const RING_WIDTH = 20
 /** Distances (in tiles from the centre) where ring 1, 2, 3, 4 start. Ring 4 is the peak. */
 export const RING_INNER = [60, 40, 20, 0] as const
@@ -33,7 +33,7 @@ export const TYPE_COLOR: Record<PType, string> = {
   Rock: '#b6a136', Ghost: '#735797', Dragon: '#6f35fc', Dark: '#705746', Steel: '#b7b7ce', Fairy: '#d685ad',
 }
 
-export type Dir = 0 | 1 | 2 | 3 // 0 down, 1 left, 2 right, 3 up
+export type Dir = 0 | 1 | 2 | 3 // 0 down (south), 1 left, 2 right, 3 up (north)
 export const DX = [0, -1, 1, 0]
 export const DY = [1, 0, 0, -1]
 
@@ -41,7 +41,7 @@ export interface Gym {
   id: string
   ring: number // 1..3: beating this gym leader sends you to ring + 1
   side: 'N' | 'E' | 'S' | 'W'
-  x: number // top-left tile of the 7x5 building
+  x: number // the gym entrance tile (stand next to it and walk into it)
   y: number
   doorX: number
   doorY: number
@@ -111,92 +111,105 @@ const NPC_NAMES = [
   'Quin', 'Rex', 'Sol', 'Tess', 'Uri', 'Vera', 'Wes', 'Xan', 'Yara', 'Zed',
 ]
 
-export function gymRect(ring: number, side: 'N' | 'E' | 'S' | 'W'): { x: number; y: number } {
-  const rIn = RING_INNER[ring - 1]
-  switch (side) {
-    case 'N': return { x: C - 3, y: C - (rIn + 9) }
-    case 'S': return { x: C - 3, y: C + rIn + 3 }
-    case 'E': return { x: C + rIn + 2, y: C - 2 }
-    case 'W': return { x: C - (rIn + 9), y: C - 2 }
-  }
-}
-
-export function generateWorld(seed: number): World {
+/**
+ * Builds the playable island from the ground tiles of the real map chunks.
+ * `ground` has SIZE*SIZE tile codes (Water / Grass / Tall / Tree = blocked ...).
+ */
+export function generateWorld(seed: number, ground: Uint8Array): World {
   const rng = mulberry32(seed)
-  const tiles = new Uint8Array(SIZE * SIZE)
+  const tiles = new Uint8Array(ground)
 
-  // gyms first (4 per ring, rings 1-3), with random types
-  const gyms: Gym[] = []
-  const reserved = new Set<number>()
-  for (let ring = 1; ring <= 3; ring++) {
-    for (const side of ['N', 'E', 'S', 'W'] as const) {
-      const { x, y } = gymRect(ring, side)
-      gyms.push({
-        id: `g${ring}${side}`, ring, side, x, y, doorX: x + 3, doorY: y + 4,
-        type: pick(rng, TYPES), leader: pick(rng, LEADER_NAMES),
-      })
-      for (let yy = y - 2; yy < y + 8; yy++) for (let xx = x - 2; xx < x + 9; xx++) reserved.add(yy * SIZE + xx)
-    }
-  }
-
+  // outside the island: sea. The edge of each ring is a barrier you can only pass by beating a gym leader.
   for (let y = 0; y < SIZE; y++) {
     for (let x = 0; x < SIZE; x++) {
       const d = dist(x, y)
-      let t: Tile = T.Grass
-      if (d > RADIUS + 1) t = T.Water
-      else if (d > RADIUS - 1) t = T.Sand
+      const i = y * SIZE + x
+      if (d > RADIUS) tiles[i] = T.Water
       else {
         const fl = Math.floor(d)
-        if (fl === RING_INNER[0] - 1 || fl === RING_INNER[1] - 1 || fl === RING_INNER[2] - 1) t = T.Cliff
-        else {
-          const n1 = valueNoise(x, y, seed, 9)
-          const n2 = valueNoise(x, y, seed + 17, 6)
-          if (n2 > 0.64 && hash2(x, y, seed + 5) > 0.45 && !reserved.has(y * SIZE + x)) t = T.Tree
-          else if (n1 > 0.52) t = T.Tall
+        if (fl === RING_INNER[0] - 1 || fl === RING_INNER[1] - 1 || fl === RING_INNER[2] - 1) tiles[i] = T.Cliff
+      }
+    }
+  }
+
+  const walkable = (x: number, y: number) => {
+    const t = tiles[y * SIZE + x]
+    return t === T.Grass || t === T.Tall
+  }
+
+  // keep only the biggest connected piece of ground in each ring (no unreachable pockets, nothing placed in them)
+  {
+    const seen = new Uint8Array(SIZE * SIZE)
+    const comps: Array<{ ring: number; cells: number[] }> = []
+    for (let s = 0; s < SIZE * SIZE; s++) {
+      if (seen[s] || !(tiles[s] === T.Grass || tiles[s] === T.Tall)) continue
+      const sx = s % SIZE, sy = (s / SIZE) | 0
+      const ring = ringAt(sx, sy)
+      const cells: number[] = []
+      const stack = [s]
+      seen[s] = 1
+      while (stack.length) {
+        const c = stack.pop()!
+        cells.push(c)
+        const cx = c % SIZE, cy = (c / SIZE) | 0
+        for (let d = 0; d < 4; d++) {
+          const nx = cx + DX[d], ny = cy + DY[d]
+          if (!inBounds(nx, ny)) continue
+          const n = ny * SIZE + nx
+          if (seen[n] || !(tiles[n] === T.Grass || tiles[n] === T.Tall) || ringAt(nx, ny) !== ring) continue
+          seen[n] = 1
+          stack.push(n)
         }
       }
-      tiles[y * SIZE + x] = t
+      comps.push({ ring, cells })
+    }
+    const biggest = new Map<number, number>()
+    for (const c of comps) biggest.set(c.ring, Math.max(biggest.get(c.ring) ?? 0, c.cells.length))
+    for (const c of comps) if (c.cells.length < (biggest.get(c.ring) ?? 0)) for (const i of c.cells) tiles[i] = T.Tree
+  }
+  // gyms: 4 per ring (rings 1-3) at the north, east, south and west, on the nearest free ground inside the ring
+  const gyms: Gym[] = []
+  const dirs: Array<['N' | 'E' | 'S' | 'W', number, number]> = [['N', 0, -1], ['E', 1, 0], ['S', 0, 1], ['W', -1, 0]]
+  for (let ring = 1; ring <= 3; ring++) {
+    for (const [side, dx, dy] of dirs) {
+      let spot: { x: number; y: number } | null = null
+      for (let r = RING_INNER[ring - 1] + 4; r < RING_INNER[ring - 1] + 14 && !spot; r++) {
+        for (const off of [0, 1, -1, 2, -2, 3, -3, 4, -4]) {
+          const x = Math.round(C + dx * r - 0.5 + (dy !== 0 ? off : 0))
+          const y = Math.round(C + dy * r - 0.5 + (dx !== 0 ? off : 0))
+          if (inBounds(x, y) && walkable(x, y)) { spot = { x, y }; break }
+        }
+      }
+      if (!spot) continue
+      tiles[spot.y * SIZE + spot.x] = T.GymDoor
+      gyms.push({
+        id: `g${ring}${side}`, ring, side, x: spot.x, y: spot.y, doorX: spot.x, doorY: spot.y,
+        type: pick(rng, TYPES), leader: pick(rng, LEADER_NAMES),
+      })
     }
   }
 
-  // stamp the gym buildings
-  for (const g of gyms) {
-    for (let yy = 0; yy < 5; yy++) for (let xx = 0; xx < 7; xx++) tiles[(g.y + yy) * SIZE + g.x + xx] = T.GymWall
-    tiles[g.doorY * SIZE + g.doorX] = T.GymDoor
-    // a clear path in front of the door
-    for (let k = 1; k <= 3; k++) {
-      const i = (g.doorY + k) * SIZE + g.doorX
-      if (tiles[i] === T.Tree || tiles[i] === T.Cliff) tiles[i] = T.Grass
-    }
-  }
-
-  // spawn points: as far apart as possible on the outer ring
   const spawns: { x: number; y: number }[] = []
   for (let i = 0; i < 16; i++) {
     const a = (i / 16) * Math.PI * 2 + 0.2
-    const r = 70
-    let x = Math.round(C + Math.cos(a) * r - 0.5)
-    let y = Math.round(C + Math.sin(a) * r - 0.5)
-    // find a walkable tile close by
-    for (let k = 0; k < 40 && !(tiles[y * SIZE + x] === T.Grass || tiles[y * SIZE + x] === T.Tall); k++) {
-      x += k % 2 === 0 ? 1 : 0
-      y += k % 2 === 1 ? 1 : 0
+    for (let r = RADIUS - 2; r >= RING_INNER[0]; r--) {
+      const x = Math.round(C + Math.cos(a) * r - 0.5)
+      const y = Math.round(C + Math.sin(a) * r - 0.5)
+      if (inBounds(x, y) && walkable(x, y)) { spawns.push({ x, y }); break }
     }
-    spawns.push({ x, y })
   }
 
   const freeTile = (ring: number): { x: number; y: number } => {
-    for (let tries = 0; tries < 500; tries++) {
+    for (let tries = 0; tries < 800; tries++) {
       const a = rng() * Math.PI * 2
       const lo = ring === 4 ? 2 : RING_INNER[ring - 1] + 2
       const hi = ring === 1 ? RADIUS - 4 : RING_INNER[ring - 2] - 3
       const r = lo + rng() * (hi - lo)
       const x = Math.round(C + Math.cos(a) * r - 0.5)
       const y = Math.round(C + Math.sin(a) * r - 0.5)
-      const t = tiles[y * SIZE + x]
-      if ((t === T.Grass || t === T.Tall) && !reserved.has(y * SIZE + x)) return { x, y }
+      if (inBounds(x, y) && walkable(x, y) && !gyms.some((g) => Math.abs(g.x - x) < 3 && Math.abs(g.y - y) < 3)) return { x, y }
     }
-    return { x: C, y: C }
+    return spawns[0] ?? { x: C, y: C }
   }
 
   const npcs: NpcSpec[] = []
@@ -221,6 +234,7 @@ export function generateWorld(seed: number): World {
     }
   }
 
+  void hash2
   return { seed, tiles, gyms, npcs, pickups, spawns }
 }
 
@@ -237,3 +251,4 @@ export function collapseRadius(elapsedSeconds: number): number {
 export function hasFallen(x: number, y: number, elapsedSeconds: number): boolean {
   return dist(x, y) > collapseRadius(elapsedSeconds)
 }
+

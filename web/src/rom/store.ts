@@ -2,6 +2,7 @@
 // They are never uploaded, and never put into the website or the database.
 import { NdsFile, type RomSource } from './nds'
 import { SPRITE_NARC, decodeAllSprites, spriteKey } from './sprites'
+import { WORLD_WINDOW, extractWorldData, type WorldData } from './worldData'
 
 const DB = 'pokequest-rom'
 const STORE = 'assets'
@@ -39,7 +40,15 @@ async function get<T>(key: string): Promise<T | undefined> {
 }
 
 export interface RomMeta { title: string; gameCode: string; sprites: number; version: number }
-const VERSION = 1
+const VERSION = 3 // 3 = pictures + map pieces of window (20,5)
+
+export async function loadWorldData(): Promise<WorldData | undefined> {
+  try {
+    return await get<WorldData>('world')
+  } catch {
+    return undefined
+  }
+}
 
 export async function getRomMeta(): Promise<RomMeta | null> {
   try {
@@ -63,6 +72,8 @@ export async function importRom(file: RomSource, onProgress: (text: string, frac
   const narc = await nds.get(SPRITE_NARC)
   let count = 0
   count = await decodeAllSprites(narc, (d, t) => onProgress(`Converting Pokémon ${d} of ${t}…`, 0.1 + 0.88 * (d / t)), (k, b) => put(`sprite:${k}`, b))
+  onProgress('Reading the island map…', 0.985)
+  await put('world', await extractWorldData(nds, WORLD_WINDOW))
   const meta: RomMeta = { title: nds.header.title, gameCode: code, sprites: count, version: VERSION }
   await put(META_KEY, meta)
   onProgress('Done!', 1)
@@ -97,3 +108,4 @@ export async function clearRom(): Promise<void> {
   d.close()
   urlCache.clear()
 }
+

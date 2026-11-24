@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import GameView, { type GameEvents, type GameHandle } from '../game/GameView'
+import { type GameEvents, type GameHandle } from '../game/GameView'
+import GameView3D from '../game/GameView3D'
+import { buildChunkWorld, type BuiltWorld } from '../rom/chunkWorld'
+import { loadWorldData } from '../rom/store'
 import type { Look } from '../game/character'
 import type { Settings } from '../game/settings'
 import { ENCOUNTER_RATE, gymTeam, trainerTeam, wildEncounter } from '../game/encounters'
@@ -7,7 +10,7 @@ import { addItems, emptyTrainer, makeStarter, type Trainer } from '../game/state
 import { ITEMS, STARTING_BAG, rollPickup } from '../data/items'
 import { maxHp, type Mon } from '../data/dex'
 import {
-  C, COLLAPSE_SECONDS, RADIUS, RING_INNER, T, collapseRadius, generateWorld, isWalkable, ringAt, type Dir,
+  C, COLLAPSE_SECONDS, RADIUS, RING_INNER, SIZE, T, collapseRadius, generateWorld, isWalkable, ringAt, type Dir, type World,
 } from '../game/world'
 import BattleScreen, { type BattleKind, type BattleOutcome } from './BattleScreen'
 import { BagPanel, PcPanel, TeamPanel } from './MenuPanels'
@@ -25,8 +28,7 @@ interface Props {
 interface ActiveBattle { id?: number; kind: BattleKind; foe: Mon[]; name?: string; onWin?: () => void; npcId?: string }
 let battleCounter = 0
 
-export default function PlayScreen({ look, settings, onSettings, onExit, onCustomize }: Props) {
-  const world = useMemo(() => generateWorld(Math.floor(Math.random() * 1e9)), [])
+function PlayInner({ look, settings, onSettings, onExit, onCustomize, world, built }: Props & { world: World; built: BuiltWorld }) {
   const spawn = world.spawns[0]
   const handleRef = useRef<GameHandle | null>(null)
   const startRef = useRef(Date.now())
@@ -79,7 +81,7 @@ export default function PlayScreen({ look, settings, onSettings, onExit, onCusto
         const rr = r + off
         const px = Math.round(C + Math.cos(a) * rr - 0.5)
         const py = Math.round(C + Math.sin(a) * rr - 0.5)
-        if (isWalkable(world, px, py) && world.tiles[py * 170 + px] !== T.GymDoor) return { x: px, y: py }
+        if (isWalkable(world, px, py) && world.tiles[py * SIZE + px] !== T.GymDoor) return { x: px, y: py }
       }
     }
     return { x: C, y: C }
@@ -182,8 +184,9 @@ export default function PlayScreen({ look, settings, onSettings, onExit, onCusto
   const alive = trainer.team.filter((m) => m.hp > 0).length
   return (
     <div className="fullscreen">
-      <GameView
+      <GameView3D
         world={world}
+        built={built}
         look={look}
         settings={settings}
         startTile={spawn}
@@ -241,3 +244,20 @@ export default function PlayScreen({ look, settings, onSettings, onExit, onCusto
 }
 
 export type { Dir }
+
+export default function PlayScreen(props: Props) {
+  const [loaded, setLoaded] = useState<{ world: World; built: BuiltWorld } | 'missing' | null>(null)
+  useEffect(() => {
+    let live = true
+    void loadWorldData().then((data) => {
+      if (!live) return
+      if (!data) { setLoaded('missing'); return }
+      const built = buildChunkWorld(data)
+      setLoaded({ built, world: generateWorld(Math.floor(Math.random() * 1e9), built.ground) })
+    })
+    return () => { live = false }
+  }, [])
+  if (loaded === null) return <div className="fullscreen center menu-bg"><div className="panel card"><p className="sub">Building the island from your game file�</p></div></div>
+  if (loaded === 'missing') return <div className="fullscreen center menu-bg"><div className="panel card"><p>The map pieces are missing. Please import your game file again (clear this site's data, then reload).</p><button onClick={props.onExit}>Back</button></div></div>
+  return <PlayInner {...props} world={loaded.world} built={loaded.built} />
+}

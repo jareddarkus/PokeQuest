@@ -5,11 +5,17 @@ import { decodeTexture, readModels, readTexFile, type Model } from './nitro'
 /** One tile of the game world is 16 units in the DS map files. */
 export const TILE_UNITS = 16
 
-export interface LoadedTextures { texs: ReturnType<typeof readTexFile> }
+/** Shared values that let the game cut the island into a circle and make the outer bands fall into the sea. */
+export interface ClipUniforms {
+  uCut: { value: number } // tiles further than this from the centre are not drawn
+  uCenter: { value: THREE.Vector2 }
+  uTime: { value: number }
+  uWarn: { value: number } // 1 = tint the band that is about to fall
+}
 
 const textureCache = new WeakMap<object, Map<string, THREE.Texture>>()
 
-export function buildModelObject(model: Model, tex: NonNullable<ReturnType<typeof readTexFile>>): THREE.Group {
+export function buildModelObject(model: Model, tex: NonNullable<ReturnType<typeof readTexFile>>, clip?: ClipUniforms): THREE.Group {
   const group = new THREE.Group()
   let cache = textureCache.get(tex)
   if (!cache) { cache = new Map(); textureCache.set(tex, cache) }
@@ -51,6 +57,22 @@ export function buildModelObject(model: Model, tex: NonNullable<ReturnType<typeo
       opacity: m && m.alpha < 1 ? Math.max(0.35, m.alpha) : 1, side: m?.cullBack === false ? THREE.DoubleSide : THREE.FrontSide,
       color: map ? 0xffffff : 0x999999,
     })
+    if (clip) {
+      mat.onBeforeCompile = (shader) => {
+        shader.uniforms.uCut = clip.uCut
+        shader.uniforms.uCenter = clip.uCenter
+        shader.uniforms.uTime = clip.uTime
+        shader.uniforms.uWarn = clip.uWarn
+        shader.vertexShader = shader.vertexShader
+          .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;')
+          .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWPos = (modelMatrix * vec4(position, 1.0)).xyz;')
+        shader.fragmentShader = shader.fragmentShader
+          .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;\nuniform float uCut;\nuniform vec2 uCenter;\nuniform float uTime;\nuniform float uWarn;')
+          .replace('#include <clipping_planes_fragment>', '#include <clipping_planes_fragment>\nfloat pqD = length(vWPos.xz - uCenter);\nif (pqD > uCut) discard;')
+          .replace('#include <dithering_fragment>', 'if (uWarn > 0.5 && pqD > uCut - 1.0) gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(1.0, 0.2, 0.2), 0.35 + 0.15 * sin(uTime * 8.0));\n#include <dithering_fragment>')
+      }
+      mat.customProgramCacheKey = () => 'pq-clip'
+    }
     matCache.set(mi, mat)
     return mat
   }
@@ -70,7 +92,9 @@ export function buildModelObject(model: Model, tex: NonNullable<ReturnType<typeo
     g.setAttribute('position', new THREE.BufferAttribute(pos, 3))
     g.setAttribute('uv', new THREE.BufferAttribute(uv, 2))
     g.setAttribute('color', new THREE.BufferAttribute(col, 3))
-    group.add(new THREE.Mesh(g, materialFor(mesh.material)))
+    const mesh3 = new THREE.Mesh(g, materialFor(mesh.material))
+    mesh3.frustumCulled = false
+    group.add(mesh3)
   }
   return group
 }

@@ -156,3 +156,4 @@ button.big small { opacity: .7; font-size: .75rem; }
 .hpbox .hpbar { flex: none; height: 9px; }
 .me-zone .hpbox { bottom: 8%; right: -26%; }
 .me-zone { bottom: 34%; }
+.game-mount { position: absolute; inset: 0; }

@@ -405,3 +405,17 @@ export function readModels(raw: Uint8Array): Model[] {
   }
   return out
 }
+
+/** Just the name of the first model in a BMD0 file (cheap: no geometry is decoded). */
+export function readModelName(raw: Uint8Array): string | null {
+  try {
+    const d = decompress(raw)
+    if (ascii(d, 0, 4) !== 'BMD0') return null
+    const nBlocks = u16(d, 0xe)
+    for (let i = 0; i < nBlocks; i++) {
+      const o = u32(d, 0x10 + i * 4)
+      if (ascii(d, o, 4) === 'MDL0') return readDict(d, o + 8)[0]?.name ?? null
+    }
+  } catch { /* not a model */ }
+  return null
+}
