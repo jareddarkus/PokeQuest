@@ -421,7 +421,7 @@ export default function GameView3D(props: Props) {
         for (const n of npcs) {
           if (n.defeated || n.frozen || (alert && alert.n === n && n.moving === 0)) continue
           if (n.moving > 0) {
-            n.moving = Math.min(1, n.moving + dt / (n.spec.behavior === 'run' ? 0.1 : 0.22))
+            n.moving = Math.min(1, n.moving + dt / (n.spec.behavior === 'run' ? 0.17 : 0.32))
             n.fx = n.fromX + (n.x - n.fromX) * n.moving
             n.fy = n.fromY + (n.y - n.fromY) * n.moving
             if (n.moving >= 1) { n.moving = 0; n.fx = n.x; n.fy = n.y }

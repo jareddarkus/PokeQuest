@@ -11,9 +11,11 @@ import PlayScreen from './ui/PlayScreen'
 import RomGate from './ui/RomGate'
 import { getRomMeta } from './rom/store'
 import { music } from './audio/music'
+import LobbyScreen from './ui/LobbyScreen'
+import type { MatchInfo } from './net/useLobby'
 import './App.css'
 
-type Screen = 'menu' | 'customize' | 'practice'
+type Screen = 'menu' | 'customize' | 'practice' | 'lobby' | 'match'
 
 function Login({ onGuest }: { onGuest: () => void }) {
   const [mode, setMode] = useState<'login' | 'signup'>('login')
@@ -63,6 +65,7 @@ export default function App() {
   const [username, setUsername] = useState<string | null>(null)
   const [screen, setScreen] = useState<Screen>(devJump ? 'practice' : 'menu')
   const [showSettings, setShowSettings] = useState(false)
+  const [match, setMatch] = useState<MatchInfo | null>(null)
   const [rom, setRom] = useState<'checking' | 'missing' | 'ready'>('checking')
   useEffect(() => {
     void getRomMeta().then((m) => setRom(m ? 'ready' : 'missing'))
@@ -91,7 +94,7 @@ export default function App() {
   useEffect(() => {
     music.setVolume(settings.musicVolume)
     music.setSfxVolume(settings.sfxVolume)
-    if (screen !== 'practice') void music.play('title')
+    if (screen !== 'practice' && screen !== 'match') void music.play('title')
   }, [screen, settings.musicVolume, settings.sfxVolume, rom])
 
   const finishLook = () => {
@@ -112,6 +115,12 @@ export default function App() {
     setGuest(false)
   }
 
+  if (screen === 'lobby' && username) {
+    return <LobbyScreen username={username} look={look} onStart={(m) => { setMatch(m); setScreen('match') }} onBack={() => setScreen('menu')} />
+  }
+  if (screen === 'match' && match) {
+    return <PlayScreen key={match.id} royale={match} username={username} look={look} settings={settings} onSettings={setSettings} onExit={() => { setMatch(null); setScreen('menu') }} onCustomize={() => setScreen('customize')} />
+  }
   if (screen === 'customize') return <Customizer look={look} onChange={setLook} onDone={finishLook} />
   if (screen === 'practice') {
     return (
@@ -129,7 +138,7 @@ export default function App() {
     <>
       <MainMenu
         username={username}
-        onBattleRoyale={() => alert('The online lobby arrives in a later step. Try the Practice Island for now!')}
+        onBattleRoyale={() => (username ? startMode('lobby') : alert('Log in with your account to play the Battle Royale with your friends. (The Practice Island works without an account.)'))}
         onPractice={() => startMode('practice')}
         onCustomize={() => setScreen('customize')}
         onSettings={() => setShowSettings(true)}

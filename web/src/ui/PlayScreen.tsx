@@ -18,10 +18,15 @@ import SettingsPanel from './SettingsPanel'
 import StarterPick from './StarterPick'
 import MenuButton from './MenuButton'
 import ChatPanel from './ChatPanel'
+import { useMatchPlayers } from '../net/useMatchPlayers'
 import { useChat } from './useChat'
 import { music } from '../audio/music'
 
+export interface RoyaleInfo { id: string; seed: number; players: string[]; startsAt: number }
+
 interface Props {
+  /** set when this is a real match (from the waiting room) */
+  royale?: RoyaleInfo
   username: string | null
   look: Look
   settings: Settings
@@ -33,11 +38,17 @@ interface Props {
 interface ActiveBattle { id?: number; kind: BattleKind; foe: Mon[]; name?: string; onWin?: () => void; npcId?: string }
 let battleCounter = 0
 
-function PlayInner({ username, look, settings, onSettings, onExit, onCustomize, world, built }: Props & { world: World; built: BuiltWorld }) {
-  const spawn = world.spawns[0]
+function PlayInner({ royale, username, look, settings, onSettings, onExit, onCustomize, world, built }: Props & { world: World; built: BuiltWorld }) {
+  // in a match everybody starts at a different place of the outer ring, as far apart as possible
+  const myIndex = royale && username ? Math.max(0, royale.players.indexOf(username)) : 0
+  const spawn = royale ? world.spawns[Math.round((myIndex * world.spawns.length) / Math.max(1, royale.players.length)) % world.spawns.length] : world.spawns[0]
+  const t0 = royale ? royale.startsAt + 60_000 : 0 // the match begins one minute after the start (time to pick a starter)
   const handleRef = useRef<GameHandle | null>(null)
-  const startRef = useRef(Date.now())
-  const [collapseOn, setCollapseOn] = useState(false)
+  const startRef = useRef(royale ? t0 : Date.now())
+  const [collapseOn, setCollapseOn] = useState(!!royale)
+  const [now, setNow] = useState(Date.now())
+  useEffect(() => { if (!royale) return; const id = window.setInterval(() => setNow(Date.now()), 500); return () => window.clearInterval(id) }, [])
+  const waiting = !!royale && now < t0 // everybody waits for the others until the match really begins
   const collapseRef = useRef(false)
   collapseRef.current = collapseOn
   const [panel, setPanel] = useState<null | 'settings' | 'team' | 'bag' | 'pc' | 'chat'>(null)
@@ -57,6 +68,7 @@ function PlayInner({ username, look, settings, onSettings, onExit, onCustomize, 
 
   const say = (t: string) => setToast(t)
   const chat = useChat(username, panel === 'chat')
+  const players = useMatchPlayers(royale?.id ?? null, username, look, () => handleRef.current?.getPos() ?? null)
 
   // the real songs of the game: route music by ring, battle music by kind of battle
   const song = battle ? (battle.kind === 'gym' ? 'gymLeader' : battle.kind === 'trainer' ? 'trainer' : 'wild') : ring <= 1 ? 'field1' : ring === 2 ? 'field2' : 'field3'
@@ -66,7 +78,7 @@ function PlayInner({ username, look, settings, onSettings, onExit, onCustomize, 
   useEffect(() => () => music.stop(), [])
 
   useEffect(() => {
-    if (collapseOn) startRef.current = Date.now()
+    if (collapseOn && !royale) startRef.current = Date.now()
   }, [collapseOn])
 
   useEffect(() => {
@@ -191,7 +203,7 @@ function PlayInner({ username, look, settings, onSettings, onExit, onCustomize, 
   }
 
   if (trainer.team.length === 0 && trainer.pc.length === 0 && !battle) {
-    return <StarterPick onPick={pickStarter} />
+    return <StarterPick until={royale ? royale.startsAt + 60_000 - 1000 : undefined} onPick={pickStarter} />
   }
 
   const alive = trainer.team.filter((m) => m.hp > 0).length
@@ -203,22 +215,24 @@ function PlayInner({ username, look, settings, onSettings, onExit, onCustomize, 
         look={look}
         settings={settings}
         startTile={spawn}
-        elapsed={() => (collapseRef.current ? Date.now() - startRef.current : null)}
-        others={() => []}
+        elapsed={() => (collapseRef.current && Date.now() >= (royale ? t0 : 0) ? Date.now() - startRef.current : null)}
+        others={players}
         events={events}
         handleRef={handleRef}
-        paused={panel !== null || battle !== null}
+        paused={panel !== null || battle !== null || waiting}
       />
 
       <div className="hud-top-left panel">
         <strong>Ring {ring}</strong>
         <span>
-          {collapseOn ? `Next band falls in ${Math.ceil(secs)}s · island radius ${Math.max(0, radius)}` : 'Island collapse is off'}
+          {waiting ? 'Island falls when the match starts' : collapseOn ? `Next band falls in ${Math.ceil(secs)}s · island radius ${Math.max(0, radius)}` : 'Island collapse is off'}
         </span>
         <span>Team {alive}/{trainer.team.length} fit · {trainer.bag['Poke Ball'] ?? 0} Poké Balls</span>
-        <label className="mini">
-          <input type="checkbox" checked={collapseOn} onChange={(e) => setCollapseOn(e.target.checked)} /> Test collapse
-        </label>
+        {!royale && (
+          <label className="mini">
+            <input type="checkbox" checked={collapseOn} onChange={(e) => setCollapseOn(e.target.checked)} /> Test collapse
+          </label>
+        )}
       </div>
 
       <div className="hud-top-right">
@@ -230,7 +244,9 @@ function PlayInner({ username, look, settings, onSettings, onExit, onCustomize, 
         <MenuButton icon={11} label="Menu" onClick={onExit} />
       </div>
 
-      {!battle && (
+      {waiting && <div className="match-wait panel"><strong>Get ready!</strong><span>The match begins in {Math.max(0, Math.ceil((t0 - now) / 1000))} seconds. Everybody is picking a starter…</span></div>}
+
+      {!battle && !royale && (
         <div className="hud-practice panel">
           <small>Practice tools</small>
           <button onClick={() => setTrainer({ ...trainer, team: trainer.team.map((m) => ({ ...m, hp: maxHp(m) })) })}>Heal team</button>
@@ -268,7 +284,7 @@ export default function PlayScreen(props: Props) {
       if (!live) return
       if (!data) { setLoaded('missing'); return }
       const built = buildChunkWorld(data)
-      setLoaded({ built, world: generateWorld(Math.floor(Math.random() * 1e9), built.ground) })
+      setLoaded({ built, world: generateWorld(props.royale ? props.royale.seed : Math.floor(Math.random() * 1e9), built.ground) })
     })
     return () => { live = false }
   }, [])

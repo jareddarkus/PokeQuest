@@ -67,7 +67,9 @@ export function MonIcon({ species, shiny }: { species: string; shiny?: boolean }
     if (inRom) void romIconUrl(dex).then((u) => live && setUrl(u))
     return () => { live = false }
   }, [dex, inRom])
-  // the game's own menu icon (32 x 32); newer Pokémon and missing icons use the small big picture instead
-  if (inRom && url) return <img src={url} alt={species} draggable={false} style={{ width: 48, height: 48, imageRendering: 'pixelated', flex: 'none' }} />
-  return <MonSprite species={species} shiny={shiny} scale={0.9} className="mon-icon" />
+  // the game's own menu icon (32 x 32): all the same size. Newer Pokémon (no icon in the game file) are shown in a box of the same size.
+  const box = { width: 48, height: 48, flex: 'none' as const }
+  if (inRom && url) return <img src={url} alt={species} draggable={false} style={{ ...box, imageRendering: 'pixelated' }} />
+  if (!inRom) return <img src={spriteUrl(species, { shiny })} alt={species} draggable={false} style={{ ...box, objectFit: 'contain' }} />
+  return <div style={box} />
 }
