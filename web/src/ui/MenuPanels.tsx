@@ -7,6 +7,7 @@ import {
   evolve, healMon, rareCandy, reviveMon, stoneEvolution, useItemFromBag, useVitamin, type Trainer,
 } from '../game/state'
 import { TYPE_COLOR, type PType } from '../game/world'
+import HpBar from './HpBar'
 import ItemIcon from './ItemIcon'
 import MonSprite from './MonSprite'
 import StatBars from './StatBars'
@@ -21,15 +22,13 @@ interface PanelProps {
 
 function HpLine({ m }: { m: Mon }) {
   const mx = maxHp(m)
-  const frac = Math.max(0, m.hp / mx)
   return (
     <div className="hpline">
-      <div className="hpbar small"><div style={{ width: `${frac * 100}%`, background: frac > 0.5 ? '#4cd964' : frac > 0.2 ? '#ffcc00' : '#ff3b30' }} /></div>
+      <HpBar hp={m.hp} max={mx} scale={2} />
       <span>{m.hp}/{mx}</span>
     </div>
   )
 }
-
 function TypeChips({ species }: { species: string }) {
   return (
     <span className="chips">

@@ -88,3 +88,52 @@ export async function decodePlates(narcData: Uint8Array, put: (name: string, blo
   await save('Special', tilesOf(files[58]))
   return n
 }
+export const STATUS_ORDER = ['pkrs', 'par', 'frz', 'slp', 'psn', 'brn', 'fnt', 'tox'] as const
+
+function sheetCanvas(px: Uint8Array, tiles: number, perRow: number, pal: Array<[number, number, number]>): HTMLCanvasElement {
+  const rows = Math.ceil(tiles / perRow)
+  const c = document.createElement('canvas')
+  c.width = perRow * 8
+  c.height = rows * 8
+  const ctx = c.getContext('2d')!
+  const img = ctx.createImageData(c.width, c.height)
+  for (let t = 0; t < tiles; t++) {
+    const bx = (t % perRow) * 8, by = Math.floor(t / perRow) * 8
+    for (let y = 0; y < 8; y++) {
+      for (let x = 0; x < 8; x++) {
+        const b = px[t * 32 + y * 4 + (x >> 1)] ?? 0
+        const i = x & 1 ? b >> 4 : b & 15
+        if (i === 0) continue
+        const rgb = pal[i] ?? [255, 0, 255]
+        const o = ((by + y) * c.width + bx + x) * 4
+        img.data[o] = rgb[0]; img.data[o + 1] = rgb[1]; img.data[o + 2] = rgb[2]; img.data[o + 3] = 255
+      }
+    }
+  }
+  ctx.putImageData(img, 0, 0)
+  return c
+}
+
+const toBlob = (c: HTMLCanvasElement) => new Promise<Blob | null>((res) => c.toBlob(res, 'image/png'))
+
+/** The HP bar (the "HP" label and its dark track, 72 x 8) and the status icons (PAR, FRZ, SLP, PSN, BRN, FNT ...). */
+export async function decodeBattleUi(narcData: Uint8Array, put: (name: string, blob: Blob) => Promise<void>): Promise<void> {
+  const files = parseNarc(narcData)
+  const pal0 = paletteOf(files[0])
+  const pal11 = paletteOf(files[11])
+  if (pal0) {
+    const hp = await toBlob(sheetCanvas(tilesOf(files[2]), 9, 9, pal0))
+    if (hp) await put('hpbar', hp)
+  }
+  if (pal11) {
+    const sheet = sheetCanvas(tilesOf(files[12]), 32, 4, pal11)
+    for (let i = 0; i < STATUS_ORDER.length; i++) {
+      const c = document.createElement('canvas')
+      c.width = 32
+      c.height = 8
+      c.getContext('2d')!.drawImage(sheet, 0, i * 8, 32, 8, 0, 0, 32, 8)
+      const b = await toBlob(c)
+      if (b) await put(`status:${STATUS_ORDER[i]}`, b)
+    }
+  }
+}

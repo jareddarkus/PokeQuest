@@ -9,6 +9,7 @@ export type BattleEvent =
   | { kind: 'switch'; side: Side; uid: string; species: string; level: number; hp: number; maxHp: number; shiny: boolean }
   | { kind: 'hp'; side: Side; uid: string; hp: number; maxHp: number; status?: string }
   | { kind: 'faint'; side: Side; uid: string }
+  | { kind: 'status'; side: Side; uid: string; status: string }
   | { kind: 'move'; side: Side; uid: string; move: string }
   | { kind: 'turn'; n: number }
   | { kind: 'win'; side: Side | null }
@@ -208,9 +209,11 @@ export class BattleSession {
         case 'cant': ev.push({ kind: 'text', text: `${this.pretty(this.nameOf(p[1]))} can't move!` }); break
         case '-status': {
           const names: Record<string, string> = { brn: 'was burned', par: 'is paralyzed', slp: 'fell asleep', psn: 'was poisoned', tox: 'was badly poisoned', frz: 'was frozen solid' }
+          ev.push({ kind: 'status', side: p[1].startsWith('p1') ? 'p1' : 'p2', uid: this.nameOf(p[1]), status: p[2] })
           ev.push({ kind: 'text', text: `${this.pretty(this.nameOf(p[1]))} ${names[p[2]] ?? 'has a status'}!` })
           break
         }
+        case '-curestatus': ev.push({ kind: 'status', side: p[1].startsWith('p1') ? 'p1' : 'p2', uid: this.nameOf(p[1]), status: '' }); break
         case '-boost': ev.push({ kind: 'text', text: `${this.pretty(this.nameOf(p[1]))}'s ${p[2]} rose!` }); break
         case '-unboost': ev.push({ kind: 'text', text: `${this.pretty(this.nameOf(p[1]))}'s ${p[2]} fell!` }); break
         case 'turn': this.turnCount = Number(p[1]); ev.push({ kind: 'turn', n: this.turnCount }); break

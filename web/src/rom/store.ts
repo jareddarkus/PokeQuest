@@ -5,7 +5,7 @@ import { SPRITE_NARC, decodeAllSprites, spriteKey } from './sprites'
 import { WORLD_WINDOW, extractWorldData, type WorldData } from './worldData'
 import { ITEM_ICON_NARC, decodeItemIcons } from './items'
 import { BATTLE_NARC } from './battleScene'
-import { UI_NARC, decodePlates } from './plates'
+import { UI_NARC, decodeBattleUi, decodePlates } from './plates'
 
 const DB = 'pokequest-rom'
 const STORE = 'assets'
@@ -43,7 +43,7 @@ async function get<T>(key: string): Promise<T | undefined> {
 }
 
 export interface RomMeta { title: string; gameCode: string; sprites: number; version: number }
-const VERSION = 7 // 7 = ... + the move-type plates
+const VERSION = 8 // 8 = ... + HP bar and status icons
 
 export async function loadWorldData(): Promise<WorldData | undefined> {
   try {
@@ -80,7 +80,9 @@ export async function importRom(file: RomSource, onProgress: (text: string, frac
   count = await decodeAllSprites(narc, (d, t) => onProgress(`Converting Pokémon ${d} of ${t}…`, 0.1 + 0.88 * (d / t)), (k, b) => put(`sprite:${k}`, b))
   onProgress('Reading the item icons…', 0.975)
   await decodeItemIcons(await nds.get(ITEM_ICON_NARC), (id, b) => put(`item:${id}`, b))
-  await decodePlates(await nds.get(UI_NARC), (name, b) => put(`plate:${name}`, b))
+  const uiNarc = await nds.get(UI_NARC)
+  await decodePlates(uiNarc, (name, b) => put(`plate:${name}`, b))
+  await decodeBattleUi(uiNarc, (name, b) => put(`ui:${name}`, b))
   onProgress('Reading the island map…', 0.985)
   await put('world', await extractWorldData(nds, WORLD_WINDOW))
   const meta: RomMeta = { title: nds.header.title, gameCode: code, sprites: count, version: VERSION }
@@ -163,6 +165,21 @@ export async function getBattleFiles(): Promise<Uint8Array[] | null> {
 /** A move-type label (or the physical / special / status icon) from the player's game file. */
 export async function romPlateUrl(name: string): Promise<string | null> {
   const key = `plate:${name}`
+  const hit = urlCache.get(key)
+  if (hit) return hit
+  try {
+    const blob = await get<Blob>(key)
+    if (!blob) return null
+    const url = URL.createObjectURL(blob)
+    urlCache.set(key, url)
+    return url
+  } catch {
+    return null
+  }
+}
+/** A battle-interface picture from the player's game file ("hpbar", "status:par" ...). */
+export async function romUiUrl(name: string): Promise<string | null> {
+  const key = `ui:${name}`
   const hit = urlCache.get(key)
   if (hit) return hit
   try {

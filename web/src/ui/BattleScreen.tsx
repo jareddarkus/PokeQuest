@@ -7,6 +7,8 @@ import {
 } from '../game/state'
 import { TYPE_COLOR, type PType } from '../game/world'
 import ItemIcon from './ItemIcon'
+import HpBar from './HpBar'
+import StatusIcon from './StatusIcon'
 import TypePlate from './TypePlate'
 import BattleBackdrop from './BattleBackdrop'
 import type { BattleLayout } from '../rom/battleScene'
@@ -23,23 +25,21 @@ interface Props {
   onEnd: (outcome: BattleOutcome, trainer: Trainer) => void
 }
 
-interface Side { uid: string; species: string; level: number; hp: number; maxHp: number; shiny: boolean; fainted: boolean }
+interface Side { uid: string; species: string; level: number; hp: number; maxHp: number; shiny: boolean; fainted: boolean; status?: string }
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
 
-function hpColor(frac: number): string {
-  return frac > 0.5 ? '#4cd964' : frac > 0.2 ? '#ffcc00' : '#ff3b30'
-}
-
 function HpBox({ side, mine }: { side: Side; mine: boolean }) {
-  const frac = side.maxHp ? Math.max(0, side.hp / side.maxHp) : 0
   return (
     <div className={`hpbox panel ${mine ? 'mine' : 'foe'}`}>
       <div className="hpbox-top">
         <strong>{side.species}</strong>
         <span>Lv{side.level}</span>
       </div>
-      <div className="hpbar"><div style={{ width: `${frac * 100}%`, background: hpColor(frac) }} /></div>
+      <div className="hpbox-bar">
+        <HpBar hp={side.hp} max={side.maxHp} scale={3} />
+        <StatusIcon status={side.fainted ? 'fnt' : side.status} scale={2} />
+      </div>
       {mine && <div className="hpnum">{Math.max(0, side.hp)} / {side.maxHp}</div>}
     </div>
   )
@@ -96,9 +96,14 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, onEnd }:
           break
         }
         case 'hp': {
-          const upd = (s: Side | null): Side | null => (s && s.uid === ev.uid ? { ...s, hp: ev.hp, maxHp: ev.hp === 0 ? s.maxHp : ev.maxHp } : s)
+          const upd = (s: Side | null): Side | null => (s && s.uid === ev.uid ? { ...s, hp: ev.hp, maxHp: ev.hp === 0 ? s.maxHp : ev.maxHp, status: ev.status ?? s.status } : s)
           if (ev.side === 'p1') setMe(upd); else setFoe(upd)
           await sleep(550)
+          break
+        }
+        case 'status': {
+          const upd = (s: Side | null): Side | null => (s && s.uid === ev.uid ? { ...s, status: ev.status } : s)
+          if (ev.side === 'p1') setMe(upd); else setFoe(upd)
           break
         }
         case 'move': setShake(ev.side === 'p1' ? 'foe' : 'me'); await sleep(250); setShake(null); break
