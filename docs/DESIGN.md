@@ -52,3 +52,10 @@ Private, friends-only web game. Main menu: **"PokÃ©mon White 2 Together"** (sh
 - PC button always on screen (not usable during a battle). Team of 6.
 - Rules: no Z-moves, no Mega Evolution, no Gigantamax, no Terastallization. Battle data from Pokémon Showdown (latest generation data, so Fairy type etc.).
 - Art, 3D models and music come from the player's own Pokémon White 2 file. Invented art is only a last resort for things the ROM does not have (e.g. Gen 6+ species), and the owner prefers not to invent anything.
+
+## Update 3 (owner, 2026-11-24)
+- Collapse = one tile-thick BAND around the whole island every 15 s, from the outside in (20 bands per ring = 5 min per ring, ~20 min match). A player standing on a falling band is pushed to safety; if they are in the last band of a ring they are pushed into the next inner ring (skipping that ring's gym). Compute the collapse from the match start timestamp; render it as instanced tiles so it does not lag.
+- Anti-cheat dropped on purpose (no paid server, no lag): game logic runs in the browsers, Supabase Realtime only relays, saves are written by the player's own client (RLS must allow own-row writes). No speed check either.
+- Gen 6-9 species have no art in White 2: load Pokémon Showdown's animated sprites (play.pokemonshowdown.com/sprites/ani, gen5ani for Gen 1-5) at runtime, the way Showdown itself does. Never copy them into the repo.
+- Music: look for an open-source JS synthesizer that can play DS SDAT/SSEQ (or convert SSEQ to MIDI + soundfont and play with an open-source web synth). To research later.
+- ROM facts found (White 2, game code IRDO, parsed read-only): NitroFS at header offsets 0x40/0x48; `a/0/0/4` = Pokémon sprites, 20 files per national-dex number: file 0 = front sprite tiles (LZ11-compressed NCGR, 4bpp, tiled, 8 tiles wide), file 2 = animation atlas, file 4 = cell bank (RECN), 18 = normal palette, 19 = shiny palette (RLCN, 16 colours BGR555). 3D models are BMD0 (a/0/1/1, a/0/4/8, a/1/1/6...), textures BTX0 (a/0/1/4), animations BCA0, maps in a/0/0/8. Dev experiments are kept outside the repo.
