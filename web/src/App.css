@@ -208,3 +208,13 @@ button.big small { opacity: .7; font-size: .75rem; }
 
 /* a soft shadow under the Pokémon in battle */
 .stage-sprite::before { content: ''; position: absolute; left: 50%; bottom: 3%; width: 62%; height: 12%; transform: translateX(-50%); border-radius: 50%; background: radial-gradient(ellipse at center, rgba(0,0,0,.42), rgba(0,0,0,0) 70%); z-index: -1; pointer-events: none; }
+
+/* game chat */
+.hud-top-right .menu-slab { position: relative; }
+.menu-badge { position: absolute; top: 2px; right: 8px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 9px; background: #e5483c; color: #fff; font-size: .7rem; line-height: 18px; text-align: center; font-weight: 800; }
+.chat-panel { width: min(520px, 94vw); display: flex; flex-direction: column; gap: 10px; }
+.chat-log { height: min(300px, 40vh); overflow-y: auto; display: flex; flex-direction: column; gap: 4px; padding: 8px; background: rgba(0,0,0,.35); border-radius: 8px; font-size: .9rem; }
+.chat-msg b { color: #9fd0ff; }
+.chat-msg.mine b { color: #ffd37a; }
+.chat-input { display: flex; gap: 8px; }
+.chat-input input { flex: 1; padding: 8px 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,.25); background: rgba(0,0,0,.45); color: #fff; font: inherit; }

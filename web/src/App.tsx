@@ -108,6 +108,7 @@ export default function App() {
   if (screen === 'practice') {
     return (
       <PlayScreen
+        username={username}
         look={look}
         settings={settings}
         onSettings={setSettings}

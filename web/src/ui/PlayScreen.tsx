@@ -17,9 +17,12 @@ import { BagPanel, PcPanel, TeamPanel } from './MenuPanels'
 import SettingsPanel from './SettingsPanel'
 import StarterPick from './StarterPick'
 import MenuButton from './MenuButton'
+import ChatPanel from './ChatPanel'
+import { useChat } from './useChat'
 import { music } from '../audio/music'
 
 interface Props {
+  username: string | null
   look: Look
   settings: Settings
   onSettings: (patch: Partial<Settings>) => void
@@ -30,14 +33,14 @@ interface Props {
 interface ActiveBattle { id?: number; kind: BattleKind; foe: Mon[]; name?: string; onWin?: () => void; npcId?: string }
 let battleCounter = 0
 
-function PlayInner({ look, settings, onSettings, onExit, onCustomize, world, built }: Props & { world: World; built: BuiltWorld }) {
+function PlayInner({ username, look, settings, onSettings, onExit, onCustomize, world, built }: Props & { world: World; built: BuiltWorld }) {
   const spawn = world.spawns[0]
   const handleRef = useRef<GameHandle | null>(null)
   const startRef = useRef(Date.now())
   const [collapseOn, setCollapseOn] = useState(false)
   const collapseRef = useRef(false)
   collapseRef.current = collapseOn
-  const [panel, setPanel] = useState<null | 'settings' | 'team' | 'bag' | 'pc'>(null)
+  const [panel, setPanel] = useState<null | 'settings' | 'team' | 'bag' | 'pc' | 'chat'>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [ring, setRing] = useState(1)
   const [secs, setSecs] = useState(0)
@@ -53,6 +56,7 @@ function PlayInner({ look, settings, onSettings, onExit, onCustomize, world, bui
   const busy = useRef(false)
 
   const say = (t: string) => setToast(t)
+  const chat = useChat(username, panel === 'chat')
 
   // the real songs of the game: route music by ring, battle music by kind of battle
   const song = battle ? (battle.kind === 'gym' ? 'gymLeader' : battle.kind === 'trainer' ? 'trainer' : 'wild') : ring <= 1 ? 'field1' : ring === 2 ? 'field2' : 'field3'
@@ -220,6 +224,7 @@ function PlayInner({ look, settings, onSettings, onExit, onCustomize, world, bui
         <MenuButton icon={9} label="Team" onClick={() => setPanel('team')} />
         <MenuButton icon={7} label="Bag" onClick={() => setPanel('bag')} />
         <MenuButton icon={6} label="PC" onClick={() => setPanel('pc')} />
+        <MenuButton icon={5} label="Chat" badge={chat.unread} onClick={() => setPanel('chat')} />
         <MenuButton label="Settings" onClick={() => setPanel('settings')} />
         <MenuButton icon={12} label="Menu" onClick={onExit} />
       </div>
@@ -232,6 +237,7 @@ function PlayInner({ look, settings, onSettings, onExit, onCustomize, world, bui
       )}
 
       {toast && <div className="toast panel">{toast}</div>}
+      {panel === 'chat' && <ChatPanel messages={chat.messages} status={chat.status} send={chat.send} canChat={!!username} onClose={() => setPanel(null)} />}
       {panel === 'settings' && <SettingsPanel settings={settings} onChange={onSettings} onClose={() => setPanel(null)} onCustomize={onCustomize} />}
       {panel === 'team' && <TeamPanel trainer={trainer} setTrainer={setTrainer} onClose={() => setPanel(null)} onMessage={say} />}
       {panel === 'bag' && <BagPanel trainer={trainer} setTrainer={setTrainer} onClose={() => setPanel(null)} onMessage={say} />}
