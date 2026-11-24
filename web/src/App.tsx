@@ -8,6 +8,8 @@ import MainMenu from './ui/MainMenu'
 import Customizer from './ui/Customizer'
 import SettingsPanel from './ui/SettingsPanel'
 import PlayScreen from './ui/PlayScreen'
+import RomGate from './ui/RomGate'
+import { getRomMeta } from './rom/store'
 import './App.css'
 
 type Screen = 'menu' | 'customize' | 'practice'
@@ -60,6 +62,10 @@ export default function App() {
   const [username, setUsername] = useState<string | null>(null)
   const [screen, setScreen] = useState<Screen>(devJump ? 'practice' : 'menu')
   const [showSettings, setShowSettings] = useState(false)
+  const [rom, setRom] = useState<'checking' | 'missing' | 'ready'>('checking')
+  useEffect(() => {
+    void getRomMeta().then((m) => setRom(m ? 'ready' : 'missing'))
+  }, [])
   const [settings, setSettings] = useSettings()
   const [look, setLook] = useLook()
   const [lookDone, setLookDone] = useState(() => {
@@ -89,6 +95,8 @@ export default function App() {
 
   if (!ready) return null
   if (!session && !guest) return <Login onGuest={() => setGuest(true)} />
+  if (rom === 'checking') return null
+  if (rom === 'missing') return <RomGate onReady={() => setRom('ready')} />
 
   const logout = async () => {
     setScreen('menu')
