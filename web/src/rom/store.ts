@@ -12,6 +12,7 @@ import { EMOTE_NARC, OVERWORLD_NARC, decodeEmotes, decodeOverworld } from './ove
 import { ICON_NARC, decodeIcons } from './icons'
 import { COMMAND_NARC, decodeCommandUi } from './commandUi'
 import { MENU_NARC, decodeMenuUi } from './menuUi'
+import { extractMusic, type MusicIndex } from './sdat'
 import { owList, registerEmote, registerOw } from '../game/ow'
 
 const DB = 'pokequest-rom'
@@ -78,7 +79,7 @@ export async function loadOverworldSprites(): Promise<void> {
   } catch { /* the game falls back to the drawn characters */ }
 }
 
-const VERSION = 20 // 20 = gym buildings;  19 = buildings fixed;  18 = ... + buildings;  17 = ... + emote bubbles;  16 = ... + start menu art;  15 = battle buttons rebuilt;  14 = ... + battle command buttons;  13 = ... + menu icons;  12 = ... + walking characters;  11 = ... + the game's own trainer colours
+const VERSION = 21 // 21 = ... + music;  20 = gym buildings;  19 = buildings fixed;  18 = ... + buildings;  17 = ... + emote bubbles;  16 = ... + start menu art;  15 = battle buttons rebuilt;  14 = ... + battle command buttons;  13 = ... + menu icons;  12 = ... + walking characters;  11 = ... + the game's own trainer colours
 
 let colorsApplied = false
 /** Makes the colour choices of the character maker use the colours the game really uses (snaps each to the nearest real one). */
@@ -147,12 +148,15 @@ export async function importRom(file: RomSource, onProgress: (text: string, frac
   const ow = await decodeOverworld(parseNarc(await nds.get(OVERWORLD_NARC)), (i, b) => put(`ow:${i}`, b))
   await put('ow:list', ow)
   await put('emote:list', await decodeEmotes(parseNarc(await nds.get(EMOTE_NARC)), (i, b) => put(`emote:${i}`, b)))
+  onProgress('Reading the music…', 0.9845)
+  try { await put('music:index', await extractMusic(nds, (id, d) => put(`music:${id}`, d))) } catch { /* no sound archive: the game stays quiet */ }
   onProgress('Reading the island map…', 0.985)
   await put('world', await extractWorldData(nds, WORLD_WINDOW))
   const meta: RomMeta = { title: nds.header.title, gameCode: code, sprites: count, version: VERSION }
   await put(META_KEY, meta)
   colorsApplied = false
   owLoaded = false
+  musicIndex = undefined
   await applyRomColors()
   await loadOverworldSprites()
   onProgress('Done!', 1)
@@ -218,6 +222,16 @@ export async function romIconUrl(dex: number): Promise<string | null> {
   } catch {
     return null
   }
+}
+/** The list of songs that were copied from the sound archive (name -> files). */
+let musicIndex: MusicIndex | null | undefined
+export async function loadMusicIndex(): Promise<MusicIndex | null> {
+  if (musicIndex !== undefined) return musicIndex
+  try { musicIndex = (await get<MusicIndex>('music:index')) ?? null } catch { musicIndex = null }
+  return musicIndex
+}
+export async function loadMusicFile(id: number): Promise<Uint8Array | null> {
+  try { return (await get<Uint8Array>(`music:${id}`)) ?? null } catch { return null }
 }
 let narcFiles: Uint8Array[] | null = null
 /** The 20 files of every Pokémon (kept in the browser) so the animated pictures can be built when they are needed. */

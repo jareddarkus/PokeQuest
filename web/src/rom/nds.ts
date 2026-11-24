@@ -65,6 +65,13 @@ export class NdsFile {
     return this.files.has(path)
   }
 
+  /** Part of a file (for the huge sound archive we only read what we need). */
+  async getRange(path: string, offset: number, length: number): Promise<Uint8Array> {
+    const f = this.files.get(path)
+    if (!f) throw new Error(`The game file has no "${path}"`)
+    return this.read(f[0] + offset, length)
+  }
+
   async get(path: string): Promise<Uint8Array> {
     const f = this.files.get(path)
     if (!f) throw new Error(`The game file has no "${path}" (is it Pokémon Black 2 / White 2?)`)

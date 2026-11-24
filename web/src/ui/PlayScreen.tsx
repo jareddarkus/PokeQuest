@@ -17,6 +17,7 @@ import { BagPanel, PcPanel, TeamPanel } from './MenuPanels'
 import SettingsPanel from './SettingsPanel'
 import StarterPick from './StarterPick'
 import MenuButton from './MenuButton'
+import { music } from '../audio/music'
 
 interface Props {
   look: Look
@@ -52,6 +53,12 @@ function PlayInner({ look, settings, onSettings, onExit, onCustomize, world, bui
   const busy = useRef(false)
 
   const say = (t: string) => setToast(t)
+
+  // the real songs of the game: route music by ring, battle music by kind of battle
+  const song = battle ? (battle.kind === 'gym' ? 'gymLeader' : battle.kind === 'trainer' ? 'trainer' : 'wild') : ring <= 1 ? 'field1' : ring === 2 ? 'field2' : 'field3'
+  useEffect(() => { music.setVolume(settings.musicVolume) }, [settings.musicVolume])
+  useEffect(() => { void music.play(song) }, [song])
+  useEffect(() => () => music.stop(), [])
 
   useEffect(() => {
     if (collapseOn) startRef.current = Date.now()
