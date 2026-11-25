@@ -29,6 +29,7 @@ export default function BtlView() {
         const tex = readTexFile(raw)
         if (!model || !tex) { names.push(`${key} ${idx}: failed`); continue }
         const obj = buildModelObject(model, tex)
+        if (q.has('wire')) obj.traverse((o) => { const m = (o as THREE.Mesh).material as THREE.MeshBasicMaterial | undefined; if (m) { m.wireframe = true; m.side = THREE.DoubleSide; m.transparent = false } })
         scene.add(obj)
         let mn = [1e9, 1e9, 1e9], mx = [-1e9, -1e9, -1e9]
         for (const me of model.meshes) for (const v of me.verts) {

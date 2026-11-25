@@ -227,3 +227,8 @@ Next ideas if this is picked up again: (1) the "!" emote for trainers spotting t
 
 ### Hotfix (2026-11-25): the page froze on the login screen
 - Cause: `MusicManager.play()` retried itself forever (in its `finally`) when the asked song was missing from the saved music list (no game file imported yet, or an older import without the title song). Each retry was a new promise, so the browser never got time to draw: "Page Unresponsive". Only the production build showed it (the dev server always had the song). Fix: retry only when a DIFFERENT song was asked for meanwhile (`audio/music.ts`).
+
+### Title-screen dragon (research, 2026-11-25; not built yet)
+- The 3D dragon of the White 2 title screen is in `a/1/5/8`: White Kyurem = files 454-460 (`title_w_01` model 455 + skeleton animation 454, `title_w_02` 457 / 456, `title_w_03` 459 / 458 / texture animation 460), Black Kyurem = 446-452 (`title_b_*`). The game file has NO Zekrom body model (the only Zekrom model, `a/1/1/6` file 250 `zekuromu_ci_a`, is just the electricity effect balls).
+- Our model reader (`rom/nitro.ts` `readModels`) shows these as degenerate slivers: the models are SKINNED (bones). Needed: the model's render commands (SBC: NODE / MTX restore / NODEMIX blend with weights) and the matrix-restore command (0x14) in the display lists, using the bind pose (or frame 0 of the BCA0 skeleton animation), then a slow spin. Dev viewer: `?btlview&narc=a/1/5/8&stage=455&cz=5&cy=0.6&ty=0.4&fov=60&wire`.
+- Rule to keep: the model must be read from the player's own game file in the browser (never committed or hosted), so it can only appear after the game file has been imported; one small component, easy to remove.
