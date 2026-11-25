@@ -1,3 +1,4 @@
+import { SplFx } from '../rom/splFx'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { snap } from './pixel'
 import { BattleSession, type BattleEvent, type Request } from '../battle/engine'
@@ -300,6 +301,8 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
   const Kd = KdBase
   const fxCanvas = useRef<HTMLCanvasElement>(null)
   const fxRef = useRef<MoveFx | null>(null)
+  const splRef = useRef<SplFx | null>(null) // the game's own particle effects
+  const splCanvas = useRef<HTMLCanvasElement>(null)
   const environment = 'grass'
   const [ball, setBall] = useState<null | { shakes: number }>(null)
   const legendaryNames = useMemo(() => new Set(allSpecies().filter((s) => s.legendary).map((s) => s.name)), [])
@@ -368,7 +371,11 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
           const upd = (s: Side | null): Side | null => (s && s.uid === ev.uid ? { ...s, hp: ev.hp, maxHp: ev.hp === 0 ? s.maxHp : ev.maxHp, status: ev.status ?? s.status } : s)
           if (ev.side === 'p1') setMe(upd); else setFoe(upd)
           if (ev.uid in hpOf.current && ev.hp < hpOf.current[ev.uid]) { void music.playSfx(pendingHit.current ?? 'se:hit'); pendingHit.current = null }
-          else if (ev.uid in hpOf.current && ev.hp > hpOf.current[ev.uid]) void music.heal()
+          else if (ev.uid in hpOf.current && ev.hp > hpOf.current[ev.uid]) {
+            void music.heal()
+            const sd = ev.side === 'p1' ? 'me' : 'foe'
+            void playSpl(splRef.current?.effectEffects(45) ?? [], sd, sd).then(() => playSpl(splRef.current?.effectEffects(50) ?? [], sd, sd))
+          }
           const before = hpOf.current[ev.uid] ?? ev.hp
           hpOf.current[ev.uid] = ev.hp
           await sleep(Math.max(700, (Math.abs(ev.hp - before) / Math.max(1, ev.maxHp)) * 48 / 30 * 1000 + 350)) // the gauge drains at the game's speed
@@ -388,7 +395,11 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
           const selfT = mv.target === 'self' || mv.target === 'allySide' || mv.target === 'allies' || mv.target === 'adjacentAllyOrSelf'
           const hitSide = ev.side === 'p1' ? 'foe' : 'me'
           if (contact) { setLunge(ev.side === 'p1' ? 'me' : 'foe'); await sleep(250) }
-          if (fx?.ready && L) {
+          const splIds = splRef.current?.ready && num ? splRef.current.moveEffects(num) : []
+          const userSide = ev.side === 'p1' ? 'me' : 'foe', targetSide = selfT ? userSide : hitSide
+          if (splIds.length && L) {
+            await playSpl(splIds, userSide, targetSide, !selfT && !contact && mv.category === 'Special') // the effect files the game's own script of this move starts
+          } else if (fx?.ready && L) {
             const centre = (a: { x: number; y: number; w: number }) => ({ x: a.x, y: a.y + a.w * 0.1 - a.w * 0.38 })
             const from = ev.side === 'p1' ? L.me : L.foe, to = ev.side === 'p1' ? L.foe : L.me
             await fx.play({ type: mv.type, category: mv.category as 'Physical' | 'Special' | 'Status', contact, name: mv.name, selfTarget: selfT }, centre(from), centre(to), to.w * 0.85)
@@ -401,7 +412,8 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
         case 'stat': {
           // the game's own sounds (the picture of the stat-change effect is not decoded yet, nothing is invented here)
           void music.playSfx(ev.amount > 0 ? 'be:12' : 'be:13')
-          await sleep(700)
+          if (splRef.current?.ready) await playSpl([ev.amount > 0 ? 155 : 156], ev.side === 'p1' ? 'me' : 'foe', ev.side === 'p1' ? 'me' : 'foe', false, 90) // the game's own effect (orbs rising / falling)
+          else await sleep(700)
           break
         }
         case 'faint': {
@@ -432,6 +444,28 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
     void fx.load(FX_NAMES)
     return () => { window.removeEventListener('resize', size); fx.stop(); fxRef.current = null }
   }, [])
+
+  // the game's particle effects are drawn at the resolution of the DS screen (one canvas pixel = one picture pixel of the game's 256 x 192 screen) and scaled up sharp
+  const splScale = layout ? Math.max(1, layout.frame.w / 256) : 1
+  useEffect(() => {
+    const c = splCanvas.current
+    if (!c) return
+    c.width = Math.max(1, Math.ceil(c.parentElement!.clientWidth / splScale)); c.height = Math.max(1, Math.ceil(c.parentElement!.clientHeight / splScale))
+    if (!splRef.current) { const f = new SplFx(); splRef.current = f; void f.load() }
+    splRef.current.attach(c)
+    if (import.meta.env.DEV) (window as unknown as { __spl?: SplFx }).__spl = splRef.current
+  }, [splScale, layout])
+  /** Plays effect files on a Pokémon (or flying from one to the other). */
+  const playSpl = async (ids: number[], from: 'me' | 'foe', to: 'me' | 'foe', travel = false, maxFrames = 150) => {
+    const spl = splRef.current, L = layoutRef.current
+    if (!spl?.ready || !L || !ids.length) return
+    // the middle of the Pokémon's body: its picture stands on the platform's centre (yours is bigger and taller)
+    const centre = (a: { x: number; y: number; w: number }, mine: boolean) => ({ x: a.x / splScale, y: (a.y - a.w * (mine ? 0.17 : 0.1)) / splScale })
+    const a = from === 'me' ? L.me : L.foe, b = to === 'me' ? L.me : L.foe
+    await spl.play(ids, centre(a, from === 'me'), centre(b, to === 'me'), 16, { travel, maxFrames }) // (one unit of the effects = 16 picture pixels of the game's screen)
+  }
+
+  if (import.meta.env.DEV) (window as unknown as { __splTest?: unknown }).__splTest = (ids: number[], a: 'me' | 'foe', b: 'me' | 'foe', travel = false) => playSpl(ids, a, b, travel) // developer hook
 
   // ---------------------------------------------------------------- start the battle
   useEffect(() => {
@@ -658,6 +692,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
       <div className={`stage-cam ${mode === 'fight' ? 'zoom' : ''}`}>
       <BattleBackdrop env={environment} onLayout={setLayout} sceneRef={sceneRef} />
       <canvas ref={fxCanvas} className="fx-canvas" />
+      <canvas ref={splCanvas} className="spl-layer" />
 
 
       {layout && foePic && !trGone.foe && (
