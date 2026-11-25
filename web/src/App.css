@@ -24,14 +24,19 @@ h2 { font-size: 1.15rem; }
 h3 { font-size: 0.8rem; margin-top: 12px; opacity: 0.9; }
 .sub { margin: 0 0 4px; opacity: .8; font-size: .9rem; }
 
-input[type='text'], input[type='password'], input:not([type]) { padding: 11px 12px; border-radius: 8px; border: 1px solid var(--ui-line); background: rgba(0, 0, 0, 0.45); color: var(--ui-text); font: inherit; }
+/* Pokémon White 2 look: dark charcoal slabs with a silver outline (like the Start menu), drawn with plain CSS so it also works before the game file is imported */
+.panel.card, .panel.menu, .modal { background: linear-gradient(112deg, #1d1d1d 0 62%, #2c2c2c 62% 100%); border: 2px solid #d4d4d4; border-radius: 8px; box-shadow: 0 0 0 2px #0e0e0e, 0 8px 22px rgba(0, 0, 0, 0.55); backdrop-filter: none; }
+input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']) { padding: 11px 12px; border-radius: 6px; border: 2px solid #8f8f8f; background: #262626; box-shadow: 0 0 0 2px #0e0e0e; color: var(--ui-text); font: inherit; outline: none; min-width: 0; }
+input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']):focus { border-color: #ffffff; background: #303030; }
+input:-webkit-autofill, input:-webkit-autofill:hover, input:-webkit-autofill:focus { -webkit-text-fill-color: #fff; caret-color: #fff; box-shadow: 0 0 0 100px #262626 inset, 0 0 0 2px #0e0e0e; transition: background-color 9999s; }
 input::placeholder { color: rgba(255, 255, 255, 0.5); }
-button { padding: 10px 14px; border-radius: 8px; border: 1px solid var(--ui-line); background: rgba(255, 255, 255, 0.1); color: var(--ui-text); font: inherit; cursor: pointer; }
-button:hover:not(:disabled) { background: rgba(255, 255, 255, 0.22); }
+button { padding: 10px 14px; border-radius: 6px; border: 2px solid #bdbdbd; background: linear-gradient(#3b3b3b, #242424); box-shadow: 0 0 0 2px #0e0e0e; color: var(--ui-text); font: inherit; cursor: pointer; }
+button:hover:not(:disabled) { border-color: #fff; filter: brightness(1.25); }
 button:disabled { opacity: .45; cursor: default; }
-button.primary { background: rgba(255, 255, 255, 0.92); color: #101810; border-color: transparent; font-weight: 600; }
-button.primary:hover:not(:disabled) { background: #fff; }
-button.link { background: none; border: 0; opacity: .75; text-decoration: underline; }
+button.primary { background: linear-gradient(#fafafa, #c4c4c4); color: #141414; border-color: #ffffff; font-weight: 600; }
+button.primary:hover:not(:disabled) { filter: brightness(1.06); }
+button.link { background: none; border: 0; box-shadow: none; opacity: .8; text-decoration: underline; }
+button.link:hover:not(:disabled) { filter: none; opacity: 1; background: none; }
 .error { margin: 0; color: #ff9d9d; font-size: .9rem; }
 
 /* main menu */
