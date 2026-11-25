@@ -124,11 +124,14 @@ function readPalette(d0: Uint8Array): Rgb[] {
 }
 
 /** the 96 x 96 still picture of a Pokémon as palette numbers (same layout as sprites.ts) */
-function stillIndices(d0: Uint8Array): Uint8Array {
+function stillIndices(d0: Uint8Array, S = 96): Uint8Array {
   const d = decompress(d0)
   const tiles = readChr(d).px
-  const out = new Uint8Array(96 * 96)
-  const blocks: Array<[number, number, number, number]> = [[0, 0, 8, 8], [64, 0, 4, 8], [0, 64, 8, 4], [64, 64, 4, 4]]
+  const out = new Uint8Array(S * S)
+  // a trainer's 80 x 80 picture is made of separate objects: 64x64, two 16x32 (right), two 32x16 (bottom), 16x16 (corner)
+  const blocks: Array<[number, number, number, number]> = S === 80
+    ? [[0, 0, 8, 8], [64, 0, 2, 4], [64, 32, 2, 4], [0, 64, 4, 2], [32, 64, 4, 2], [64, 64, 2, 2]]
+    : [[0, 0, 8, 8], [64, 0, 4, 8], [0, 64, 8, 4], [64, 64, 4, 4]]
   let t = 0
   for (const [bx, by, tw, th] of blocks) {
     for (let ty = 0; ty < th; ty++) {
@@ -137,7 +140,7 @@ function stillIndices(d0: Uint8Array): Uint8Array {
         t++
         for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) {
           const b = tiles[base + y * 4 + (x >> 1)] ?? 0
-          out[(by + ty * 8 + y) * 96 + bx + tx * 8 + x] = x & 1 ? b >> 4 : b & 15
+          out[(by + ty * 8 + y) * S + bx + tx * 8 + x] = x & 1 ? b >> 4 : b & 15
         }
       }
     }
@@ -206,16 +209,67 @@ interface Prelim { anim: Seq; node: Node; px: number; py: number; idx: number }
  * still picture.
  */
 export function buildAnimatedSprite(files: Uint8Array[], base: number, front: boolean, shiny: boolean): AnimatedSprite | null {
+  const o = front ? 0 : 9
+  return buildFromParts({
+    S: 96, pal: files[base + (shiny ? 19 : 18)], atlas: files[base + o + 2], cells: files[base + o + 4], anims: files[base + o + 5],
+    multi: files[base + o + 6], timeline: files[base + o + 7], still: files[base + o],
+  })
+}
+
+/**
+ * A trainer's picture: archive a/0/7/1 (front, 188 classes) or a/0/7/2 (back, the player characters), 8 files per picture:
+ * 0 = 80 x 80 still, 1 = pieces (tiles), 2 = cells, 3 = part animations, 4 = multicells, 5 = pose timeline, 7 = palette.
+ */
+export function buildTrainerSprite(files: Uint8Array[], index: number): AnimatedSprite | null {
+  const b = index * 8
+  if (!files[b + 1] || !files[b + 1].length || !files[b + 7]) return null
+  return buildFromParts({ S: 80, pal: files[b + 7], atlas: files[b + 1], cells: files[b + 2], anims: files[b + 3], multi: files[b + 4], timeline: files[b + 5], still: files[b] })
+}
+
+/** A trainer's 80 x 80 still picture (front, archive a/0/7/1) as a canvas; null when the class has no picture. */
+export function trainerStillCanvas(files: Uint8Array[], index: number): HTMLCanvasElement | null {
+  const b = index * 8
+  if (!files[b] || !files[b].length || !files[b + 7]) return null
   try {
-    const o = front ? 0 : 9
-    const pal = readPalette(files[base + (shiny ? 19 : 18)])
-    const atlas = readChr(decompress(files[base + o + 2]))
-    const cells = parseCells(decompress(files[base + o + 4]))
-    const anims = parseAnimBank(decompress(files[base + o + 5]))
-    const multi = parseMulticells(decompress(files[base + o + 6]))
-    const timeline = parseAnimBank(decompress(files[base + o + 7]))[0]
+    const pal = readPalette(files[b + 7])
+    const idx = stillIndices(files[b], 80)
+    const c = document.createElement('canvas')
+    c.width = 80; c.height = 80
+    const ctx = c.getContext('2d')!
+    const img = ctx.createImageData(80, 80)
+    let count = 0
+    for (let i = 0; i < 6400; i++) {
+      const v = idx[i]
+      if (!v) continue
+      const rgb = pal[v] ?? [255, 0, 255]
+      img.data[i * 4] = rgb[0]; img.data[i * 4 + 1] = rgb[1]; img.data[i * 4 + 2] = rgb[2]; img.data[i * 4 + 3] = 255
+      count++
+    }
+    if (count < 200) return null
+    ctx.putImageData(img, 0, 0)
+    return c
+  } catch { return null }
+}
+
+/** The player's back picture (archive a/0/7/2, 8 files per picture, no still picture). */
+export function buildTrainerBackSprite(files: Uint8Array[], index: number): AnimatedSprite | null {
+  const b = index * 8
+  if (!files[b + 1] || !files[b + 1].length || !files[b + 7]) return null
+  return buildFromParts({ S: 128, pal: files[b + 7], atlas: files[b + 1], cells: files[b + 2], anims: files[b + 3], multi: files[b + 4], timeline: files[b + 5], still: files[b] })
+}
+
+interface Parts { S: number; pal: Uint8Array; atlas: Uint8Array; cells: Uint8Array; anims: Uint8Array; multi: Uint8Array; timeline: Uint8Array; still: Uint8Array }
+function buildFromParts(P: Parts): AnimatedSprite | null {
+  try {
+    const S = P.S
+    const pal = readPalette(P.pal)
+    const atlas = readChr(decompress(P.atlas))
+    const cells = parseCells(decompress(P.cells))
+    const anims = parseAnimBank(decompress(P.anims))
+    const multi = parseMulticells(decompress(P.multi))
+    const timeline = parseAnimBank(decompress(P.timeline))[0]
     if (!cells.length || !multi.length || !timeline) return null
-    const still = stillIndices(files[base + o])
+    const still = stillIndices(P.still, S)
     let stillCount = 0
     for (let i = 0; i < still.length; i++) if (still[i]) stillCount++
 
@@ -236,13 +290,20 @@ export function buildAnimatedSprite(files: Uint8Array[], base: number, front: bo
       let s = 0
       for (const [x, y, c] of cell.pixels) {
         const X = ox + x, Y = oy + y
-        if (X >= 0 && Y >= 0 && X < 96 && Y < 96 && still[Y * 96 + X] === c) s++
+        if (X >= 0 && Y >= 0 && X < S && Y < S && still[Y * S + X] === c) s++
       }
       return s
     }
     let gBest = -1, gx = 49, gy = 71
-    for (let by = 30; by <= 110; by++) {
-      for (let bx = 20; bx <= 80; bx++) {
+    const noStill = stillCount === 0
+    if (noStill) {
+      // no still picture to lay the parts over (the player's back pictures): centre the first pose horizontally, feet at the bottom
+      let minX = 1e9, maxX = -1e9, maxY = -1e9
+      for (const p of prelim) for (const [x, y] of plainCell(p.idx).pixels) { minX = Math.min(minX, p.px + x); maxX = Math.max(maxX, p.px + x); maxY = Math.max(maxY, p.py + y) }
+      if (maxX >= minX) { gx = Math.round(S / 2 - (minX + maxX) / 2); gy = Math.round(S - 2 - maxY) }
+    }
+    if (!noStill) for (let by = Math.round(S * 0.3); by <= Math.round(S * 1.15); by++) {
+      for (let bx = Math.round(S * 0.2); bx <= Math.round(S * 0.85); bx++) {
         let sc = 0
         for (const p of prelim) sc += scoreAt(plainCell(p.idx), bx + p.px, by + p.py)
         if (sc > gBest) { gBest = sc; gx = bx; gy = by }
@@ -251,8 +312,8 @@ export function buildAnimatedSprite(files: Uint8Array[], base: number, front: bo
 
     // 2) build the sprite for each drawing order and keep the best one
     const probe = document.createElement('canvas')
-    probe.width = 96
-    probe.height = 96
+    probe.width = S
+    probe.height = S
     const pctx = probe.getContext('2d', { willReadFrequently: true })!
     const rgbOfStill = (i: number): Rgb => pal[i] ?? [255, 0, 255]
 
@@ -314,11 +375,11 @@ export function buildAnimatedSprite(files: Uint8Array[], base: number, front: bo
       }
       // how different is the first picture from the still one?
       const measure = (): number => {
-        pctx.clearRect(0, 0, 96, 96)
+        pctx.clearRect(0, 0, S, S)
         draw(pctx, 0)
-        const d = pctx.getImageData(0, 0, 96, 96).data
+        const d = pctx.getImageData(0, 0, S, S).data
         let bad = 0
-        for (let i = 0; i < 96 * 96; i++) {
+        for (let i = 0; i < S * S; i++) {
           const a = d[i * 4 + 3] > 128
           const si = still[i]
           if (!si) { if (a) bad++; continue }
@@ -331,6 +392,10 @@ export function buildAnimatedSprite(files: Uint8Array[], base: number, front: bo
       return { draw, measure, total: period, timeline: total, longest: Math.max(...multi.flatMap((m) => m.map((n) => anims[n.anim]?.total ?? 1))) }
     }
 
+    if (noStill) {
+      const f = make(false, false, 0, 0)
+      return { size: S, loopLength: f.total, draw: f.draw, mismatch: 0, order: [false, false], info: { timeline: f.timeline, longest: f.longest } }
+    }
     let best: { v: [boolean, boolean]; m: number } | null = null
     for (const rc of [false, true]) {
       for (const rp of [false, true]) {
@@ -367,7 +432,7 @@ export function buildAnimatedSprite(files: Uint8Array[], base: number, front: bo
       }
       if (cur < bestM) { bestM = cur; final = make(best!.v[0], best!.v[1], ox, oy, adj) }
     }
-    return { size: 96, loopLength: final.total, draw: final.draw, mismatch: bestM, order: best!.v, info: { timeline: final.timeline, longest: final.longest } }
+    return { size: S, loopLength: final.total, draw: final.draw, mismatch: bestM, order: best!.v, info: { timeline: final.timeline, longest: final.longest } }
   } catch {
     return null
   }

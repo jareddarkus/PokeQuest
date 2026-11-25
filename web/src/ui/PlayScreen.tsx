@@ -318,6 +318,8 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
           foeTeam={battle.foe}
           kind={battle.kind}
           foeName={battle.name}
+          foeSeed={battle.npcId ?? battle.name}
+          playerGirl={look.sprite === 10}
           textSpeed={settings.textSpeed}
           onEnd={endBattle}
         />

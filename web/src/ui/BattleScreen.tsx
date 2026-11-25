@@ -15,6 +15,9 @@ import BagScreen from './BagScreen'
 import { Dex } from '@pkmn/sim'
 import { music } from '../audio/music'
 import { warmAnim } from './AnimSprite'
+import { trainerBackPic, trainerFrontPic } from '../rom/trainerPics'
+import type { AnimatedSprite } from '../rom/anim'
+import { playerBackClass, trainerClassFor } from '../data/trainerClasses'
 import { MoveFx, FX_NAMES } from './moveFx'
 import { trText, useLang } from '../i18n'
 import ItemIcon from './ItemIcon'
@@ -29,6 +32,10 @@ interface Props {
   foeTeam: Mon[]
   kind: BattleKind
   foeName?: string
+  /** identifies the trainer (its picture is chosen from it) */
+  foeSeed?: string
+  /** the player's character is the girl */
+  playerGirl?: boolean
   /** how fast the message text is typed */
   textSpeed?: 'slow' | 'normal' | 'fast' | 'instant'
   onEnd: (outcome: BattleOutcome, trainer: Trainer) => void
@@ -74,6 +81,32 @@ function SendOut({ fromLeft }: { fromLeft: boolean }) {
       {Array.from({ length: 10 }, (_, i) => <span key={i} className="so-spark" style={{ ['--a' as string]: `${i * 36 + (i % 2) * 14}deg`, ['--d' as string]: `${40 + (i % 3) * 22}px` }} />)}
     </div>
   )
+}
+
+/** A trainer standing on a platform: the foe's still picture, or the player's back picture that throws the ball. Slides away when `out`. */
+function TrainerFigure({ still, sprite, k, side, out, play }: { still?: HTMLCanvasElement | null; sprite?: AnimatedSprite | null; k: number; side: 'foe' | 'me'; out: boolean; play: number }) {
+  const ref = useRef<HTMLCanvasElement>(null)
+  const size = still ? 80 : sprite?.size ?? 128
+  useEffect(() => {
+    const c = ref.current
+    if (!c) return
+    const ctx = c.getContext('2d')!
+    ctx.clearRect(0, 0, size, size)
+    if (still) { ctx.drawImage(still, 0, 0); return }
+    if (!sprite) return
+    if (!play) { sprite.draw(ctx, 0); return }
+    let raf = 0
+    const t0 = performance.now()
+    const tick = () => {
+      const t = ((performance.now() - t0) / 1000) * 60
+      ctx.clearRect(0, 0, size, size)
+      sprite.draw(ctx, Math.min(t, sprite.loopLength - 1))
+      if (t < sprite.loopLength) raf = requestAnimationFrame(tick)
+    }
+    tick()
+    return () => cancelAnimationFrame(raf)
+  }, [still, sprite, play, size])
+  return <canvas ref={ref} width={size} height={size} className={`tr-fig ${side} ${out ? 'out' : ''}`} style={{ width: size * k, height: size * k }} />
 }
 
 /** The row of six small balls shown on the top screen while a trainer is introduced (filled = a Pokémon, empty = no Pokémon in that place). */
@@ -151,7 +184,7 @@ function HpBox({ side, mine, exp, gender }: { side: Side; mine: boolean; exp?: n
   )
 }
 
-export default function BattleScreen({ trainer, foeTeam, kind, foeName, textSpeed = 'normal', onEnd }: Props) {
+export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed, playerGirl, textSpeed = 'normal', onEnd }: Props) {
   const playerTeam = useMemo(() => trainer.team.filter((m) => m.hp > 0).map((m) => ({ ...m, evs: { ...m.evs }, ivs: { ...m.ivs }, moves: [...m.moves] })), [])
   const foeCopies = useMemo(() => foeTeam.map((m) => ({ ...m, evs: { ...m.evs }, ivs: { ...m.ivs }, moves: [...m.moves] })), [])
   const [me, setMe] = useState<Side | null>(null)
@@ -161,6 +194,12 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, textSpee
   const [rows, setRows] = useState<null | 'foe' | 'me'>(null) // the row of six balls shown while a trainer is introduced
   const rowsShown = useRef(false)
   const fromFight = useRef(false) // coming back from the move screen: the Poké Ball closes
+  const [foePic, setFoePic] = useState<HTMLCanvasElement | null>(null) // the foe trainer's picture
+  const [myPic, setMyPic] = useState<AnimatedSprite | null>(null) // your own trainer's back picture
+  const [trOut, setTrOut] = useState({ foe: false, me: false }) // sliding away
+  const [trGone, setTrGone] = useState({ foe: false, me: false }) // gone
+  const [throwKey, setThrowKey] = useState(0)
+  const trSent = useRef({ foe: false, me: false })
   const [send, setSend] = useState<null | { side: 'me' | 'foe'; key: number }>(null) // a Pokémon being sent out of its ball
   const wake = useRef<(() => void) | null>(null)
   const [statFx, setStatFx] = useState<null | { side: 'me' | 'foe'; up: boolean; big: boolean; key: number }>(null)
@@ -225,6 +264,14 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, textSpee
           const s: Side = { uid: ev.uid, species: ev.species, level: ev.level, hp: ev.hp, maxHp: ev.maxHp, shiny: ev.shiny, fainted: false }
           const ballOut = ev.side === 'p1' || kind !== 'wild' // trainers' Pokémon (and yours) come out of a Poké Ball; a wild Pokémon just appears
           if (ballOut) setSend({ side: ev.side === 'p1' ? 'me' : 'foe', key: ++sendKey })
+          { // the trainers step aside: the foe's slides off, yours throws the ball and slides off
+            const who = ev.side === 'p1' ? 'me' : 'foe'
+            if (!trSent.current[who] && (who === 'me' || kind !== 'wild')) {
+              trSent.current[who] = true
+              if (who === 'me') { setThrowKey((k) => k + 1); window.setTimeout(() => setTrOut((o) => ({ ...o, me: true })), 800); window.setTimeout(() => setTrGone((o) => ({ ...o, me: true })), 1900) }
+              else { setTrOut((o) => ({ ...o, foe: true })); window.setTimeout(() => setTrGone((o) => ({ ...o, foe: true })), 1100) }
+            }
+          }
           if (ev.side === 'p1' && kind !== 'wild' && !rowsShown.current) { rowsShown.current = true; setRows('me'); window.setTimeout(() => setRows(null), 1500) }
           if (ev.side === 'p1') setMe(s); else setFoe(s)
           hpOf.current[ev.uid] = ev.hp
@@ -322,6 +369,8 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, textSpee
         jobs.push(d > 0 && d <= 649 ? warmAnim(m.species, back, !!m.shiny) : Promise.resolve(preloadPixel(m.species, back, !!m.shiny)))
       }
       for (const m of foeCopies.slice(1)) { const d = dexNum(m.species); if (d > 649) preloadPixel(m.species, false, !!m.shiny) }
+      jobs.push(trainerBackPic(playerBackClass(!!playerGirl)).then(setMyPic))
+      if (kind !== 'wild') jobs.push(trainerFrontPic(trainerClassFor(kind === 'gym' ? 'gym' : 'trainer', foeSeed ?? foeName ?? 'trainer'), [2, 3, 4, 5]).then((r) => setFoePic(r?.canvas ?? null)))
       await Promise.race([Promise.all(jobs), sleep(3000)])
     }
     if (kind !== 'wild') { setText(`You are challenged by ${foeName ?? 'a trainer'}!`); setRows('foe') }
@@ -332,7 +381,14 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, textSpee
       s.isTrainerBattle = kind !== 'wild'
       s.foeName = foeName ?? ''
       sessionRef.current = s
-      s.onEvents((evs) => { queue.current.push(...evs); void pump() })
+      let opening = kind !== 'wild' // in a trainer battle the foe trainer sends out first, like in the game
+      s.onEvents((evs) => {
+        if (opening) {
+          const a = evs.findIndex((e) => e.kind === 'switch' && e.side === 'p1'), b = evs.findIndex((e) => e.kind === 'switch' && e.side === 'p2')
+          if (a >= 0 && b === a + 2) { opening = false; evs = [...evs.slice(0, a), evs[b], evs[b + 1], evs[a], evs[a + 1], ...evs.slice(b + 2)] }
+        }
+        queue.current.push(...evs); void pump()
+      })
       s.onRequest((r) => {
         reqRef.current = r
         if (!pumping.current && queue.current.length === 0) showMenuIfReady()
@@ -496,6 +552,16 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, textSpee
       <canvas ref={fxCanvas} className="fx-canvas" />
 
 
+      {layout && foePic && !trGone.foe && (
+        <div className="stage-sprite" style={{ left: layout.foe.x, top: layout.foe.y + layout.foe.w * 0.1, width: layout.foe.w }}>
+          <TrainerFigure still={foePic} k={(layout.foe.w * 1.05) / 76.8} side="foe" out={trOut.foe} play={0} />
+        </div>
+      )}
+      {layout && myPic && !trGone.me && (
+        <div className="stage-sprite" style={{ left: layout.me.x, top: layout.me.y + layout.me.w * 0.1, width: layout.me.w }}>
+          <TrainerFigure sprite={myPic} k={(layout.me.w * 0.46) / 76.8} side="me" out={trOut.me} play={throwKey} />
+        </div>
+      )}
       {layout && foe && (
         <>
           <div className="stage-shadow" style={{ left: layout.foe.x, top: layout.foe.y + layout.foe.w * 0.03, width: layout.foe.w * 0.78 * shadowFor(foe.species) }} />

@@ -405,3 +405,9 @@ button.big small { opacity: .7; font-size: .75rem; }
 .hp2.mine { animation: pq-hp-in-r .4s cubic-bezier(.2, .8, .3, 1) .5s backwards; }
 @keyframes pq-hp-in-l { from { transform: translateX(-130%); opacity: 0; } to { transform: none; opacity: 1; } }
 @keyframes pq-hp-in-r { from { transform: translateX(130%); opacity: 0; } to { transform: none; opacity: 1; } }
+
+/* trainers standing on the platforms at the start of a battle */
+.tr-fig { display: block; image-rendering: pixelated; transition: transform .8s ease-in, opacity .8s ease-in; }
+.tr-fig.foe.out { transform: translateX(130%); opacity: 0; }
+.tr-fig.me.out { transform: translateX(-130%); opacity: 0; }
+.tr-fig.me { margin-left: -22%; margin-bottom: -16%; }
