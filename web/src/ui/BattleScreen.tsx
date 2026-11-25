@@ -99,6 +99,12 @@ function SendOut({ fromLeft }: { fromLeft: boolean }) {
   )
 }
 
+/** The nearest whole number of device pixels per picture pixel (the player's back picture is about 0.57 of the platform's width in the game: platform 136 DS pixels, picture 77). */
+function snapNear(k: number): number {
+  const dpr = window.devicePixelRatio || 1
+  return Math.max(1 / dpr, Math.round(k * dpr) / dpr)
+}
+
 /** A trainer standing on a platform: the foe's still picture, or the player's back picture that throws the ball. Slides away when `out`. */
 function TrainerFigure({ still, sprite, k, side, out, play, sil }: { still?: HTMLCanvasElement | null; sprite?: AnimatedSprite | null; k: number; side: 'foe' | 'me'; out: boolean; play: number; sil?: 0 | 1 }) {
   const ref = useRef<HTMLCanvasElement>(null)
@@ -361,7 +367,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
           const upd = (s: Side | null): Side | null => (s && s.uid === ev.uid ? { ...s, hp: ev.hp, maxHp: ev.hp === 0 ? s.maxHp : ev.maxHp, status: ev.status ?? s.status } : s)
           if (ev.side === 'p1') setMe(upd); else setFoe(upd)
           if (ev.uid in hpOf.current && ev.hp < hpOf.current[ev.uid]) { void music.playSfx(pendingHit.current ?? 'se:hit'); pendingHit.current = null }
-          else if (ev.uid in hpOf.current && ev.hp > hpOf.current[ev.uid]) void music.playSfx('se:heal')
+          else if (ev.uid in hpOf.current && ev.hp > hpOf.current[ev.uid]) void music.heal()
           const before = hpOf.current[ev.uid] ?? ev.hp
           hpOf.current[ev.uid] = ev.hp
           await sleep(Math.max(700, (Math.abs(ev.hp - before) / Math.max(1, ev.maxHp)) * 48 / 30 * 1000 + 350)) // the gauge drains at the game's speed
@@ -392,8 +398,9 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
           break
         }
         case 'stat': {
-          // (the game's own stat-change effect is not decoded yet: nothing is invented here, the message says what happened)
-          await sleep(350)
+          // the game's own sounds (the picture of the stat-change effect is not decoded yet, nothing is invented here)
+          void music.playSfx(ev.amount > 0 ? 'be:12' : 'be:13')
+          await sleep(700)
           break
         }
         case 'faint': {
@@ -581,7 +588,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
     const ok = mine >= theirs || Math.random() < 0.55
     setMode('wait'); setReq(null)
     if (ok) {
-      void music.playSfx('se:run')
+      void music.playSfx('be:41')
       ranRef.current = true
       endedRef.current = true
       void (async () => { await say('Got away safely!', 500); s().syncBack(); onEnd('ran', { ...trainer, bag: bagRef.current, team: trainer.team.map((m) => teamRef.current.find((p) => p.uid === m.uid) ?? m) }) })()
@@ -659,7 +666,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
       )}
       {layout && myPic && !trGone.me && (
         <div className="stage-sprite trainer-me" style={{ left: layout.me.x, width: layout.me.w }}>
-          <TrainerFigure sprite={myPic} k={snap((layout.me.w * 0.46) / 76.8)} side="me" out={trOut.me} play={throwKey} />
+          <TrainerFigure sprite={myPic} k={snapNear(layout.me.w / 136)} side="me" out={trOut.me} play={throwKey} />
         </div>
       )}
       {layout && foe && (

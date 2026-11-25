@@ -249,6 +249,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
         if (ringAt(Math.round(o.x), Math.round(o.y)) !== 4) continue
         if (Math.abs(o.x - me.x) <= 1.2 && Math.abs(o.y - me.y) <= 1.2) {
           duelPending.current = o.id
+          void music.playSfx('fld:07') // touching another player at the peak: the same sound as a trainer spotting you
           busySender.current?.duel({ to: o.id, type: 'challenge', data: JSON.parse(JSON.stringify(team)) })
           window.setTimeout(() => { if (duelPending.current === o.id && !battleRef.current) duelPending.current = null }, 4000)
           break
@@ -263,6 +264,8 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
       onMenuKey: () => setMenuOpen((o) => !o),
       onMoveStart: () => setMenuOpen(false), // walking closes the menu again
       onStep: (_x, _y, tile) => {
+        if (tile === T.Tall) void music.playSfx('fld:12') // walking in tall grass
+        else if (tile === T.Water) void music.playSfx('fld:13') // walking in water
         if (tile === T.Tall && Math.random() < ENCOUNTER_RATE && trainerRef.current.team.length > 0) {
           const pos = handleRef.current?.getPos()
           const r = pos ? ringAt(pos.x, pos.y) : 1
@@ -272,6 +275,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
       onGym: (id) => {
         const g = world.gyms.find((q) => q.id === id)
         if (!g) return
+        void music.playSfx('fld:KAIDAN') // going into a building
         if (beatenGyms.current.has(id)) { say(`${g.leader} nods: you already beat this gym.`); return }
         speakThen(`Gym Leader ${g.leader}`, leaderLine(g.id), () => void gymTeam(g.type, g.ring).then((team) =>
           startBattle({
@@ -280,6 +284,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
               beatenGyms.current.add(id)
               const pos = handleRef.current!.getPos()
               const spot = nextRingSpot(pos.x, pos.y, g.ring)
+              void music.playSfx('fld:22') // the lift up to the next ring
               handleRef.current?.teleport(spot.x, spot.y)
               say(`You beat ${g.leader}! You were taken to ring ${g.ring + 1}.`)
             },
@@ -296,6 +301,8 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
         say('You found: ' + Object.entries(items).map(([k, n]) => `${ITEMS[k]?.name ?? k} x${n}`).join(', '))
       },
       onPushed: (_x, _y, r) => say(`The ground crumbled — you were pushed to ring ${r}!`),
+      onAlert: () => { void music.playSfx('fld:07') }, // a trainer noticed you
+      onBump: () => { void music.playSfx('fld:WALL_HIT') },
       onNpcSpotted: (npcId) => {
         if (defeatedNpcs.current.has(npcId) || busy.current || talking.current || busyNpcs.current.has(npcId)) return
         const npc = world.npcs.find((n) => n.id === npcId)
@@ -393,7 +400,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
       {!battle && !royale && (
         <div className="hud-practice panel" style={hudFrame ?? undefined}>
           <small>Practice tools</small>
-          <button onClick={() => setTrainer({ ...trainer, team: trainer.team.map((m) => ({ ...m, hp: maxHp(m) })) })}>Heal team</button>
+          <button onClick={() => { void music.heal(); setTrainer({ ...trainer, team: trainer.team.map((m) => ({ ...m, hp: maxHp(m) })) }) }}>Heal team</button>
         </div>
       )}
 

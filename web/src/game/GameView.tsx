@@ -29,6 +29,10 @@ export interface GameEvents {
   /** the island pushed the player to a new place */
   onPushed?: (x: number, y: number, ring: number) => void
   onNpcSpotted?: (npcId: string) => void
+  /** a trainer just noticed the player (the "!" appears) */
+  onAlert?: () => void
+  /** the player pushed against something that blocks the way (a wall, a character ...) */
+  onBump?: () => void
   /** button A pressed in front of a character: talk to it */
   onNpcTalk?: (npcId: string) => void
 }

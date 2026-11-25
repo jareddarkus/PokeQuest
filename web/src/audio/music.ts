@@ -61,7 +61,7 @@ class MusicManager {
   }
 
   /** Plays a short sound once: 'se:select', 'se:hit', 'mv:52' (the sound of a move), 'cry:6' (a Pokémon's cry), or a jingle like 'win'. */
-  async playSfx(key: string) {
+  async playSfx(key: string, then?: () => void) {
     if (!this.enabled || this.sfxVolume <= 0.001) return
     try {
       const ctx = this.ensure()
@@ -71,11 +71,14 @@ class MusicManager {
       if (!info) return
       const [seq, bank, ...waves] = await Promise.all([this.file(info.seq), this.file(info.bank), ...info.waves.map((w) => (w >= 0 ? this.file(w) : Promise.resolve(null)))])
       if (!seq || !bank) return
-      const p = new SongPlayer(ctx, this.sfx, seq, bank, waves, info.vol, false)
+      const p = new SongPlayer(ctx, this.sfx, seq, bank, waves, info.vol, false, then)
       p.start()
       window.setTimeout(() => p.stop(0.3), key.startsWith('cry:') ? 3500 : 6000) // a safety stop
     } catch { /* sounds are optional */ }
   }
+
+  /** The healing sound of the game: one sound, then the next one right after it. */
+  heal() { return this.playSfx('be:9', () => { void this.playSfx('be:14') }) }
 
   cry(dex: number) { return this.playSfx(`cry:${dex}`) }
 

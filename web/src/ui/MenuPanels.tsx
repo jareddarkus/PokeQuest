@@ -18,6 +18,7 @@ import { abilityDesc, useLang, CATEGORY } from '../i18n'
 import { moveFacts, moveGameText } from '../data/moveText'
 import BagScreen from './BagScreen'
 import { useUiUrl } from './CmdButton'
+import { music } from '../audio/music'
 
 interface PanelProps {
   trainer: Trainer
@@ -240,10 +241,10 @@ export function BagPanel({ trainer, setTrainer, onClose, onMessage }: PanelProps
     let msg = ''
     if (def.kind === 'heal') {
       if (m.hp <= 0 || m.hp >= maxHp(m)) { onMessage('It would have no effect.'); return }
-      upd = healMon(m, def.heal ?? 0); msg = `${m.species} was healed.`
+      upd = healMon(m, def.heal ?? 0); msg = `${m.species} was healed.`; void music.heal()
     } else if (def.kind === 'revive') {
       if (m.hp > 0) { onMessage('It would have no effect.'); return }
-      upd = reviveMon(m, def.heal ?? 0.5); msg = `${m.species} was revived!`
+      upd = reviveMon(m, def.heal ?? 0.5); msg = `${m.species} was revived!`; void music.heal()
     } else if (def.kind === 'vitamin') {
       const r = useVitamin(m, def.stat!)
       if (!r) { onMessage('It would have no effect.'); return }

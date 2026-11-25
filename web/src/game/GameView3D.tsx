@@ -515,6 +515,8 @@ export default function GameView3D(props: Props) {
     const npcAt = (x: number, y: number) =>
       npcs.some((n) => !n.defeated && ((n.x === x && n.y === y) || (n.moving > 0 && Math.round(n.fx) === x && Math.round(n.fy) === y)))
 
+    let lastBump = 0
+    const now0 = () => performance.now()
     const tryStep = (d: Dir, elapsed: number | null) => {
       me.dir = d
       const nx = me.x + DX[d]
@@ -523,7 +525,7 @@ export default function GameView3D(props: Props) {
         if (tileAt(world, nx, ny) === T.GymDoor) {
           const g = world.gyms.find((q) => q.doorX === nx && q.doorY === ny)
           if (g) propsRef.current.events.onGym?.(g.id)
-        }
+        } else if (now0() - lastBump > 380) { lastBump = now0(); propsRef.current.events.onBump?.() }
         return
       }
       // the follower steps onto the tile you leave (from wherever it is right now)
@@ -642,7 +644,7 @@ export default function GameView3D(props: Props) {
               if (!isWalkable(world, sx, sy) && tileAt(world, sx, sy) !== T.GymDoor) break
               if (sx === me.x && sy === me.y && me.t >= 1 && !alert && p.canBattle !== false && !busyMap.has(n.spec.id)) { // (trainers leave you alone when none of your Pokémon can fight)
                 const em = owEmote(15) // the game's own "!" bubble
-                if (em && bubble) { alert = { n, t: 0.9 }; bubble.visible = true; break }
+                if (em && bubble) { alert = { n, t: 0.9 }; bubble.visible = true; p.events.onAlert?.(); break }
                 p.events.onNpcSpotted?.(n.spec.id)
                 break
               }
