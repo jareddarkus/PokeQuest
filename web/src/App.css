@@ -13,7 +13,8 @@ body { margin: 0; background: #0b140e; color: var(--ui-text); font-family: var(-
 .fullscreen { position: fixed; inset: 0; }
 .fullscreen.center { display: grid; place-items: center; }
 .fullscreen.scroll { overflow-y: auto; }
-.menu-bg { background: #0e1a12 radial-gradient(circle at 50% 30%, #25402c, #0b140e 70%); }
+.menu-bg { background: transparent; }
+body { background: #0e1a12 radial-gradient(circle at 50% 30%, #25402c, #0b140e 70%) fixed; min-height: 100vh; }
 
 .panel { background: var(--ui-bg); border: 1px solid var(--ui-line); border-radius: 12px; backdrop-filter: blur(4px); color: var(--ui-text); }
 .card { display: flex; flex-direction: column; gap: 14px; width: min(360px, 90vw); padding: 28px; }

@@ -232,3 +232,9 @@ Next ideas if this is picked up again: (1) the "!" emote for trainers spotting t
 - The 3D dragon of the White 2 title screen is in `a/1/5/8`: White Kyurem = files 454-460 (`title_w_01` model 455 + skeleton animation 454, `title_w_02` 457 / 456, `title_w_03` 459 / 458 / texture animation 460), Black Kyurem = 446-452 (`title_b_*`). The game file has NO Zekrom body model (the only Zekrom model, `a/1/1/6` file 250 `zekuromu_ci_a`, is just the electricity effect balls).
 - Our model reader (`rom/nitro.ts` `readModels`) shows these as degenerate slivers: the models are SKINNED (bones). Needed: the model's render commands (SBC: NODE / MTX restore / NODEMIX blend with weights) and the matrix-restore command (0x14) in the display lists, using the bind pose (or frame 0 of the BCA0 skeleton animation), then a slow spin. Dev viewer: `?btlview&narc=a/1/5/8&stage=455&cz=5&cy=0.6&ty=0.4&fov=60&wire`.
 - Rule to keep: the model must be read from the player's own game file in the browser (never committed or hosted), so it can only appear after the game file has been imported; one small component, easy to remove.
+
+## Title-screen dragon (White Kyurem)
+- White 2's title-screen dragon is **White Kyurem** (Zekrom is not in the file). Model + animation come from archive `a/1/5/8` (files 455 / 454 for White 2, 447 / 446 for Black 2), read in `rom/titleDragon.ts`, saved at import as `title:model` / `title:anim` (`rom/store.ts`, `VERSION` 37).
+- `rom/nitro.ts` reads the skeleton (`readObjects`, `readPose`, `poseFrameCount`, matrix-stack restore in display lists) so the model is posed from its BCA0 animation.
+- `ui/TitleDragon.tsx` draws it with three.js on the login page and main menu (transparent, spinning, animation frames baked in the background, `pointer-events: none`). `?nodragon` turns it off.
+- Only appears after the player imports their own game file. Remove it by deleting `ui/TitleDragon.tsx` and its two uses in `App.tsx`.

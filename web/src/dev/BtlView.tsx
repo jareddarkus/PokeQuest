@@ -4,6 +4,7 @@ import * as THREE from 'three'
 import { devRomSource } from '../rom/devSource'
 import { NdsFile, parseNarc } from '../rom/nds'
 import { buildModelObject, readModels, readTexFile } from '../rom/mapModel'
+import { readPose } from '../rom/nitro'
 
 export default function BtlView() {
   const ref = useRef<HTMLDivElement>(null)
@@ -25,7 +26,8 @@ export default function BtlView() {
         const idx = q.get(key)
         if (idx === null) continue
         const raw = files[Number(idx)]
-        const model = readModels(raw)[0]
+        const pose = q.has('bca') ? readPose(files[Number(q.get('bca'))], Number(q.get('frame') ?? 0)) : null
+        const model = readModels(raw, pose)[0]
         const tex = readTexFile(raw)
         if (!model || !tex) { names.push(`${key} ${idx}: failed`); continue }
         const obj = buildModelObject(model, tex)

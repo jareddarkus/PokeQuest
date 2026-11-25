@@ -12,6 +12,7 @@ import { EMOTE_NARC, OVERWORLD_NARC, decodeEmotes, decodeFieldBall, decodeOverwo
 import { ICON_NARC, decodeIcons } from './icons'
 import { FX_NARC, decodeFx } from './fx'
 import { decodeHpBoxes } from './hpBox'
+import { TITLE_NARC, titleFiles } from './titleDragon'
 import { BAG_NARC, BOX_NARC, PARTY_NARC, PC_NARC, SUMMARY_NARC, decodeScreens } from './screens'
 import { COMMAND_NARC, decodeCommandUi } from './commandUi'
 import { MENU_NARC, decodeMenuUi } from './menuUi'
@@ -89,7 +90,7 @@ export async function loadOverworldSprites(): Promise<void> {
   } catch { /* the game falls back to the drawn characters */ }
 }
 
-const VERSION = 36 // 36 = ... + Elixir icon;  35 = ... + no placeholder characters;  34 = ... + message frames;  33 = ... + PC wallpapers;  32 = ... + party panels, summary pages;  31 = ... + Bag and Summary backgrounds;  30 = ... + HP boxes;  29 = ... + potion/vitamin colours;  28 = ... + move-effect shapes;  27 = ... + all item icons by file;  26 = ... + item ball;  25 = ... + running pictures;  24 = ... + water animation data;  23 = ... + sound effects and cries;  22 = ... + menu backdrops;  21 = ... + music;  20 = gym buildings;  19 = buildings fixed;  18 = ... + buildings;  17 = ... + emote bubbles;  16 = ... + start menu art;  15 = battle buttons rebuilt;  14 = ... + battle command buttons;  13 = ... + menu icons;  12 = ... + walking characters;  11 = ... + the game's own trainer colours
+const VERSION = 37 // 37 = ... + title dragon;  36 = ... + Elixir icon;  35 = ... + no placeholder characters;  34 = ... + message frames;  33 = ... + PC wallpapers;  32 = ... + party panels, summary pages;  31 = ... + Bag and Summary backgrounds;  30 = ... + HP boxes;  29 = ... + potion/vitamin colours;  28 = ... + move-effect shapes;  27 = ... + all item icons by file;  26 = ... + item ball;  25 = ... + running pictures;  24 = ... + water animation data;  23 = ... + sound effects and cries;  22 = ... + menu backdrops;  21 = ... + music;  20 = gym buildings;  19 = buildings fixed;  18 = ... + buildings;  17 = ... + emote bubbles;  16 = ... + start menu art;  15 = battle buttons rebuilt;  14 = ... + battle command buttons;  13 = ... + menu icons;  12 = ... + walking characters;  11 = ... + the game's own trainer colours
 
 let colorsApplied = false
 /** Makes the colour choices of the character maker use the colours the game really uses (snaps each to the nearest real one). */
@@ -166,6 +167,10 @@ export async function importRom(file: RomSource, onProgress: (text: string, frac
   await put('emote:list', await decodeEmotes(parseNarc(await nds.get(EMOTE_NARC)), (i, b) => put(`emote:${i}`, b)))
   onProgress('Reading the move effects…', 0.9843)
   try { await decodeFx(await nds.get(FX_NARC), (name, b) => put(`ui:fx:${name}`, b)) } catch { /* the battle uses plain flashes */ }
+  try { // the 3D dragon of the title screen (two small files: the model and its skeleton animation)
+    const t = titleFiles(code)
+    if (t) { const tf = parseNarc(await nds.get(TITLE_NARC)); await put('title:model', new Blob([new Uint8Array(tf[t.model])])); await put('title:anim', new Blob([new Uint8Array(tf[t.anim])])) }
+  } catch { /* no dragon on the title screen */ }
   onProgress('Reading the music…', 0.9845)
   try { await put('music:index', await extractMusic(nds, (id, d) => put(`music:${id}`, d))) } catch { /* no sound archive: the game stays quiet */ }
   onProgress('Reading the island map…', 0.985)
@@ -306,4 +311,12 @@ export async function romUiUrl(name: string): Promise<string | null> {
   } catch {
     return null
   }
+}
+/** The files of the 3D dragon of the title screen, or null if the game file has none (or it was not imported). */
+export async function loadTitleFiles(): Promise<{ model: Uint8Array; anim: Uint8Array } | null> {
+  try {
+    const m = await get<Blob>('title:model'), a = await get<Blob>('title:anim')
+    if (!m || !a) return null
+    return { model: new Uint8Array(await m.arrayBuffer()), anim: new Uint8Array(await a.arrayBuffer()) }
+  } catch { return null }
 }

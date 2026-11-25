@@ -14,6 +14,7 @@ import { music } from './audio/music'
 import LobbyScreen from './ui/LobbyScreen'
 import type { MatchInfo } from './net/useLobby'
 import { setLang, startTranslator } from './i18n'
+import TitleDragon from './ui/TitleDragon'
 import './App.css'
 
 type Screen = 'menu' | 'customize' | 'practice' | 'lobby' | 'match'
@@ -113,7 +114,7 @@ export default function App() {
   const startMode = (mode: Screen) => setScreen(lookDone ? mode : 'customize')
 
   if (!ready) return null
-  if (!session && !guest) return <Login onGuest={() => setGuest(true)} />
+  if (!session && !guest) return <><TitleDragon /><Login onGuest={() => setGuest(true)} /></>
   if (rom === 'checking') return null
   if (rom === 'missing') return <RomGate onReady={() => setRom('ready')} />
 
@@ -144,6 +145,7 @@ export default function App() {
   }
   return (
     <>
+      <TitleDragon />
       <MainMenu
         username={username}
         onBattleRoyale={() => (username ? startMode('lobby') : alert('Log in with your account to play the Battle Royale with your friends. (The Practice Island works without an account.)'))}
