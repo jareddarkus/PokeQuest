@@ -16,7 +16,9 @@ const HpView = import.meta.env.DEV ? lazy(() => import('./dev/HpView')) : null
 const TransView = import.meta.env.DEV ? lazy(() => import('./dev/TransView')) : null
 const TrView = import.meta.env.DEV ? lazy(() => import('./dev/TrView')) : null
 const SfxTest = lazy(() => import('./dev/SfxTest'))
+const OwPeople = import.meta.env.DEV ? lazy(() => import('./dev/OwPeople')) : null
 const q = new URLSearchParams(location.search)
+const showOwPeople = import.meta.env.DEV && q.has('owpeople')
 const showSfx = q.has('sfxtest')
 const showBld = import.meta.env.DEV && q.has('bldview')
 const showOw = import.meta.env.DEV && q.has('owview')
@@ -32,7 +34,11 @@ const showAnim = import.meta.env.DEV && q.has('animtest')
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    {showSfx ? (
+    {showOwPeople && OwPeople ? (
+      <Suspense fallback={null}>
+        <OwPeople />
+      </Suspense>
+    ) : showSfx ? (
       <Suspense fallback={null}>
         <SfxTest />
       </Suspense>

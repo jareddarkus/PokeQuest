@@ -18,6 +18,16 @@ export const NOT_PEOPLE = new Set(CREATURES)
 export const SWIM_SPRITES = [298, 301, 302]
 /** Every walking character that is a person (in file order). */
 export const owPeople = (): number[] => owList.filter((i) => !NOT_PEOPLE.has(i))
+/**
+ * The people who may walk the island as NPC trainers: the ordinary trainer-type characters of the game (files 14 - 145: kids, adults, workers, sailors, ...).
+ * Left out (checked by eye on the contact sheet, `?owpeople`): the two players (7, 10), police / pilots / doctors / the nurse (76 - 80, 102), the named
+ * gym leaders and story people (92, 94 - 100) and everything from file 147 on (named characters, Team Plasma bosses, legendary forms ...).
+ */
+const NOT_NPC_TRAINERS = new Set([76, 77, 78, 79, 80, 92, 94, 95, 96, 97, 98, 99, 100, 102])
+export const owTrainers = (): number[] => {
+  const t = owPeople().filter((i) => i >= 14 && i <= 145 && !NOT_NPC_TRAINERS.has(i))
+  return t.length ? t : owPeople()
+}
 export const hasOw = (idx: number | undefined) => idx !== undefined && strips.has(idx)
 
 const frameCache = new Map<string, HTMLCanvasElement>()

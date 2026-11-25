@@ -447,7 +447,7 @@ export default function GameView3D(props: Props) {
     // items lying on the ground are in the way: characters walking around never step on them
     const pickupAt = (x: number, y: number) => world.pickups.some((q) => q.x === x && q.y === y && !removed.has(q.id))
     const npcs: NpcRuntime[] = world.npcs.map((s) => {
-      const look = randomLook(s.look)
+      const look = randomLook(s.look, true) // NPC trainers only look like ordinary trainer-type characters
       if (s.swim) { const sw = SWIM_SPRITES.filter((i) => hasOw(i)); if (sw.length) look.sprite = sw[s.look % sw.length] }
       const sp = new THREE.Sprite(charMaterial(look, s.dir, 0))
       fit(sp)

@@ -119,7 +119,7 @@ export default function GameView(props: Props) {
     const removed = new Set<string>()
     const npcs: NpcRuntime[] = world.npcs.map((s) => ({
       spec: s, x: s.x, y: s.y, fx: s.x, fy: s.y, dir: s.dir, moving: 0, fromX: s.x, fromY: s.y,
-      timer: 1 + hash2(s.x, s.y, 3) * 3, defeated: false, frozen: false, look: randomLook(s.look),
+      timer: 1 + hash2(s.x, s.y, 3) * 3, defeated: false, frozen: false, look: randomLook(s.look, true),
     }))
     let paused = false
     const held = new Set<string>()
