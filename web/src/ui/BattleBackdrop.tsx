@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { BattleBackdrop3D, ENVIRONMENTS, type BattleLayout } from '../rom/battleScene'
+import { sideLayout, lowerWidth } from './DsMenu'
 import { getBallModel, getBattleFiles } from '../rom/store'
 
 /** The 3D battle scenery from the player's game file. It tells the screen where the two platforms are. */
@@ -12,7 +13,7 @@ export default function BattleBackdrop({ env = 'grass', onLayout, sceneRef }: { 
     void Promise.all([getBattleFiles(), getBallModel()]).then(([files, ball]) => {
       if (!live || !files || !ref.current) return
       scene = new BattleBackdrop3D(ref.current, files, ENVIRONMENTS[env] ?? ENVIRONMENTS.grass, ball)
-      onResize = () => scene && onLayout(scene.layout())
+      onResize = () => { if (!scene) return; scene.reserveRight = sideLayout() ? lowerWidth() : 0; onLayout(scene.layout()) }
       scene.onFrame = onLayout
       if (sceneRef) sceneRef.current = scene
       onResize()

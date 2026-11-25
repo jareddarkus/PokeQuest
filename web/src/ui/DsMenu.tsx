@@ -19,6 +19,11 @@ export function dsScale(): number {
   return snap(Math.max(1, Math.min(byWidth, byHeight)))
 }
 
+/** Wide windows (desktop): the lower screen and the message log sit in the bottom right corner and the battle picture uses the rest of the window. */
+export function sideLayout(): boolean { return window.innerWidth >= 1000 && window.innerWidth / window.innerHeight >= 1.3 }
+/** The width of the lower screen in screen pixels. */
+export function lowerWidth(): number { return 256 * dsScale() + 6 }
+
 const recolored = new Map<string, string>()
 
 /** The game's move button picture comes with a few stray specks around it (pieces of the neighbouring pictures): keep only the biggest piece and trim the edges. */
@@ -136,6 +141,9 @@ function Corner({ S, flipX, flipY, style }: { S: number; flipX?: boolean; flipY?
   )
 }
 
+/** the grey shadow the game puts under the letters of the move buttons */
+const MOVE_SHADOW = '#787878'
+
 function MoveButton({ mv, x, y, S, selected, onSelect, onClick, onInfo }: { mv: MoveView; x: number; y: number; S: number; selected: boolean; onSelect: () => void; onClick: () => void; onInfo: (m: MoveView | null) => void }) {
   const timer = useRef<number | null>(null)
   const longPressed = useRef(false)
@@ -159,11 +167,11 @@ function MoveButton({ mv, x, y, S, selected, onSelect, onClick, onInfo }: { mv: 
     >
       {/* the name in the middle (main font), below it: the type label, "PP" and the numbers on the right (positions measured on the real game) */}
       <span style={{ position: 'absolute', left: 0, right: 0, top: 5 * S, display: 'flex', justifyContent: 'center' }}>
-        <FontText text={nameOf(mv.name)} font={0} k={S} color="#ffffff" shadow="#202028" align="center" />
+        <FontText text={nameOf(mv.name)} font={0} k={S} color="#ffffff" shadow={MOVE_SHADOW} align="center" />
       </span>
       <span style={{ position: 'absolute', left: 17 * S, top: 20 * S, lineHeight: 0 }}><TypePlate type={mv.type} scale={S} /></span>
-      <span style={{ position: 'absolute', left: 51 * S, top: 22 * S }}><FontText text="PP" font={2} k={S} color="#ffffff" shadow="#202028" /></span>
-      <span style={{ position: 'absolute', right: 22 * S, top: 20 * S }}><FontText text={pp} font={0} k={S} color="#ffffff" shadow="#202028" align="right" /></span>
+      <span style={{ position: 'absolute', left: 51 * S, top: 20 * S }}><FontText text="PP" font={0} k={S} color="#ffffff" shadow={MOVE_SHADOW} /></span>
+      <span style={{ position: 'absolute', right: 22 * S, top: 20 * S }}><FontText text={pp} font={0} k={S} color="#ffffff" shadow={MOVE_SHADOW} align="right" /></span>
     </button>
     {selected && !off && (
       <>
@@ -302,23 +310,39 @@ export function MoveScreen({ S, moves, party, onMove, onBack }: { S: number; mov
   )
 }
 
-/** What a move does: type, kind, power, accuracy, PP and its description (shown while the mouse is over it, or after a long press). */
+/** What a move does, in a clean grid: name + type, then category / power / accuracy / PP, then what it does and what the game says about it. */
 function MoveInfoCard({ mv, S }: { mv: MoveView; S: number }) {
   const lang = useLang()
+  const es = lang === 'es'
   const m = Dex.moves.get(mv.id)
   const facts = moveFacts(mv.name, lang)
   const game = moveGameText(mv.name, lang)
-  const W = Math.floor((256 * S - 14 * S) / S)
+  const W = Math.floor((256 * S - 16 * S) / S)
+  const cells: Array<[string, string]> = [
+    [es ? 'Categoría' : 'Category', es ? CATEGORY[m.category] ?? m.category : m.category],
+    [es ? 'Potencia' : 'Power', m.basePower ? String(m.basePower) : '—'],
+    [es ? 'Precisión' : 'Accuracy', m.accuracy === true ? '—' : `${m.accuracy}%`],
+    ['PP', `${mv.pp}/${mv.maxpp}`],
+  ]
+  const line = '1px solid rgba(255,255,255,.18)'
   return (
-    <div style={{ position: 'absolute', left: 0, bottom: '100%', marginBottom: 6, width: 256 * S, padding: `${4 * S}px ${6 * S}px`, boxSizing: 'border-box', maxHeight: 170 * S, overflow: 'hidden', background: 'rgba(16,18,26,.94)', border: '2px solid rgba(255,255,255,.7)', borderRadius: 6, color: '#fff', zIndex: 40, pointerEvents: 'none' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 5 * S, marginBottom: 2 * S }}>
-        <FontText text={nameOf(mv.name)} font={0} k={S} />
-        <TypePlate type={mv.type} scale={S * 1.05} />
-        <FontText text={lang === 'es' ? CATEGORY[m.category] ?? m.category : m.category} font={1} k={S} />
-        <span style={{ marginLeft: 'auto' }}><FontText text={`${lang === 'es' ? 'Potencia' : 'Power'} ${m.basePower || '—'} · ${lang === 'es' ? 'Precisión' : 'Accuracy'} ${m.accuracy === true ? '—' : m.accuracy}`} font={1} k={S} align="right" /></span>
+    <div style={{ position: 'absolute', left: 0, bottom: '100%', width: 256 * S + 6, boxSizing: 'border-box', background: 'rgba(14,16,24,.97)', border: '2px solid rgba(255,255,255,.55)', color: '#fff', zIndex: 40, pointerEvents: 'none' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: `${4 * S}px ${6 * S}px`, borderBottom: line }}>
+        <FontText text={nameOf(mv.name)} font={0} k={S} color="#ffffff" shadow={MOVE_SHADOW} />
+        <TypePlate type={mv.type} scale={S} />
       </div>
-      <FontText text={facts} font={1} k={S} maxWidth={W} color="#ffffff" />
-      {game && <div style={{ marginTop: 3 * S, borderTop: '1px solid rgba(255,255,255,.2)', paddingTop: 3 * S }}><FontText text={game} font={1} k={S} maxWidth={W} color="#b8b8c8" shadow="#40404c" /></div>}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', borderBottom: line }}>
+        {cells.map(([label, value], i) => (
+          <div key={label} style={{ padding: `${3 * S}px ${5 * S}px`, borderLeft: i ? line : 'none', display: 'flex', flexDirection: 'column', gap: S }}>
+            <FontText text={label} font={1} k={S} color="#a8b0c8" shadow="#30343c" />
+            <FontText text={value} font={0} k={S} color="#ffffff" shadow={MOVE_SHADOW} />
+          </div>
+        ))}
+      </div>
+      <div style={{ padding: `${4 * S}px ${6 * S}px`, display: 'flex', flexDirection: 'column', gap: 3 * S }}>
+        {facts && <FontText text={facts} font={2} k={S} maxWidth={W} color="#ffffff" shadow={MOVE_SHADOW} />}
+        {game && <div style={{ borderTop: line, paddingTop: 3 * S }}><FontText text={game} font={1} k={S} maxWidth={W} color="#b8b8c8" shadow="#40404c" /></div>}
+      </div>
     </div>
   )
 }

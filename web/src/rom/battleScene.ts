@@ -59,6 +59,8 @@ export class BattleBackdrop3D {
   // a camera move: linear steps (the game's own: `frames` steps, one every `wait + 1` frames, the steps get half as long after `brake` steps)
   private move: { posStep: THREE.Vector3; targetStep: THREE.Vector3; left: number; every: number; tick: number; brake: number; done: () => void } | null = null
   private frame = { l: 0, t: 0, w: 1, h: 1, b: 0 }
+  /** pixels at the right edge of the window that the page covers with the lower screen (the picture is placed to the left of them) */
+  reserveRight = 0
   private lastMs = 0
   private acc = 0
   private moving = 0 // frames of camera motion left to report to the page
@@ -216,11 +218,14 @@ export class BattleBackdrop3D {
     const w = this.mount.clientWidth, h = this.mount.clientHeight
     this.renderer.setSize(w, h, false)
     // The game's 4:3 screen fills the window (as much as its height / 98% of its width allow); the lower screen and the log lie on top of its bottom part.
-    const fh = Math.min(h, w * 0.735), fw = (fh * 4) / 3
-    this.frame = { l: (w - fw) / 2, t: 0, w: fw, h: fh, b: h - fh }
+    // (wide windows: the lower screen sits in the right bottom corner, so the picture uses the part of the window to its left)
+    const aw = w - this.reserveRight
+    const fh = this.reserveRight > 0 ? Math.min(h, aw * 0.75) : Math.min(h, w * 0.735), fw = (fh * 4) / 3
+    const fl = (aw - fw) / 2, ft = this.reserveRight > 0 ? (h - fh) / 2 : 0
+    this.frame = { l: fl, t: ft, w: fw, h: fh, b: h - ft - fh }
     this.camera.aspect = 4 / 3
     this.camera.fov = FOV
-    this.camera.setViewOffset(fw, fh, -(w - fw) / 2, 0, w, h)
+    this.camera.setViewOffset(fw, fh, -fl, -ft, w, h)
     this.camera.updateProjectionMatrix()
     this.applyCamera()
     return this.measure()

@@ -362,3 +362,10 @@ Seen in the recording but NOT done: the trainers' battle sprites (the foe traine
 - Red corner marks (14 x 13 px each) on the chosen move (the last used one at first; mouse hover / touch moves it).
 - Row of party balls shown on the move screen; the back button is at the bottom right.
 - The corner marks are drawn from a measurement of a picture of the real game, not read from the game file (the sprite was not found in the command archive).
+
+## Round 11
+- Desktop (wide windows): the lower screen and the log sit in the bottom right corner; the battle picture (4:3 frame) uses the rest of the window, so nothing is covered. Phones/tablets keep the stacked layout. Log is 40 DS px high.
+- Move buttons: all text in the main font with the game's grey shadow (#787878); "PP" in the same font.
+- Move info card: a grid (category / power / accuracy / PP), then what the move does, then the game's text. Type plates are cached so the card shows at once.
+- Spanish is Spain Spanish: names come from PokeAPI's es table as it was before its names were mixed with Latin American ones (Látigo, Rapidez, Amortiguador...); the live Showdown names only add what the table lacks.
+- Send-out (ball) follows the game's scripts (effect 0x234 for your Pokémon, 0x239 for a trainer's): ball picture = effect file 60 (Poké Ball), burst = effect file 6, landing = 325; sounds 1382 (throw), 1383 (opens), 1400 (landing); timings in frames (60/s). Not verified at full speed: the test pane runs animations slowly.

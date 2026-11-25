@@ -43,6 +43,8 @@ function applyShowdown(kind: 'moves' | 'abilities' | 'items' | 'pokedex', text: 
     const en = kind === 'moves' ? Dex.moves.get(id) : kind === 'abilities' ? Dex.abilities.get(id) : kind === 'items' ? Dex.items.get(id) : Dex.species.get(id)
     if (!en.exists || toId(en.name) !== id) continue
     const sp = m[2].replace(/\\"/g, '"')
+    // Spanish from Spain: the bundled table (the names of the games, from PokeAPI as it was before its names were mixed with Latin American ones) wins; the live names only add what the table lacks
+    if (kind !== 'pokedex' && (es as Record<string, Record<string, string>>)[kind]?.[en.name]) continue
     if (en.name.length > 2 && NAMES.get(en.name) !== sp) { NAMES.set(en.name, sp); n++ }
   }
   return n

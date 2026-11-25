@@ -376,7 +376,7 @@ button.big small { opacity: .7; font-size: .75rem; }
 .so-glow { position: absolute; left: 50%; bottom: 0; width: 150px; height: 150px; margin: 0 0 0 -75px; transform: translateY(-165%) scale(.1); border-radius: 50%; opacity: 0; background: radial-gradient(circle, #fffbe0 0%, rgba(255,226,120,.9) 28%, rgba(255,190,60,.35) 55%, rgba(255,190,60,0) 72%); animation: pq-glow .85s ease-out .25s forwards; }
 .so-beam { position: absolute; left: 50%; bottom: 0; width: 26px; height: 120px; margin-left: -13px; transform-origin: 50% 0; transform: translateY(-175%) scaleY(.1); opacity: 0; background: linear-gradient(rgba(255,244,190,.95), rgba(255,244,190,0)); clip-path: polygon(35% 0, 65% 0, 100% 100%, 0 100%); animation: pq-beam .8s ease-out .3s forwards; }
 .so-spark { position: absolute; left: 50%; bottom: 0; width: 6px; height: 6px; margin: 0 0 0 -3px; border-radius: 50%; background: #ffb050; opacity: 0; animation: pq-spark .8s ease-out .3s forwards; }
-.so-mon { transform-origin: 50% 100%; animation: pq-sendout .75s cubic-bezier(.4, 0, .9, .6) .4s backwards; }
+
 @keyframes pq-ball-hang { 0% { opacity: 0; transform: translateY(-260%); } 20% { opacity: 1; } 55% { opacity: 1; transform: translateY(-210%); } 100% { opacity: 0; transform: translateY(-210%); } }
 @keyframes pq-ball-from-l { 0% { opacity: 1; transform: translate(-220px, 60px); } 100% { opacity: 1; transform: translate(0, -210%); } }
 @keyframes pq-ball-from-r { 0% { opacity: 1; transform: translate(160px, -330%); } 100% { opacity: 1; transform: translate(0, -210%); } }
@@ -455,7 +455,8 @@ button.big small { opacity: .7; font-size: .75rem; }
 
 /* the way a Pokémon comes out of its ball (reference video): the Pokémon appears as a small white shape high above the platform inside a golden light with beams, grows, turns
    into colour and drops onto the platform; small rings of light fly around */
-.so-mon { transform-origin: 50% 100%; animation: pq-so-mon 1.55s linear backwards; }
+.so-mon { transform-origin: 50% 100%; position: relative; opacity: 0; }
+.so-white { position: absolute; left: 0; right: 0; bottom: 0; display: flex; justify-content: center; align-items: flex-end; filter: brightness(0) invert(1); pointer-events: none; opacity: 1; }
 @keyframes pq-so-mon {
   0% { transform: translateY(calc(var(--hv, 100px) * -1)) scale(.08); filter: brightness(12) saturate(0); opacity: 0; }
   8% { opacity: 1; }
@@ -477,7 +478,9 @@ button.big small { opacity: .7; font-size: .75rem; }
 
 /* the lower screen sits at the very bottom, the log box right above it, both the same width (256 DS pixels x S) */
 .battle-bottom { align-items: center; flex-direction: column !important; }
-.battle-band { width: calc(256 * var(--s)) !important; height: calc(44 * var(--s)) !important; padding: calc(9 * var(--s)) calc(8 * var(--s)) !important; }
+.battle-band { width: calc(256 * var(--s)) !important; height: calc(40 * var(--s)) !important; padding: calc(4 * var(--s)) calc(8 * var(--s)) !important; }
+/* wide windows: the log and the lower screen are in the bottom right corner */
+.fullscreen.battle.side .battle-bottom { left: auto; right: 0; margin: 0; width: calc(256 * var(--s) + 6px); }
 
 /* the picture of the top screen ends where the log box begins; your trainer's feet touch that border */
 .fullscreen.battle .stage-cam, .fullscreen.battle .foe-zone, .fullscreen.battle .me-zone, .fullscreen.battle .team-balls, .fullscreen.battle .tbs { bottom: var(--bottom-h, 0px) !important; inset: 0 0 var(--bottom-h, 0px) 0 !important; height: auto !important; overflow: hidden; }
@@ -488,7 +491,7 @@ button.big small { opacity: .7; font-size: .75rem; }
 .fullscreen.battle .stage-cam { inset: 0 !important; bottom: 0 !important; }
 
 /* the HP boxes / team balls belong to the game's 4:3 screen as it fits above the lower screen, in the middle of the window */
-.fullscreen.battle .foe-zone, .fullscreen.battle .me-zone, .fullscreen.battle .team-balls, .fullscreen.battle .tbs { inset: 0 var(--zone-l, 0px) var(--bottom-h, 0px) var(--zone-l, 0px) !important; width: auto !important; height: auto !important; overflow: visible !important; }
+.fullscreen.battle .foe-zone, .fullscreen.battle .me-zone, .fullscreen.battle .team-balls, .fullscreen.battle .tbs { inset: var(--zone-t, 0px) var(--zone-r, var(--zone-l, 0px)) var(--zone-b, var(--bottom-h, 0px)) var(--zone-l, 0px) !important; width: auto !important; height: auto !important; overflow: visible !important; }
 
 /* the progress bar shown whenever the page reads or builds something */
 .pq-progress { width: min(440px, 86vw); margin: 14px auto 4px; text-align: left; }

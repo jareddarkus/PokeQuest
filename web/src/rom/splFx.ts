@@ -99,7 +99,7 @@ export class SplFx {
    * Starts ONE effect of a file (`emitter` = which emitter of the file, or all of them) at a place (canvas pixels), optionally flying to another place.
    * `size` / `radius` / `life` are the script's scale factors. Resolves when the effect has faded out.
    */
-  emit(id: number, emitter: number | null, from: Pt, to: Pt | null, k: number, opts: { size?: number; radius?: number; life?: number; frames?: number; height?: number } = {}): Promise<void> {
+  emit(id: number, emitter: number | null, from: Pt, to: Pt | null, k: number, opts: { size?: number; radius?: number; life?: number; frames?: number; height?: number; maxFrames?: number } = {}): Promise<void> {
     if (!this.ready || !this.canvas) return Promise.resolve()
     const f = this.file(id)
     if (!f) return Promise.resolve()
@@ -113,7 +113,7 @@ export class SplFx {
       const at: [number, number, number] = [(start.x - origin.x) / k, -(start.y - origin.y) / k, 0]
       const o = { size: opts.size, radius: opts.radius, life: opts.life }
       if (emitter === null) sys.spawnAll(at, undefined, o); else sys.spawn(emitter, at, undefined, o)
-      this.sessions.push({ sys, origin, k, track, frame: 0, done: resolve, maxFrames: 240 })
+      this.sessions.push({ sys, origin, k, track, frame: 0, done: resolve, maxFrames: opts.maxFrames ?? 240 })
       this.run()
     })
   }
