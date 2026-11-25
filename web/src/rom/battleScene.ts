@@ -18,7 +18,7 @@ const FOE_PLATFORM = { x: 0.52, z: -0.62, scale: 0.85 }
 const ME_PLATFORM = { x: -0.4, z: 0.3, scale: 1.12 }
 // the opening shot (reference video): the camera starts low and close to the ground beside the far platform and flies back to the usual view in about 0.9 s
 const INTRO = { pos: [0.1, 0.22, -0.05], target: [0.5, 0.16, -0.62] } as const
-const CAMERA = { fov: 33, pos: [0, 0.56, 1.5], target: [0, 0.22, -0.2] } as const
+const CAMERA = { fov: 28, pos: [0, 0.56, 1.5], target: [0, 0.22, -0.2] } as const
 
 export interface BattleLayout {
   foe: { x: number; y: number; w: number }

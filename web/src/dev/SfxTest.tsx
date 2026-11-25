@@ -3,20 +3,23 @@
 import { useEffect, useState } from 'react'
 import { loadMusicIndex } from '../rom/store'
 import { music } from '../audio/music'
+import RomGate from '../ui/RomGate'
 
 const STAR_FLD = new Set([10, 12, 13, 14, 22, 49, 50, 55, 64]) // short, noise-like (checked by analysis): likely candidates for the grass rustle
 
 export default function SfxTest() {
   const [keys, setKeys] = useState<string[] | null>(null)
   const [last, setLast] = useState('')
-  useEffect(() => { void loadMusicIndex().then((i) => setKeys(i ? Object.keys(i).filter((k) => k.startsWith('fld:') || k.startsWith('be:')) : [])) }, [])
+  const load = () => { void loadMusicIndex().then((i) => setKeys(i ? Object.keys(i).filter((k) => k.startsWith('fld:') || k.startsWith('be:')) : [])) }
+  useEffect(load, [])
   const num = (k: string) => k.split(':')[1]
   const sorted = (p: string) => (keys ?? []).filter((k) => k.startsWith(p)).sort((a, b) => (Number(num(a)) || 999) - (Number(num(b)) || 999) || a.localeCompare(b))
   const btn = (k: string, star = false) => (
-    <button key={k} onClick={() => { setLast(k); void music.playSfx(k) }} style={{ margin: 3, padding: '8px 12px', fontSize: 16, background: star ? '#ffe28a' : '#fff', border: '1px solid #444', borderRadius: 6, cursor: 'pointer' }}>
+    <button key={k} onClick={() => { setLast(k); void music.playSfx(k) }} style={{ margin: 3, padding: '8px 12px', fontSize: 16, background: star ? '#ffe28a' : '#fff', color: '#111', fontWeight: 700, minWidth: 48, border: '1px solid #444', borderRadius: 6, cursor: 'pointer' }}>
       {star ? '★ ' : ''}{num(k)}
     </button>
   )
+  if (keys !== null && keys.length === 0) return <RomGate onReady={load} /> // the sounds come from the game file: pick it again (this version stores the sounds)
   return (
     <div style={{ padding: 16, maxWidth: 900, margin: '0 auto', color: '#111', background: '#eee', minHeight: '100vh', font: '16px system-ui' }}>
       <h2>PokeQuest — sound tester</h2>
