@@ -1,6 +1,8 @@
 // A few new Pokémon (generation 8 / 9) have no pixel-art picture anywhere yet; the only pictures are 3D renders, which look out of place next to the others.
 // For those few we turn the 3D render into pixel art: shrink it to a small size, use only about 18 colours, hard edges and a dark outline.
 // (Pictures come from the open PokeAPI sprite collection while playing; nothing is stored by us.)
+import { Dex } from '@pkmn/sim'
+
 export const NO_PIXEL_ART = new Set([922, 933, 940, 949, 953, 954, 981, 1012, 1017, 1023])
 
 const urls = new Map<string, string>() // `${dex}|${shiny}` -> picture (96 x 96 PNG)
@@ -43,7 +45,8 @@ async function make(dex: number, shiny: boolean): Promise<void> {
   for (let y = 0; y < c.height; y++) for (let x = 0; x < c.width; x++) if (d[(y * c.width + x) * 4 + 3] > 20) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y }
   if (x1 < 0) return
   const w = x1 - x0 + 1, h = y1 - y0 + 1
-  const target = 66 // the biggest side of the little picture, in pixels (the game's own pictures are about this big)
+  const height = Dex.species.all().find((sp) => sp.num === dex && !sp.forme)?.heightm ?? 1
+  const target = Math.round(Math.max(30, Math.min(80, 24 + 38 * Math.sqrt(height)))) // the biggest side of the little picture (the game's own pictures: small Pokémon ~40 pixels, big ones ~80)
   const s = Math.min(target / w, target / h)
   const sw = Math.max(4, Math.round(w * s)), sh = Math.max(4, Math.round(h * s))
   const small = document.createElement('canvas'); small.width = sw; small.height = sh
