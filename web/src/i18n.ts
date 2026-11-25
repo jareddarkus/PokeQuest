@@ -11,6 +11,8 @@ export type Lang = 'es' | 'en'
 let lang: Lang = 'es'
 const listeners = new Set<() => void>()
 export const getLang = () => lang
+/** A battle message in the language of the page (the typewriter needs the whole sentence translated before it starts typing). */
+export const trText = (s: string): string => (lang === 'es' ? trSentence(s) : s)
 export function setLang(l: Lang) { if (l === lang) return; lang = l; retranslateAll(); listeners.forEach((f) => f()) }
 
 // ---------------------------------------------------------------- names
@@ -29,6 +31,7 @@ const translateNames = (s: string) => s.replace(nameRe, (m) => NAMES.get(m) ?? m
 export const nameOf = (en: string) => (lang === 'es' ? NAMES.get(en) ?? en : en)
 
 // ---------------------------------------------------------------- sentences
+const STAT_ES: Record<string, string> = { Attack: 'Ataque', Defense: 'Defensa', 'Sp. Atk': 'Ataque Especial', 'Sp. Def': 'Defensa Especial', Speed: 'Velocidad', accuracy: 'Precisión', evasiveness: 'Evasión' }
 const STAT_WORDS: Record<string, string> = { atk: 'Ataque', def: 'Defensa', spa: 'Ataque Especial', spd: 'Defensa Especial', spe: 'Velocidad', accuracy: 'Precisión', evasion: 'Evasión' }
 const DICT: Record<string, string> = {
   'HP': 'PS', 'Lv': 'Nv', 'Lv.': 'Nv.', 'Exp': 'Exp.',
@@ -97,7 +100,7 @@ const DICT: Record<string, string> = {
   'Press Ready. The match starts when everybody is ready.': 'Pulsa Listo. La partida empieza cuando todos estén listos.',
   'Log in with your account to chat with your friends. (Chat is off when you play without an account.)': 'Inicia sesión para chatear con tus amigos. (El chat está desactivado si juegas sin cuenta.)',
   // settings, customizer, starter
-  'Zoom (left = see more of the map)': 'Zoom (izquierda = ver más mapa)', 'Music volume': 'Volumen de la música', 'Sound effects volume': 'Volumen de los efectos', 'On-screen D-pad (for phones)': 'Cruceta en pantalla (para móviles)',
+  'Zoom (left = see more of the map)': 'Zoom (izquierda = ver más mapa)', 'Music volume': 'Volumen de la música', 'Text speed': 'Velocidad del texto', 'Slow': 'Lenta', 'Fast': 'Rápida', 'Instant': 'Instantánea', 'Sound effects volume': 'Volumen de los efectos', 'On-screen D-pad (for phones)': 'Cruceta en pantalla (para móviles)',
   'D-pad side': 'Lado de la cruceta', 'Left': 'Izquierda', 'Right': 'Derecha', 'Customize character': 'Personalizar personaje', 'Language': 'Idioma',
   'Pick your character': 'Elige tu personaje', 'Your trainer': 'Tu entrenador', 'Randomize': 'Al azar', 'Done': 'Hecho', 'Skin': 'Piel', 'Hair': 'Pelo', 'Eyes': 'Ojos', 'Top': 'Parte de arriba', 'Bottom': 'Parte de abajo', 'Shoes': 'Zapatos', 'Hat': 'Gorro', 'Front': 'Frente',
   'Choose your starter': 'Elige a tu inicial', 'Search by name or number': 'Buscar por nombre o número', 'Type a message…': 'Escribe un mensaje…',
@@ -110,6 +113,7 @@ const PATTERNS: Array<[RegExp, string | ((...m: string[]) => string)]> = [
   [/^(.+) was poisoned!$/, '¡$1 ha sido envenenado!'], [/^(.+) was badly poisoned!$/, '¡$1 ha sido gravemente envenenado!'], [/^(.+) was frozen solid!$/, '¡$1 ha sido congelado!'],
   [/^(.+) has a status!$/, '¡$1 tiene un estado alterado!'],
   [/^(.+)'s (\w+) rose!$/, (_m, a, b) => `¡${STAT_WORDS[b] ?? b} de ${a} ha subido!`], [/^(.+)'s (\w+) fell!$/, (_m, a, b) => `¡${STAT_WORDS[b] ?? b} de ${a} ha bajado!`],
+  [/^(.+)'s (Attack|Defense|Sp\. Atk|Sp\. Def|Speed|accuracy|evasiveness) (rose|fell)( sharply| drastically| harshly| severely)?!$/, (_m, a, b, c, d) => `¡${STAT_ES[b] ?? b} de ${a} ${c === 'rose' ? 'ha subido' : 'ha bajado'}${d ? (/drastically|severely/.test(d) ? ' muchísimo' : ' mucho') : ''}!`], [/^(.+)'s stats were already (.+)!$/, '¡Las estadísticas de $1 ya no pueden cambiar más!'],
   [/^What will (.+) do\?$/, '¿Qué hará $1?'], [/^You threw a (.+)!$/, '¡Has lanzado una $1!'], [/^You used a (.+)!$/, '¡Has usado $1!'],
   [/^Gotcha! (.+) was caught!$/, '¡Ya está! ¡$1 ha sido atrapado!'], [/^You defeated (.+)!$/, '¡Has derrotado a $1!'],
   [/^(.+) gained (\d+) Exp\. Points!$/, '¡$1 ha ganado $2 puntos de experiencia!'], [/^(.+) grew to Lv\. (\d+)!$/, '¡$1 ha subido al nivel $2!'], [/^(.+) grew to level (\d+)!$/, '¡$1 ha subido al nivel $2!'],

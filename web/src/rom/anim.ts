@@ -192,6 +192,8 @@ export interface AnimatedSprite {
   mismatch: number
   /** which drawing order was chosen: [objects inside a part reversed, parts reversed] */
   order: [boolean, boolean]
+  /** for checking: the length of the pose timeline and of the longest part sequence */
+  info?: { timeline: number; longest: number }
 }
 
 interface PartInfo { cell: PartCell; anim: Seq; node: Node; rest: [number, number] }
@@ -288,13 +290,18 @@ export function buildAnimatedSprite(files: Uint8Array[], base: number, front: bo
         }).filter((p): p is PartInfo => p !== null)
         return reverseParts ? list.reverse() : list
       }
-      const draw = (ctx: CanvasRenderingContext2D, t: number) => {
+      // One round of the whole animation: as long as the pose timeline or its longest part sequence. Every pose starts its parts from their first picture
+      // (before, the parts kept running on one clock while the poses changed, so the second time the shell came out it started in the middle of its
+      // movement and seemed to be cut off).
+      const period = Math.max(total, ...parts.map((p) => p.anim.total), ...multi.flatMap((m) => m.map((n) => anims[n.anim]?.total ?? 1)))
+      const draw = (ctx: CanvasRenderingContext2D, t0: number) => {
+        const t = t0 % period
         let tt = t % total
         let mcIdx = 0
         for (const f of timeline.frames) { if (tt < f.dur) { mcIdx = f.idx; break } tt -= f.dur }
         ctx.imageSmoothingEnabled = false
         for (const p of partsFor(mcIdx)) {
-          const f = frameAt(p.anim, t)
+          const f = frameAt(p.anim, tt) // the part's own clock starts when its pose starts (so the shell movement always begins at its beginning, every time)
           const f0 = p.anim.frames[0]
           ctx.save()
           ctx.translate(Math.round(p.rest[0] + (f.tx - f0.tx)), Math.round(p.rest[1] + (f.ty - f0.ty)))
@@ -321,7 +328,7 @@ export function buildAnimatedSprite(files: Uint8Array[], base: number, front: bo
         }
         return bad / Math.max(1, stillCount)
       }
-      return { draw, measure, total }
+      return { draw, measure, total: period, timeline: total, longest: Math.max(...multi.flatMap((m) => m.map((n) => anims[n.anim]?.total ?? 1))) }
     }
 
     let best: { v: [boolean, boolean]; m: number } | null = null
@@ -360,7 +367,7 @@ export function buildAnimatedSprite(files: Uint8Array[], base: number, front: bo
       }
       if (cur < bestM) { bestM = cur; final = make(best!.v[0], best!.v[1], ox, oy, adj) }
     }
-    return { size: 96, loopLength: final.total, draw: final.draw, mismatch: bestM, order: best!.v }
+    return { size: 96, loopLength: final.total, draw: final.draw, mismatch: bestM, order: best!.v, info: { timeline: final.timeline, longest: final.longest } }
   } catch {
     return null
   }

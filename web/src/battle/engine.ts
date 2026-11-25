@@ -4,6 +4,8 @@ import { maxHp, type Mon } from '../data/dex'
 
 export type Side = 'p1' | 'p2'
 
+const STAT_NAMES: Record<string, string> = { atk: 'Attack', def: 'Defense', spa: 'Sp. Atk', spd: 'Sp. Def', spe: 'Speed', accuracy: 'accuracy', evasion: 'evasiveness' }
+
 export type BattleEvent =
   | { kind: 'text'; text: string }
   | { kind: 'switch'; side: Side; uid: string; species: string; level: number; hp: number; maxHp: number; shiny: boolean }
@@ -11,6 +13,7 @@ export type BattleEvent =
   | { kind: 'faint'; side: Side; uid: string }
   | { kind: 'status'; side: Side; uid: string; status: string }
   | { kind: 'move'; side: Side; uid: string; move: string }
+  | { kind: 'stat'; side: Side; uid: string; amount: number }
   | { kind: 'turn'; n: number }
   | { kind: 'win'; side: Side | null }
 
@@ -188,8 +191,8 @@ export class BattleSession {
           const side = p[1].startsWith('p1') ? 'p1' : 'p2'
           const uid = this.nameOf(p[1])
           if (p[2] === EXTRA) break
+          ev.push({ kind: 'text', text: `${this.pretty(uid)} used ${p[2]}!` }) // the message first, then the move plays
           ev.push({ kind: 'move', side, uid, move: p[2] })
-          ev.push({ kind: 'text', text: `${this.pretty(uid)} used ${p[2]}!` })
           break
         }
         case '-damage': case '-heal': {
@@ -224,8 +227,16 @@ export class BattleSession {
           break
         }
         case '-curestatus': ev.push({ kind: 'status', side: p[1].startsWith('p1') ? 'p1' : 'p2', uid: this.nameOf(p[1]), status: '' }); break
-        case '-boost': ev.push({ kind: 'text', text: `${this.pretty(this.nameOf(p[1]))}'s ${p[2]} rose!` }); break
-        case '-unboost': ev.push({ kind: 'text', text: `${this.pretty(this.nameOf(p[1]))}'s ${p[2]} fell!` }); break
+        case '-boost': case '-unboost': {
+          const up = p[0] === '-boost'
+          const n = Math.max(1, Math.min(6, Number(p[3]) || 1))
+          const stat = STAT_NAMES[p[2]] ?? p[2]
+          const how = up ? (n === 1 ? '' : n === 2 ? ' sharply' : ' drastically') : (n === 1 ? '' : n === 2 ? ' harshly' : ' severely')
+          const uid = this.nameOf(p[1])
+          ev.push({ kind: 'text', text: `${this.pretty(uid)}'s ${stat} ${up ? 'rose' : 'fell'}${how}!` })
+          ev.push({ kind: 'stat', side: p[1].startsWith('p1') ? 'p1' : 'p2', uid, amount: up ? n : -n })
+          break
+        }
         case 'turn': this.turnCount = Number(p[1]); ev.push({ kind: 'turn', n: this.turnCount }); break
         case 'win': {
           this.ended = true

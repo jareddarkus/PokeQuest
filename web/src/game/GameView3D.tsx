@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import type { BuiltWorld } from '../rom/chunkWorld'
 import { drawCharacter, lookSprite, randomLook, type Look } from './character'
-import { owBall, owEmote, owFrame } from './ow'
+import { SWIM_SPRITES, hasOw, owBall, owEmote, owFrame } from './ow'
 import { GYM_MODELS } from '../rom/buildings'
 import { animatedTextures } from '../rom/mapModel'
 import { valueAt } from '../rom/texanim'
@@ -17,7 +17,7 @@ import { pixelDom } from '../ui/MonSprite'
 import type { AnimatedSprite } from '../rom/anim'
 import type { Settings } from './settings'
 import {
-  DX, DY, RING_INNER, SIZE, T, TYPE_COLOR, collapseRadius, dist, isWalkable, tileAt, type Dir, type NpcSpec, type World,
+  DX, DY, RING_INNER, SIZE, T, TYPE_COLOR, collapseRadius, dist, inBounds, isWalkable, tileAt, type Dir, type NpcSpec, type World,
 } from './world'
 
 interface Props {
@@ -310,6 +310,18 @@ export default function GameView3D(props: Props) {
       anim: null as AnimatedSprite | null, canvas: document.createElement('canvas'), tex: null as THREE.CanvasTexture | null,
       dom: null as { wrap: HTMLElement; w: number; h: number } | null,
     }
+    /** The follower never stands on the same tile as you: it takes a free tile beside you (or behind you when that is blocked). */
+    const followerSpot = (x: number, y: number, dir: Dir): { x: number; y: number } => {
+      const opposite = [3, 2, 1, 0][dir] as Dir
+      // beside you first (a picture right behind you would stand in front of your back on screen), then behind, then in front
+      const sides: Dir[] = dir === 0 || dir === 3 ? [1, 2] : [0, 3]
+      for (const d of [...sides, opposite, dir]) {
+        const nx = x + DX[d], ny = y + DY[d]
+        if (isWalkable(world, nx, ny) && !world.pickups.some((q) => q.x === nx && q.y === ny)) return { x: nx, y: ny }
+      }
+      return { x, y }
+    }
+    { const f0 = followerSpot(me.x, me.y, me.dir); fol.x = f0.x; fol.y = f0.y; fol.fromX = f0.x; fol.fromY = f0.y; fol.t = 1 }
     fol.canvas.width = 96; fol.canvas.height = 96
     fol.owCanvas.width = 32; fol.owCanvas.height = 32
     fol.sprite.visible = false
@@ -414,6 +426,7 @@ export default function GameView3D(props: Props) {
     const pickupAt = (x: number, y: number) => world.pickups.some((q) => q.x === x && q.y === y && !removed.has(q.id))
     const npcs: NpcRuntime[] = world.npcs.map((s) => {
       const look = randomLook(s.look)
+      if (s.swim) { const sw = SWIM_SPRITES.filter((i) => hasOw(i)); if (sw.length) look.sprite = sw[s.look % sw.length] }
       const sp = new THREE.Sprite(charMaterial(look, s.dir, 0))
       fit(sp)
       scene.add(sp)
@@ -425,7 +438,7 @@ export default function GameView3D(props: Props) {
     const held = new Set<string>()
 
     const handle: GameHandle = {
-      teleport: (x, y) => { me.x = x; me.y = y; me.fromX = x; me.fromY = y; me.t = 1; fol.x = x; fol.y = y; fol.fromX = x; fol.fromY = y; fol.t = 1 },
+      teleport: (x, y) => { me.x = x; me.y = y; me.fromX = x; me.fromY = y; me.t = 1; const f1 = followerSpot(x, y, me.dir); fol.x = f1.x; fol.y = f1.y; fol.fromX = f1.x; fol.fromY = f1.y; fol.t = 1 },
       getPos: () => ({ x: me.x, y: me.y, dir: me.dir }),
       removePickup: (id) => { removed.add(id); const s = pickupSprites.get(id); if (s) s.visible = false },
       defeatNpc: (id) => { const n = npcs.find((q) => q.spec.id === id); if (n) n.defeated = true },
@@ -604,14 +617,15 @@ export default function GameView3D(props: Props) {
                 const ny = n.y + DY[d]
                 n.dir = d
                 const homeOk = Math.abs(nx - n.spec.x) <= 7 && Math.abs(ny - n.spec.y) <= 7
-                if (homeOk && walkableFor(world, nx, ny, elapsed) && tileAt(world, nx, ny) !== T.GymDoor && !(nx === me.x && ny === me.y) && !npcAt(nx, ny) && !pickupAt(nx, ny)) {
+                const tileOk = n.spec.swim ? (inBounds(nx, ny) && world.lake[ny * SIZE + nx] === 1) : (walkableFor(world, nx, ny, elapsed) && tileAt(world, nx, ny) !== T.GymDoor) // swimmers: only lake water
+                if (homeOk && tileOk && !(nx === me.x && ny === me.y) && !npcAt(nx, ny) && !pickupAt(nx, ny)) {
                   n.fromX = n.x; n.fromY = n.y; n.x = nx; n.y = ny; n.moving = 0.001; n.stp ^= 1
                 }
                 n.timer = b === 'run' ? 0.5 + Math.random() * 1.5 : 0.8 + Math.random() * 2.2
               }
             }
           }
-          if (n.moving === 0 || n.moving > 0.5) {
+          if (!n.spec.swim && (n.moving === 0 || n.moving > 0.5)) {
             for (let k = 1; k <= 4; k++) {
               const sx = n.x + DX[n.dir] * k
               const sy = n.y + DY[n.dir] * k
@@ -639,7 +653,7 @@ export default function GameView3D(props: Props) {
       // walking: the foot picture for the first half of a tile, standing for the second half. Running changes its picture only once per
       // tile (half as often as before): foot, upright, other foot, upright ...
       const myFrame = me.t >= 1 ? 0 : me.run ? [1, 0, 2, 0][me.cycle] : me.t < 0.5 ? 1 + me.step : 0
-      mySprite.material = charMaterial(p.look, me.dir, myFrame, me.run)
+      mySprite.material = charMaterial(p.look, me.dir, myFrame, me.run && me.t < 1) // (standing still after a run: the normal standing picture)
       fit(mySprite)
       place(mySprite, camera, px + 0.5, ph + lift(mySprite), py + 0.5)
       myShadow.position.set(px + 0.5, ph + 0.03, py + 0.5)
@@ -699,12 +713,13 @@ export default function GameView3D(props: Props) {
       for (const n of npcs) {
         n.sprite.visible = !n.defeated || true
         const frame = n.moving > 0 && n.moving < 0.5 ? 1 + n.stp : 0
-        n.sprite.material = charMaterial(n.look, n.dir, frame, n.spec.behavior === 'run')
+        n.sprite.material = charMaterial(n.look, n.dir, frame, n.spec.behavior === 'run' && n.moving > 0)
         fit(n.sprite)
-        const nh = heightAt(n.fx + 0.5, n.fy + 0.5)
+        const nh = n.spec.swim ? Math.max(heightAt(n.fx + 0.5, n.fy + 0.5), built.waterY - 0.02) : heightAt(n.fx + 0.5, n.fy + 0.5) // swimmers float on the water
         place(n.sprite, camera, n.fx + 0.5, nh + lift(n.sprite), n.fy + 0.5)
         let sh = npcShadows.get(n)
         if (!sh) { sh = makeShadow(scene); npcShadows.set(n, sh) }
+        sh.visible = !n.spec.swim
         sh.position.set(n.fx + 0.5, nh + 0.03, n.fy + 0.5)
       }
       // other players (named, never yourself)

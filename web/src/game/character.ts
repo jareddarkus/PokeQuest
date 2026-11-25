@@ -1,6 +1,6 @@
 // A fully customizable trainer, drawn with code (placeholder look until the White 2 trainer sprites are imported).
 import type { Dir } from './world'
-import { OW_BOY, hasOw, owList } from './ow'
+import { OW_BOY, hasOw, owPeople } from './ow'
 
 export interface Look {
   skin: string
@@ -48,13 +48,14 @@ export function randomLook(seed: number): Look {
     s = (Math.imul(s, 1664525) + 1013904223) >>> 0
     return (s >>> 8) % n
   }
+  const people = owPeople()
   return {
     // people in the game mostly have natural hair/eye colours, dark trousers and dark shoes
     skin: SKIN_TONES[r(SKIN_TONES.length)], hairStyle: r(5), hair: HAIR_COLORS[r(6)],
     eyes: EYE_COLORS[r(4)], top: CLOTH_COLORS[r(CLOTH_COLORS.length)], topStyle: r(3),
     bottom: CLOTH_COLORS[[5, 9, 10, 11][r(4)]], bottomStyle: r(3), shoes: CLOTH_COLORS[[9, 10, 11][r(3)]],
     hat: r(4) === 0 ? 1 + r(3) : 0, hatColor: CLOTH_COLORS[r(CLOTH_COLORS.length)],
-    sprite: owList.length ? owList[r(owList.length)] : undefined,
+    sprite: people.length ? people[r(people.length)] : undefined,
   }
 }
 

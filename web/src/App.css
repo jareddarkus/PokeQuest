@@ -302,7 +302,7 @@ button.big small { opacity: .7; font-size: .75rem; }
 .title-side .panel.menu { background: none; border: 0; box-shadow: none; padding: 0; }
 .title-side .sub { text-align: center; margin: 0; text-shadow: 0 2px 0 #000; }
 .title-side button.big { position: relative; transition: transform .12s; }
-.title-side button.big:hover:not(:disabled), .title-side button.big:focus-visible { transform: translateX(8px); border-color: #fff; }
+.title-side button.big:hover:not(:disabled), .title-side button.big:focus-visible { border-color: #fff; filter: brightness(1.2); }
 .title-side button.big:hover:not(:disabled)::before, .title-side button.big:focus-visible::before { content: 'B6'; position: absolute; left: -22px; top: 50%; transform: translateY(-50%); color: #fff; text-shadow: 0 0 6px #000; font-size: .9rem; }
 @media (max-height: 640px) and (max-aspect-ratio: 1/1) { .title-logo { font-size: 1.8rem; } }
 @media (min-aspect-ratio: 1/1) {
@@ -319,7 +319,7 @@ button.big small { opacity: .7; font-size: .75rem; }
 @keyframes pq-toast { 0% { opacity: 0; transform: translate(-50%, 12px); } 12% { opacity: 1; transform: translate(-50%, 0); } 88% { opacity: 1; transform: translate(-50%, 0); } 100% { opacity: 0; transform: translate(-50%, 6px); } }
 .modal-backdrop { animation: pq-fade .18s ease-out; }
 .modal, .chat-panel, .starter, .lobby { animation: pq-pop .22s cubic-bezier(.2, .8, .3, 1); }
-.hud-top-right .menu-slab { animation: pq-slide .2s cubic-bezier(.2, .8, .3, 1) backwards; transition: filter .12s, transform .12s; }
+.hud-top-right .menu-slab { animation: pq-slide .2s cubic-bezier(.2, .8, .3, 1) backwards; transition: filter .12s; }
 .hud-top-right .menu-slab:nth-child(2) { animation-delay: 0s; }
 .hud-top-right .menu-slab:nth-child(3) { animation-delay: .03s; }
 .hud-top-right .menu-slab:nth-child(4) { animation-delay: .06s; }
@@ -327,12 +327,10 @@ button.big small { opacity: .7; font-size: .75rem; }
 .hud-top-right .menu-slab:nth-child(6) { animation-delay: .12s; }
 .hud-top-right .menu-slab:nth-child(7) { animation-delay: .15s; }
 .hud-top-right .menu-slab:nth-child(8) { animation-delay: .18s; }
-.hud-top-right .menu-slab:hover { transform: translateX(-4px); }
 .toast { animation: pq-toast 3.2s ease both; }
 .match-wait { animation: pq-fade .3s ease-out; }
-.party-slot { transition: transform .12s, filter .12s; }
-.party-slot:hover:not(.empty) { transform: translateX(-4px); filter: brightness(1.15); }
-.party-slot.lifted { transform: none; }
+.party-slot { transition: filter .12s; }
+.party-slot:hover:not(.empty) { filter: brightness(1.15); }
 .party-fill { transition: width .5s ease, background .3s; }
 .party-bar .party-slot { animation: pq-slide .25s cubic-bezier(.2, .8, .3, 1) backwards; }
 .hud-top-left, .hud-practice { animation: pq-fade .3s ease-out; }
@@ -340,3 +338,16 @@ button.big small { opacity: .7; font-size: .75rem; }
 
 .party-bar { transition: opacity .15s; }
 .party-bar.hidden { opacity: 0; pointer-events: none; }
+
+/* stat change: arrows float over the Pokémon */
+.stat-arrows { position: absolute; left: 0; right: 0; top: -5%; height: 105%; pointer-events: none; z-index: 4; }
+.stat-arrows span { position: absolute; width: 0; height: 0; bottom: 10%; margin-left: -14px; border-left: 14px solid transparent; border-right: 14px solid transparent; opacity: 0; filter: drop-shadow(0 0 4px rgba(0,0,0,.6)); }
+.stat-arrows.up span { border-bottom: 22px solid #5ec8ff; animation: pq-arrow-up 1s ease-out forwards; }
+.stat-arrows.down span { border-top: 22px solid #ff5e7c; top: 10%; bottom: auto; animation: pq-arrow-down 1s ease-in forwards; }
+.stat-arrows.big span { transform: scale(1.4); }
+@keyframes pq-arrow-up { 0% { opacity: 0; transform: translateY(30px); } 25% { opacity: 1; } 100% { opacity: 0; transform: translateY(-90px); } }
+@keyframes pq-arrow-down { 0% { opacity: 0; transform: translateY(-30px); } 25% { opacity: 1; } 100% { opacity: 0; transform: translateY(90px); } }
+
+/* what a trainer says before the battle */
+.npc-speech { position: absolute; left: 50%; bottom: 24px; transform: translateX(-50%); width: min(620px, 92vw); box-sizing: border-box; padding: 12px 16px; display: flex; flex-direction: column; gap: 6px; z-index: 7; cursor: pointer; animation: pq-fade .2s ease-out; font-size: .95rem; line-height: 1.35; min-height: 64px; }
+.npc-speech b { font-family: var(--font-title); font-weight: 900; font-size: .8rem; color: #ffd37a; }

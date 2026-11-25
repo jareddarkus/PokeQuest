@@ -8,6 +8,8 @@ export interface Settings {
   musicVolume: number // 0..1
   sfxVolume: number
   language: 'es' | 'en'
+  /** how fast the battle text is typed */
+  textSpeed: 'slow' | 'normal' | 'fast' | 'instant'
 }
 
 export function isTouchDevice(): boolean {
@@ -25,6 +27,7 @@ export function defaultSettings(): Settings {
     musicVolume: 0.5,
     sfxVolume: 0.7,
     language: 'es',
+    textSpeed: 'normal',
   }
 }
 

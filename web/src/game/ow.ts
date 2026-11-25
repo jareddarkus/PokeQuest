@@ -11,6 +11,13 @@ export function registerOw(idx: number, img: HTMLImageElement) {
   strips.set(idx, img)
   if (!owList.includes(idx)) owList.push(idx)
 }
+/** Files of the walking-character archive that are Pokémon / objects, not people (they must never be a trainer or a player). Checked by eye. */
+const CREATURES = [116, 119, 120, 121, 124, 127, 128, 129, 130, 131, 132, 133, 187, 195, 196, 197, 198, 283, 284, 285, 286, 287, 288, 289, 290, 291, 292, 293, 294, 295, 296, 297, 298, 299, 300, 301, 302, 304, 341, 347, 354]
+export const NOT_PEOPLE = new Set(CREATURES)
+/** The creatures that float on water: they only live in the little lakes of the island. */
+export const SWIM_SPRITES = [298, 301, 302]
+/** Every walking character that is a person (in file order). */
+export const owPeople = (): number[] => owList.filter((i) => !NOT_PEOPLE.has(i))
 export const hasOw = (idx: number | undefined) => idx !== undefined && strips.has(idx)
 
 const frameCache = new Map<string, HTMLCanvasElement>()

@@ -12,7 +12,8 @@ import { maxHp, type Mon } from '../data/dex'
 import {
   C, COLLAPSE_SECONDS, RADIUS, RING_INNER, SIZE, T, collapseRadius, generateWorld, isWalkable, ringAt, type Dir, type World,
 } from '../game/world'
-import BattleScreen, { type BattleKind, type BattleOutcome } from './BattleScreen'
+import BattleScreen, { CHAR_MS, TypedText, type BattleKind, type BattleOutcome } from './BattleScreen'
+import { leaderLine, lossLine, preBattleLine } from '../data/npcLines'
 import { BagPanel, PcPanel, TeamPanel } from './MenuPanels'
 import SettingsPanel from './SettingsPanel'
 import StarterPick from './StarterPick'
@@ -56,7 +57,32 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
   const [menuOpen, setMenuOpen] = useState(false)
   const [panel, setPanel] = useState<null | 'settings' | 'team' | 'bag' | 'pc' | 'chat'>(null)
   const [toast, setToast] = useState<string | null>(null)
+  // a trainer (or gym leader) talks before the battle: { who, line, then }
+  const [speech, setSpeech] = useState<null | { who: string; line: string; then: () => void }>(null)
+  const [speechSkip, setSpeechSkip] = useState(0)
+  const speechTyping = useRef(0) // until when (ms since 1970) the sentence is still being typed
+  const talking = useRef(false)
+  const speakThen = (who: string, line: string, then: () => void) => {
+    if (talking.current) return
+    talking.current = true
+    speechTyping.current = Date.now() + line.length * CHAR_MS[settings.textSpeed ?? 'normal']
+    setSpeechSkip(0)
+    setSpeech({ who, line, then })
+  }
+  const closeSpeech = () => {
+    const sp = speech
+    if (!sp) return
+    talking.current = false
+    setSpeech(null)
+    sp.then()
+  }
+  useEffect(() => {
+    if (!speech) return
+    const id = window.setTimeout(closeSpeech, speech.line.length * CHAR_MS[settings.textSpeed ?? 'normal'] + 2600)
+    return () => window.clearTimeout(id)
+  }, [speech])
   const toastFrame = useFrameStyle('white', 2)
+  const hudFrame2 = useFrameStyle('dark', 2)
   const hudFrame = useFrameStyle('dark', 1) // the game's own dark message window for the info boxes
   const [ring, setRing] = useState(1)
   const [secs, setSecs] = useState(0)
@@ -99,7 +125,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
 
   useEffect(() => {
     if (!toast) return
-    const id = setTimeout(() => setToast(null), 3200)
+    const id = setTimeout(() => setToast(null), 4200)
     return () => clearTimeout(id)
   }, [toast])
 
@@ -135,7 +161,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
     busy.current = false
     handleRef.current?.setNpcFreeze(null)
     if (outcome === 'win' && b) {
-      if (b.npcId) { defeatedNpcs.current.add(b.npcId); handleRef.current?.defeatNpc(b.npcId) }
+      if (b.npcId) { defeatedNpcs.current.add(b.npcId); handleRef.current?.defeatNpc(b.npcId); say(`${b.name ?? 'Trainer'}: “${lossLine(b.npcId)}”`) }
       b.onWin?.()
     }
     if (outcome === 'caught') say('Gotcha! The Pokémon joined you (see Team or PC).')
@@ -157,8 +183,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
         const g = world.gyms.find((q) => q.id === id)
         if (!g) return
         if (beatenGyms.current.has(id)) { say(`${g.leader} nods: you already beat this gym.`); return }
-        say(`Gym Leader ${g.leader} (${g.type} type) accepts your challenge!`)
-        void gymTeam(g.type, g.ring).then((team) =>
+        speakThen(`Gym Leader ${g.leader}`, leaderLine(g.id), () => void gymTeam(g.type, g.ring).then((team) =>
           startBattle({
             kind: 'gym', foe: team, name: `Gym Leader ${g.leader}`,
             onWin: () => {
@@ -169,7 +194,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
               say(`You beat ${g.leader}! You were taken to ring ${g.ring + 1}.`)
             },
           }),
-        )
+        ))
       },
       onPickup: (id) => {
         void music.playSfx('se:getting')
@@ -182,10 +207,10 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
       },
       onPushed: (_x, _y, r) => say(`The ground crumbled — you were pushed to ring ${r}!`),
       onNpcSpotted: (npcId) => {
-        if (defeatedNpcs.current.has(npcId) || busy.current) return
+        if (defeatedNpcs.current.has(npcId) || busy.current || talking.current) return
         const npc = world.npcs.find((n) => n.id === npcId)
         if (!npc) return
-        void trainerTeam(npc.ring).then((team) => startBattle({ kind: 'trainer', foe: team, name: `Trainer ${npc.name}`, npcId }))
+        speakThen(`Trainer ${npc.name}`, preBattleLine(npc.id), () => void trainerTeam(npc.ring).then((team) => startBattle({ kind: 'trainer', foe: team, name: `Trainer ${npc.name}`, npcId })))
       },
     }),
     [world],
@@ -227,7 +252,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
         others={players}
         events={events}
         handleRef={handleRef}
-        paused={panel !== null || battle !== null || waiting}
+        paused={panel !== null || battle !== null || waiting || speech !== null}
         canBattle={trainer.team.some((m) => m.hp > 0)}
         follower={trainer.team[0] && trainer.team[0].hp > 0 ? { species: trainer.team[0].species, shiny: !!trainer.team[0].shiny } : null}
       />
@@ -270,6 +295,12 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
         </div>
       )}
 
+      {speech && (
+        <div className="npc-speech panel" style={hudFrame2 ?? undefined} onClick={() => { if (Date.now() < speechTyping.current) { speechTyping.current = 0; setSpeechSkip((k) => k + 1) } else closeSpeech() }}>
+          <b>{speech.who}</b>
+          <span><TypedText text={speech.line} ms={CHAR_MS[settings.textSpeed ?? 'normal']} skip={speechSkip} /></span>
+        </div>
+      )}
       {toast && <div key={toast} className="toast panel" style={toastFrame ?? undefined}>{toast}</div>}
       {panel === 'chat' && <ChatPanel messages={chat.messages} status={chat.status} send={chat.send} canChat={!!username} onClose={() => setPanel(null)} />}
       {panel === 'settings' && <SettingsPanel settings={settings} onChange={onSettings} onClose={() => setPanel(null)} onCustomize={onCustomize} />}
@@ -284,6 +315,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
           foeTeam={battle.foe}
           kind={battle.kind}
           foeName={battle.name}
+          textSpeed={settings.textSpeed}
           onEnd={endBattle}
         />
       )}

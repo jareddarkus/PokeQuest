@@ -21,6 +21,15 @@ export default function SettingsPanel({ settings, onChange, onClose, onCustomize
           </div>
         </div>
 
+        <div className="row">
+          <span>Text speed</span>
+          <div className="seg">
+            {(['slow', 'normal', 'fast', 'instant'] as const).map((v) => (
+              <button key={v} className={(settings.textSpeed ?? 'normal') === v ? 'on' : ''} onClick={() => onChange({ textSpeed: v })}>{v === 'slow' ? 'Slow' : v === 'normal' ? 'Normal' : v === 'fast' ? 'Fast' : 'Instant'}</button>
+            ))}
+          </div>
+        </div>
+
         <label className="row">
           <span>Zoom (left = see more of the map)</span>
           <input

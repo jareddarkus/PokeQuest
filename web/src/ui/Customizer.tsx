@@ -3,7 +3,7 @@ import {
   BOTTOM_STYLE_NAMES, CLOTH_COLORS, EYE_COLORS, HAIR_COLORS, HAIR_STYLE_NAMES, HAT_NAMES, SKIN_TONES, TOP_STYLE_NAMES,
   drawCharacter, lookSprite, randomLook, type Look,
 } from '../game/character'
-import { owFrame, owList } from '../game/ow'
+import { owFrame, owList, owPeople } from '../game/ow'
 import type { Dir } from '../game/world'
 
 interface Props {
@@ -61,13 +61,13 @@ function RealCustomizer({ look, onChange, onDone }: Props) {
             <button onClick={() => setDir(3)}>Back</button>
             <button onClick={() => setDir(2)}>▶</button>
           </div>
-          <button onClick={() => onChange({ ...look, sprite: owList[Math.floor(Math.random() * owList.length)] })}>Randomize</button>
+          <button onClick={() => onChange({ ...look, sprite: owPeople()[Math.floor(Math.random() * owPeople().length)] })}>Randomize</button>
           <button className="primary" onClick={onDone}>Done</button>
         </div>
         <div className="panel options">
           <h3>Pick your character</h3>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-            {owList.map((i) => (
+            {owPeople().map((i) => (
               <button
                 key={i}
                 title={`#${i}`}

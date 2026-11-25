@@ -59,6 +59,8 @@ export interface NpcSpec {
   behavior: NpcBehavior
   name: string
   look: number // seed for its colours
+  /** a creature that floats on water: lives only in the little lakes inside the island (never on land, never in the sea around it) */
+  swim?: boolean
 }
 
 export interface PickupSpec {
@@ -75,6 +77,8 @@ export interface World {
   npcs: NpcSpec[]
   pickups: PickupSpec[]
   spawns: { x: number; y: number }[]
+  /** 1 = a tile of one of the little lakes (water that is not connected to the sea around the island) */
+  lake: Uint8Array
 }
 
 export function dist(x: number, y: number): number {
@@ -234,8 +238,52 @@ export function generateWorld(seed: number, ground: Uint8Array): World {
     }
   }
 
+  // the little lakes: water that the sea around the island cannot reach (the sea is where the island collapses, so nothing may live there)
+  const lake = new Uint8Array(SIZE * SIZE)
+  {
+    const sea = new Uint8Array(SIZE * SIZE)
+    const stack: number[] = []
+    for (let i = 0; i < SIZE * SIZE; i++) { const x = i % SIZE, y = (i / SIZE) | 0; if (tiles[i] === T.Water && (dist(x, y) > RADIUS - 1 || x === 0 || y === 0 || x === SIZE - 1 || y === SIZE - 1)) { sea[i] = 1; stack.push(i) } }
+    while (stack.length) {
+      const c = stack.pop()!
+      const cx = c % SIZE, cy = (c / SIZE) | 0
+      for (let d = 0; d < 4; d++) {
+        const nx = cx + DX[d], ny = cy + DY[d]
+        if (!inBounds(nx, ny)) continue
+        const n = ny * SIZE + nx
+        if (sea[n] || tiles[n] !== T.Water) continue
+        sea[n] = 1
+        stack.push(n)
+      }
+    }
+    for (let i = 0; i < SIZE * SIZE; i++) if (tiles[i] === T.Water && !sea[i]) lake[i] = 1
+  }
+  // swimming creatures: a few in the middle of the lakes (a tile whose four neighbours are lake as well)
+  {
+    const deep: number[] = []
+    for (let i = 0; i < SIZE * SIZE; i++) {
+      if (!lake[i]) continue
+      const x = i % SIZE, y = (i / SIZE) | 0
+      if (inBounds(x - 1, y) && inBounds(x + 1, y) && inBounds(x, y - 1) && inBounds(x, y + 1) && lake[i - 1] && lake[i + 1] && lake[i - SIZE] && lake[i + SIZE] && ringAt(x, y) > 0) deep.push(i)
+    }
+    const want = Math.min(8, Math.floor(deep.length / 6))
+    const used: number[] = []
+    for (let k = 0; k < want && deep.length; k++) {
+      let spot = -1
+      for (let tries = 0; tries < 20; tries++) {
+        const cand = deep[Math.floor(rng() * deep.length)]
+        const cx = cand % SIZE, cy = (cand / SIZE) | 0
+        if (used.every((u) => Math.abs((u % SIZE) - cx) + Math.abs(((u / SIZE) | 0) - cy) > 6)) { spot = cand; break }
+      }
+      if (spot < 0) break
+      used.push(spot)
+      const x = spot % SIZE, y = (spot / SIZE) | 0
+      npcs.push({ id: `s${k}`, ring: ringAt(x, y), x, y, dir: Math.floor(rng() * 4) as Dir, behavior: 'walk', name: 'Swimmer', look: Math.floor(rng() * 1e9), swim: true })
+    }
+  }
+
   void hash2
-  return { seed, tiles, gyms, npcs, pickups, spawns }
+  return { seed, tiles, gyms, npcs, pickups, spawns, lake }
 }
 
 // ---------------------------------------------------------------- the collapsing island

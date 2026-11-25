@@ -17,6 +17,7 @@ import { Dex } from '@pkmn/sim'
 import { music } from '../audio/music'
 import { warmAnim } from './AnimSprite'
 import { MoveFx, FX_NAMES } from './moveFx'
+import { trText, useLang } from '../i18n'
 
 export type BattleKind = 'wild' | 'trainer' | 'gym'
 export type BattleOutcome = 'win' | 'lose' | 'caught' | 'ran'
@@ -26,12 +27,43 @@ interface Props {
   foeTeam: Mon[]
   kind: BattleKind
   foeName?: string
+  /** how fast the message text is typed */
+  textSpeed?: 'slow' | 'normal' | 'fast' | 'instant'
   onEnd: (outcome: BattleOutcome, trainer: Trainer) => void
 }
 
 interface Side { uid: string; species: string; level: number; hp: number; maxHp: number; shiny: boolean; fainted: boolean; status?: string }
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
+let statKey = 0
+
+/** Milliseconds per typed letter (a tap on the message box finishes the sentence at once). */
+export const CHAR_MS = { slow: 55, normal: 30, fast: 13, instant: 0 }
+
+/** The battle message, typed letter by letter. The sentence is translated first, so the page never types English and then flips to Spanish. */
+export function TypedText({ text, ms, skip }: { text: string; ms: number; skip: number }) {
+  useLang()
+  const full = trText(text)
+  const [n, setN] = useState(ms ? 0 : full.length)
+  useEffect(() => {
+    if (!ms) { setN(full.length); return }
+    setN(0)
+    let i = 0
+    const id = window.setInterval(() => { i++; setN(i); if (i >= full.length) window.clearInterval(id) }, ms)
+    return () => window.clearInterval(id)
+  }, [full, ms])
+  useEffect(() => { if (skip) setN(full.length) }, [skip])
+  return <>{full.slice(0, n)}</>
+}
+
+/** A rising / falling stat: three arrows float over the Pokémon (blue and up when raised, red and down when lowered). */
+function StatArrows({ up, big }: { up: boolean; big: boolean }) {
+  return (
+    <div className={`stat-arrows ${up ? 'up' : 'down'} ${big ? 'big' : ''}`} aria-hidden>
+      {[0, 1, 2].map((i) => <span key={i} style={{ animationDelay: `${i * 0.18}s`, left: `${18 + i * 30}%` }} />)}
+    </div>
+  )
+}
 
 /** The HP box of Pokémon Black 2 / White 2 made from the game's own pieces: a name bar, an HP strip (and an EXP strip for yours) with the gauge on it. */
 function HpBox({ side, mine, exp }: { side: Side; mine: boolean; exp?: number }) {
@@ -72,12 +104,23 @@ function HpBox({ side, mine, exp }: { side: Side; mine: boolean; exp?: number })
   )
 }
 
-export default function BattleScreen({ trainer, foeTeam, kind, foeName, onEnd }: Props) {
+export default function BattleScreen({ trainer, foeTeam, kind, foeName, textSpeed = 'normal', onEnd }: Props) {
   const playerTeam = useMemo(() => trainer.team.filter((m) => m.hp > 0).map((m) => ({ ...m, evs: { ...m.evs }, ivs: { ...m.ivs }, moves: [...m.moves] })), [])
   const foeCopies = useMemo(() => foeTeam.map((m) => ({ ...m, evs: { ...m.evs }, ivs: { ...m.ivs }, moves: [...m.moves] })), [])
   const [me, setMe] = useState<Side | null>(null)
   const [foe, setFoe] = useState<Side | null>(null)
   const [text, setText] = useState('')
+  const [skip, setSkip] = useState(0)
+  const wake = useRef<(() => void) | null>(null)
+  const [statFx, setStatFx] = useState<null | { side: 'me' | 'foe'; up: boolean; big: boolean; key: number }>(null)
+  const msPer = CHAR_MS[textSpeed] ?? 30
+  if (import.meta.env.DEV) (window as unknown as { __statFx?: (side: 'me' | 'foe', up: boolean, big: boolean) => void }).__statFx = (side, up, big) => setStatFx({ side, up, big, key: ++statKey }) // developer hook
+  /** how long a sentence takes to type, in milliseconds */
+  const typeMs = (t: string) => trText(t).length * msPer
+  /** waits, but a tap on the message box ends the wait early */
+  const wait = (ms: number) => new Promise<void>((res) => { const id = window.setTimeout(done, ms); function done() { window.clearTimeout(id); if (wake.current === done) wake.current = null; res() } wake.current = done })
+  /** shows a sentence and waits until it has been typed and read */
+  const say = async (t: string, hold = 800) => { setText(t); await wait(typeMs(t) + hold) }
   const [mode, setMode] = useState<'wait' | 'menu' | 'fight' | 'switch' | 'bag' | 'done'>('wait')
   const S = dsScale()
   const [req, setReq] = useState<Request | null>(null)
@@ -127,7 +170,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, onEnd }:
         case 'text':
           if (/super effective/i.test(ev.text)) void music.playSfx('se:hitStrong')
           else if (/not very effective/i.test(ev.text)) void music.playSfx('se:hitWeak')
-          setText(ev.text); await sleep(1800); break
+          await say(ev.text, 750); break
         case 'switch': {
           const s: Side = { uid: ev.uid, species: ev.species, level: ev.level, hp: ev.hp, maxHp: ev.maxHp, shiny: ev.shiny, fainted: false }
           if (ev.side === 'p1') setMe(s); else setFoe(s)
@@ -167,6 +210,13 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, onEnd }:
           setLunge(null)
           if (mv.category !== 'Status') { setShake(hitSide); await sleep(450); setShake(null) } else await sleep(600)
           await sleep(fx?.ready ? 800 : 300)
+          break
+        }
+        case 'stat': {
+          void music.playSfx(ev.amount > 0 ? 'se:heal' : 'se:hitWeak')
+          setStatFx({ side: ev.side === 'p1' ? 'me' : 'foe', up: ev.amount > 0, big: Math.abs(ev.amount) >= 2, key: ++statKey })
+          await sleep(1100)
+          setStatFx(null)
           break
         }
         case 'faint': {
@@ -259,17 +309,14 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, onEnd }:
           const amount = expGain(d.foe.species, d.foe.level, kind !== 'wild', share)
           const res = await gainExp(upd, amount)
           upd = res.mon
-          setText(`${upd.species} gained ${amount} Exp. Points!`)
-          await sleep(900)
+          await say(`${upd.species} gained ${amount} Exp. Points!`, 600)
           if (res.levelsGained > 0) {
             void music.playSfx('se:lvup')
-            setText(`${upd.species} grew to Lv. ${upd.level}!`)
-            await sleep(1100)
+            await say(`${upd.species} grew to Lv. ${upd.level}!`, 700)
             for (const mv of res.newMoves) {
               if (upd.moves.length < 4) {
                 upd = { ...upd, moves: [...upd.moves, mv] }
-                setText(`${upd.species} learned ${mv}!`)
-                await sleep(1000)
+                await say(`${upd.species} learned ${mv}!`, 700)
               } else {
                 const forget = await askForget(upd, mv)
                 if (forget !== null) upd = { ...upd, moves: upd.moves.map((x, k) => (k === forget ? mv : x)) }
@@ -277,12 +324,10 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, onEnd }:
             }
             const to = levelEvolution(upd)
             if (to) {
-              setText(`What? ${upd.species} is evolving!`)
-              await sleep(1300)
+              await say(`What? ${upd.species} is evolving!`, 900)
               const from = upd.species
               upd = evolve(upd, to)
-              setText(`${from} evolved into ${to}!`)
-              await sleep(1500)
+              await say(`${from} evolved into ${to}!`, 1000)
             }
           }
           working[i] = upd
@@ -298,9 +343,9 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, onEnd }:
       if (t.team.length < 6 && !(isLeg && legends >= 2)) t = { ...t, team: [...t.team, c] }
       else t = { ...t, pc: [...t.pc, c] }
     }
-    if (outcome === 'win') setText(kind === 'wild' ? 'You won!' : `You defeated ${foeName ?? 'the trainer'}!`)
-    if (outcome === 'lose') setText('You have no Pokémon left that can fight...')
-    await sleep(1200)
+    if (outcome === 'win') await say(kind === 'wild' ? 'You won!' : `You defeated ${foeName ?? 'the trainer'}!`, 700)
+    else if (outcome === 'lose') await say('You have no Pokémon left that can fight...', 900)
+    else await sleep(600)
     onEnd(outcome, t)
   }
 
@@ -326,11 +371,9 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, onEnd }:
       void music.playSfx('se:run')
       ranRef.current = true
       endedRef.current = true
-      setText('Got away safely!')
-      void (async () => { await sleep(900); s().syncBack(); onEnd('ran', { ...trainer, bag: bagRef.current, team: trainer.team.map((m) => teamRef.current.find((p) => p.uid === m.uid) ?? m) }) })()
+      void (async () => { await say('Got away safely!', 500); s().syncBack(); onEnd('ran', { ...trainer, bag: bagRef.current, team: trainer.team.map((m) => teamRef.current.find((p) => p.uid === m.uid) ?? m) }) })()
     } else {
-      setText("You couldn't get away!")
-      void sleep(700).then(() => s().passTurn())
+      void say("You couldn't get away!", 500).then(() => s().passTurn())
     }
   }
 
@@ -345,10 +388,9 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, onEnd }:
     const isLeg = legendaryNames.has(foeMon.species)
     const res = rollCatch(target, def.ballBonus ?? 1, isLeg, Math.random)
     void (async () => {
-      setText(`You threw a ${def.name}!`)
       void music.playSfx('se:throw')
       setBall({ shakes: 0 })
-      await sleep(900)
+      await say(`You threw a ${def.name}!`, 500)
       for (let i = 0; i < res.shakes; i++) {
         setBall({ shakes: i + 1 })
         void music.playSfx('se:shake')
@@ -357,13 +399,12 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, onEnd }:
       }
       if (res.caught) {
         setBall(null)
-        setText(`Gotcha! ${foeMon.species} was caught!`)
         music.stop()
         void music.playSfx('caught')
         caughtRef.current = { ...foeMon, hp: Math.max(1, live.hp), uid: foeMon.uid }
         endedRef.current = true
         s().syncBack()
-        await sleep(1300)
+        await say(`Gotcha! ${foeMon.species} was caught!`, 900)
         const t: Trainer = { ...trainer, bag: bagRef.current, team: trainer.team.map((m) => teamRef.current.find((p) => p.uid === m.uid) ?? m) }
         // no experience for a catch in this version; the Pokémon joins your team
         const c = caughtRef.current
@@ -372,8 +413,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, onEnd }:
         onEnd('caught', toPc ? { ...t, pc: [...t.pc, c] } : { ...t, team: [...t.team, c] })
       } else {
         setBall(null)
-        setText(res.shakes === 0 ? 'Oh no! The Pokémon broke free!' : res.shakes === 1 ? 'Aww! It appeared to be caught!' : 'Argh! Almost had it!')
-        await sleep(1000)
+        await say(res.shakes === 0 ? 'Oh no! The Pokémon broke free!' : res.shakes === 1 ? 'Aww! It appeared to be caught!' : 'Argh! Almost had it!', 600)
         s().passTurn()
       }
     })()
@@ -389,8 +429,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, onEnd }:
     const rec = teamRef.current.find((p) => p.uid === healed.uid)
     if (rec) rec.hp = healed.hp
     setMode('wait'); setReq(null)
-    setText(`You used a ${def.name}!`)
-    void sleep(900).then(() => s().passTurn())
+    void say(`You used a ${def.name}!`, 500).then(() => s().passTurn())
   }
 
   return (
@@ -406,6 +445,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, onEnd }:
           <div className={`stage-sprite ${shake === 'foe' ? 'hit' : ''} ${foe.fainted ? 'fainted' : ''} ${lunge === 'foe' ? 'lunge-foe' : ''}`} style={{ left: layout.foe.x, top: layout.foe.y + layout.foe.w * 0.1, width: layout.foe.w }}>
             {!ball && <MonSprite species={foe.species} shiny={foe.shiny} scale={(layout.foe.w * 1.05) / 76.8} platform={layout.foe.w} animated />}
             {ball && <div className={`ball shake-${ball.shakes}`} />}
+            {statFx?.side === 'foe' && <StatArrows key={statFx.key} up={statFx.up} big={statFx.big} />}
           </div>
         </>
       )}
@@ -414,6 +454,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, onEnd }:
           <div className="stage-shadow" style={{ left: layout.me.x, top: layout.me.y + layout.me.w * 0.03, width: layout.me.w * 0.78 * shadowFor(me.species) }} />
           <div className={`stage-sprite ${shake === 'me' ? 'hit' : ''} ${me.fainted ? 'fainted' : ''} ${lunge === 'me' ? 'lunge-me' : ''}`} style={{ left: layout.me.x, top: layout.me.y + layout.me.w * 0.1, width: layout.me.w }}>
             <MonSprite species={me.species} back shiny={me.shiny} scale={(layout.me.w * 0.92) / 76.8} platform={layout.me.w} animated />
+            {statFx?.side === 'me' && <StatArrows key={statFx.key} up={statFx.up} big={statFx.big} />}
           </div>
         </>
       )}
@@ -425,7 +466,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, onEnd }:
         {me && <HpBox side={me} mine exp={teamRef.current.find((m) => m.uid === me.uid)?.exp} />}
       </div>
       <div className="battle-bottom">
-        <div className="panel battle-text" style={textFrame ?? undefined}>{text}</div>
+        <div className="panel battle-text" style={{ ...(textFrame ?? {}), cursor: 'pointer' }} onClick={() => { setSkip((k) => k + 1); wake.current?.() }}><TypedText text={text} ms={msPer} skip={skip} /></div>
 
         {mode === 'menu' && req && (
           <CommandScreen

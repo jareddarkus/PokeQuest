@@ -251,3 +251,12 @@ Next ideas if this is picked up again: (1) the "!" emote for trainers spotting t
 - `GameView3D` draws the follower facing the way it walks, two pictures alternating while walking (slowly while standing).
 - Characters: `ow.ts` never shows a placeholder X even for game files stored by an older version of this site (it swaps to a real picture).
 - NOT done: real move animations. The move scripts are in `a/0/6/6` (+ `a/0/6/7`) and the particle files in `a/0/0/6`; the script format is not documented anywhere I could find.
+
+## Round: battle text, swimmers, NPC lines
+- Battle text is typed letter by letter (`TypedText` in `ui/BattleScreen.tsx`, the sentence is translated first with `trText`); setting "Text speed" (slow / normal / fast / instant, `settings.textSpeed`); tapping the message box finishes the sentence. The message "X used Y!" now comes BEFORE the move animation (`battle/engine.ts`).
+- Stat changes: a `stat` battle event plays red falling / blue rising arrows over the Pokémon; messages say sharply / drastically / harshly / severely; accuracy / evasiveness included (`StatArrows`).
+- Animation cut-off fix (`rom/anim.ts`): every pose now starts its parts from their first picture (parts used one clock while poses changed, so the second shell pull of Oshawott started mid-movement). Checked: both pulls now draw identical pictures.
+- People vs creatures: the walking-character archive also holds Pokémon / objects (`NOT_PEOPLE` in `game/ow.ts`); they are never trainers or player looks. Water creatures (`SWIM_SPRITES`) are `swim` NPCs placed only in the little lakes (`world.lake`: water the sea cannot reach), never on land or in the sea; they do not battle.
+- After a run the standing picture is used (the running set was kept by mistake); hover effects no longer move things (they made the party slot jitter at its edge).
+- Trainers and gym leaders talk before the battle, trainers answer after losing: 204 lines in `data/npcLines.ts` (English + Spanish).
+- The follower starts on a free tile beside you.
