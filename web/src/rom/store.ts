@@ -19,6 +19,7 @@ import { MENU_NARC, decodeMenuUi } from './menuUi'
 import { extractMusic, type MusicIndex } from './sdat'
 import { owList, registerBall, registerEmote, registerOw } from '../game/ow'
 import { decodeFollowers } from './followerSprites'
+import { readFonts, type NftrFont } from './font'
 import { FOLLOWER_FILES } from '../data/followerMap'
 
 const DB = 'pokequest-rom'
@@ -92,7 +93,7 @@ export async function loadOverworldSprites(): Promise<void> {
   } catch { /* the game falls back to the drawn characters */ }
 }
 
-const VERSION = 40 // 40 = ... + walking Pokémon (followers);  39 = ... + no X pictures / one-direction objects among the characters;  38 = ... + no X inside characters;  37 = ... + title dragon;  36 = ... + Elixir icon;  35 = ... + no placeholder characters;  34 = ... + message frames;  33 = ... + PC wallpapers;  32 = ... + party panels, summary pages;  31 = ... + Bag and Summary backgrounds;  30 = ... + HP boxes;  29 = ... + potion/vitamin colours;  28 = ... + move-effect shapes;  27 = ... + all item icons by file;  26 = ... + item ball;  25 = ... + running pictures;  24 = ... + water animation data;  23 = ... + sound effects and cries;  22 = ... + menu backdrops;  21 = ... + music;  20 = gym buildings;  19 = buildings fixed;  18 = ... + buildings;  17 = ... + emote bubbles;  16 = ... + start menu art;  15 = battle buttons rebuilt;  14 = ... + battle command buttons;  13 = ... + menu icons;  12 = ... + walking characters;  11 = ... + the game's own trainer colours
+const VERSION = 41 // 41 = ... + the game's fonts;  40 = ... + walking Pokémon (followers);  39 = ... + no X pictures / one-direction objects among the characters;  38 = ... + no X inside characters;  37 = ... + title dragon;  36 = ... + Elixir icon;  35 = ... + no placeholder characters;  34 = ... + message frames;  33 = ... + PC wallpapers;  32 = ... + party panels, summary pages;  31 = ... + Bag and Summary backgrounds;  30 = ... + HP boxes;  29 = ... + potion/vitamin colours;  28 = ... + move-effect shapes;  27 = ... + all item icons by file;  26 = ... + item ball;  25 = ... + running pictures;  24 = ... + water animation data;  23 = ... + sound effects and cries;  22 = ... + menu backdrops;  21 = ... + music;  20 = gym buildings;  19 = buildings fixed;  18 = ... + buildings;  17 = ... + emote bubbles;  16 = ... + start menu art;  15 = battle buttons rebuilt;  14 = ... + battle command buttons;  13 = ... + menu icons;  12 = ... + walking characters;  11 = ... + the game's own trainer colours
 
 let colorsApplied = false
 /** Makes the colour choices of the character maker use the colours the game really uses (snaps each to the nearest real one). */
@@ -168,6 +169,7 @@ export async function importRom(file: RomSource, onProgress: (text: string, frac
   await put('ow:list', ow)
   await put('emote:list', await decodeEmotes(parseNarc(await nds.get(EMOTE_NARC)), (i, b) => put(`emote:${i}`, b)))
   try { await decodeFollowers(owFiles, FOLLOWER_FILES, (k, b) => put(k, b)) } catch { /* followers fall back to the menu icon */ }
+  try { await put('font:narc', new Blob([new Uint8Array(await nds.get('a/0/2/3'))])) } catch { /* the page's own font is used */ }
   onProgress('Reading the move effects…', 0.9843)
   try { await decodeFx(await nds.get(FX_NARC), (name, b) => put(`ui:fx:${name}`, b)) } catch { /* the battle uses plain flashes */ }
   try { // the 3D dragon of the title screen (two small files: the model and its skeleton animation)
@@ -342,4 +344,20 @@ export function loadFollowerPicture(file: number): Promise<HTMLImageElement | nu
     followerPics.set(file, p)
   }
   return p
+}
+
+let gameFonts: Promise<NftrFont[] | null> | null = null
+/** The game's own fonts (main text 15 px, small 10 px, medium 13 px ...), or null when the game file is not imported (yet). */
+export function loadGameFonts(): Promise<NftrFont[] | null> {
+  if (!gameFonts) {
+    gameFonts = (async () => {
+      try {
+        const blob = await get<Blob>('font:narc')
+        if (!blob) return null
+        const list = readFonts(parseNarc(new Uint8Array(await blob.arrayBuffer())))
+        return list.length ? list : null
+      } catch { return null }
+    })()
+  }
+  return gameFonts
 }

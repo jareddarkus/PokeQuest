@@ -11,10 +11,12 @@ const AnimTest = import.meta.env.DEV ? lazy(() => import('./dev/AnimTest')) : nu
 const OwView = import.meta.env.DEV ? lazy(() => import('./dev/OwView')) : null
 const BldView = import.meta.env.DEV ? lazy(() => import('./dev/BldView')) : null
 const FolMap = import.meta.env.DEV ? lazy(() => import('./dev/FolMap')) : null
+const FontView = import.meta.env.DEV ? lazy(() => import('./dev/FontView')) : null
 const q = new URLSearchParams(location.search)
 const showBld = import.meta.env.DEV && q.has('bldview')
 const showOw = import.meta.env.DEV && q.has('owview')
 const showFol = import.meta.env.DEV && q.has('folmap')
+const showFont = import.meta.env.DEV && q.has('fontview')
 const showViewer = import.meta.env.DEV && q.has('mapview')
 const showWorld = import.meta.env.DEV && q.has('worldmap')
 const showBtl = import.meta.env.DEV && q.has('btlview')
@@ -22,7 +24,11 @@ const showAnim = import.meta.env.DEV && q.has('animtest')
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    {showFol && FolMap ? (
+    {showFont && FontView ? (
+      <Suspense fallback={null}>
+        <FontView />
+      </Suspense>
+    ) : showFol && FolMap ? (
       <Suspense fallback={null}>
         <FolMap />
       </Suspense>

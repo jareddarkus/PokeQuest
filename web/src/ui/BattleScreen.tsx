@@ -17,8 +17,10 @@ import { Dex } from '@pkmn/sim'
 import { music } from '../audio/music'
 import { warmAnim } from './AnimSprite'
 import { MoveFx, FX_NAMES } from './moveFx'
-import { trText, useLang } from '../i18n'
+import { getLang, trText, useLang } from '../i18n'
 import ItemIcon from './ItemIcon'
+import FontText from './FontText'
+import { nameOf } from '../i18n'
 
 export type BattleKind = 'wild' | 'trainer' | 'gym'
 export type BattleOutcome = 'win' | 'lose' | 'caught' | 'ran'
@@ -55,7 +57,9 @@ export function TypedText({ text, ms, skip }: { text: string; ms: number; skip: 
     return () => window.clearInterval(id)
   }, [full, ms])
   useEffect(() => { if (skip) setN(full.length) }, [skip])
-  return <>{full.slice(0, n)}</>
+  // the game's own font, as big as the screen allows (whole-number sizes stay crisp)
+  const k = window.innerWidth >= 700 ? 2 : 1
+  return <FontText text={full} reveal={n} k={k} font={0} color="#ffffff" shadow="#6e6e7e" maxWidth={Math.floor(Math.min(window.innerWidth - 70, 500) / k)} style={{ margin: '0 auto', textAlign: 'left' }} />
 }
 
 /** A Poké Ball drops onto the platform and opens in a flash (the Pokémon grows out of it: see .so-mon in the stylesheet). */
@@ -89,24 +93,25 @@ function HpBox({ side, mine, exp }: { side: Side; mine: boolean; exp?: number })
   const lo = side.level ** 3, hi = (side.level + 1) ** 3
   const expFrac = exp === undefined ? 0 : Math.max(0, Math.min(1, (exp - lo) / Math.max(1, hi - lo)))
   const u = (n: number) => n * K
+  const kf = Math.max(1, Math.round(K)) // font pixels: whole numbers keep the game's font crisp
   // positions in DS pixels: the name bar on top, the strip below it (yours starts further left)
   const stripX = mine ? 8 : 14, stripY = 12
   // the "HP" label of the strip ends at column 36 (yours: 48) of the strip picture: the gauge starts after it, the EXP bar after the "EXP" label (ends at column 33)
   const gx = stripX + (mine ? 50 : 38), gy = stripY + 2, gw = mine ? 66 : 64
-  const text: React.CSSProperties = { position: 'absolute', color: '#101010', fontWeight: 700, lineHeight: 1, fontSize: u(8), whiteSpace: 'nowrap', textShadow: '0 1px 0 rgba(255,255,255,.35)' }
   return (
     <div className={`hp2 ${mine ? 'mine' : 'foe'}`} style={{ width: u(136), height: u(mine ? 40 : 26) }}>
       {nameBar && <img src={nameBar} alt="" draggable={false} style={{ position: 'absolute', left: 0, top: 0, width: u(136), height: u(14), imageRendering: 'pixelated' }} />}
       {strip && <img src={strip} alt="" draggable={false} style={{ position: 'absolute', left: u(stripX), top: u(stripY), width: u(mine ? 124 : 112), height: u(mine ? 16 : 12), imageRendering: 'pixelated' }} />}
-      <span style={{ ...text, left: u(mine ? 12 : 6), top: u(3) }}>{side.species}</span>
-      <span style={{ ...text, right: u(mine ? 6 : 14), top: u(3) }}>Lv{side.level}</span>
+      <div style={{ position: 'absolute', left: u(mine ? 12 : 6), top: u(1) }}><FontText text={nameOf(side.species)} font={1} k={kf} color="#101010" shadow={null} /></div>
+      <div style={{ position: 'absolute', right: u(mine ? 8 : 16), top: u(1) }}><FontText text={`${getLang() === 'es' ? 'Nv' : 'Lv'}.${side.level}`} font={1} k={kf} color="#101010" shadow={null} align="right" /></div>
       {/* the HP gauge: a dark track with the fill on it */}
       <div style={{ position: 'absolute', left: u(gx), top: u(gy), width: u(gw), height: u(4), background: '#212121', boxShadow: '0 0 0 1px #000' }}>
         <div style={{ position: 'absolute', left: 0, top: u(1), height: u(1), width: `${frac * 100}%`, background: fill[0], transition: 'width .5s ease' }} />
         <div style={{ position: 'absolute', left: 0, top: u(2), height: u(1), width: `${frac * 100}%`, background: fill[1], transition: 'width .5s ease' }} />
       </div>
+      {mine && <div style={{ position: 'absolute', right: u(8), top: u(stripY + 6) }}><FontText text={`${Math.max(0, side.hp)}/${side.maxHp}`} font={1} k={kf} color="#101010" shadow={null} align="right" /></div>}
       {mine && (
-        <div style={{ position: 'absolute', left: u(stripX + 36), top: u(stripY + 10), width: u(80), height: u(3), background: '#212121', boxShadow: '0 0 0 1px #000' }}>
+        <div style={{ position: 'absolute', left: u(stripX + 36), top: u(stripY + 10), width: u(52), height: u(3), background: '#212121', boxShadow: '0 0 0 1px #000' }}>
           <div style={{ position: 'absolute', left: 0, top: u(1), height: u(1), width: `${expFrac * 100}%`, background: '#38b6f5', transition: 'width .5s ease' }} />
         </div>
       )}

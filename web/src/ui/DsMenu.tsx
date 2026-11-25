@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Dex } from '@pkmn/sim'
-import { CATEGORY, useLang } from '../i18n'
+import { CATEGORY, nameOf, useLang } from '../i18n'
+import FontText from './FontText'
 import { moveFacts, moveGameText } from '../data/moveText'
 import { TYPE_COLOR, type PType } from '../game/world'
 import { useUiUrl } from './CmdButton'
@@ -123,10 +124,10 @@ function MoveButton({ mv, x, y, S, onClick, onInfo }: { mv: MoveView; x: number;
       onContextMenu={(e) => e.preventDefault()}
       style={{ left: x * S, top: y * S, width: 127 * S, height: 46 * S, background: frame ? `url(${frame}) center / 100% 100% no-repeat` : '#222', opacity: off ? 0.45 : 1 }}
     >
-      <span className="ds-move-name" style={{ fontSize: 8.5 * S }}>{mv.name}</span>
-      <span className="ds-move-meta" style={{ fontSize: 7 * S }}>
+      <span className="ds-move-name"><FontText text={nameOf(mv.name)} font={1} k={S} color="#ffffff" shadow="#202028" /></span>
+      <span className="ds-move-meta">
         <TypePlate type={mv.type} scale={S * 1.0} />
-        <b>PP {mv.pp}/{mv.maxpp}</b>
+        <FontText text={`PP ${mv.pp}/${mv.maxpp}`} font={1} k={S} color="#ffffff" shadow="#202028" />
       </span>
     </button>
   )
@@ -201,16 +202,19 @@ export function MoveScreen({ S, moves, onMove, onBack }: { S: number; moves: Mov
 function MoveInfoCard({ mv, S }: { mv: MoveView; S: number }) {
   const lang = useLang()
   const m = Dex.moves.get(mv.id)
+  const facts = moveFacts(mv.name, lang)
+  const game = moveGameText(mv.name, lang)
+  const W = Math.floor((256 * S - 14 * S) / S)
   return (
-    <div style={{ position: 'absolute', left: 0, bottom: '100%', marginBottom: 6, width: 256 * S, padding: `${4 * S}px ${6 * S}px`, boxSizing: 'border-box', maxHeight: 150 * S, overflow: 'hidden', background: 'rgba(16,18,26,.94)', border: '2px solid rgba(255,255,255,.7)', borderRadius: 6, color: '#fff', fontSize: 7.5 * S, lineHeight: 1.3, zIndex: 40, pointerEvents: 'none' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 * S, marginBottom: 2 * S }}>
-        <strong style={{ fontSize: 9 * S }}>{mv.name}</strong>
+    <div style={{ position: 'absolute', left: 0, bottom: '100%', marginBottom: 6, width: 256 * S, padding: `${4 * S}px ${6 * S}px`, boxSizing: 'border-box', maxHeight: 170 * S, overflow: 'hidden', background: 'rgba(16,18,26,.94)', border: '2px solid rgba(255,255,255,.7)', borderRadius: 6, color: '#fff', zIndex: 40, pointerEvents: 'none' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 5 * S, marginBottom: 2 * S }}>
+        <FontText text={nameOf(mv.name)} font={0} k={S} />
         <TypePlate type={mv.type} scale={S * 1.05} />
-        <span>{lang === 'es' ? CATEGORY[m.category] ?? m.category : m.category}</span>
-        <span style={{ marginLeft: 'auto' }}>{lang === 'es' ? 'Potencia' : 'Power'} {m.basePower || '—'} · {lang === 'es' ? 'Precisión' : 'Accuracy'} {m.accuracy === true ? '—' : m.accuracy}</span>
+        <FontText text={lang === 'es' ? CATEGORY[m.category] ?? m.category : m.category} font={1} k={S} />
+        <span style={{ marginLeft: 'auto' }}><FontText text={`${lang === 'es' ? 'Potencia' : 'Power'} ${m.basePower || '—'} · ${lang === 'es' ? 'Precisión' : 'Accuracy'} ${m.accuracy === true ? '—' : m.accuracy}`} font={1} k={S} align="right" /></span>
       </div>
-      <div style={{ fontWeight: 600 }}>{moveFacts(mv.name, lang)}</div>
-      {moveGameText(mv.name, lang) && <div style={{ opacity: 0.72, fontStyle: 'italic', marginTop: 3 * S, borderTop: '1px solid rgba(255,255,255,.2)', paddingTop: 3 * S }}>{moveGameText(mv.name, lang)}</div>}
+      <FontText text={facts} font={1} k={S} maxWidth={W} color="#ffffff" />
+      {game && <div style={{ marginTop: 3 * S, borderTop: '1px solid rgba(255,255,255,.2)', paddingTop: 3 * S }}><FontText text={game} font={1} k={S} maxWidth={W} color="#b8b8c8" shadow="#40404c" /></div>}
     </div>
   )
 }
