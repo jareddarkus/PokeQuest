@@ -18,6 +18,8 @@ import { COMMAND_NARC, decodeCommandUi } from './commandUi'
 import { MENU_NARC, decodeMenuUi } from './menuUi'
 import { extractMusic, type MusicIndex } from './sdat'
 import { owList, registerBall, registerEmote, registerOw } from '../game/ow'
+import { decodeFollowers } from './followerSprites'
+import { FOLLOWER_FILES } from '../data/followerMap'
 
 const DB = 'pokequest-rom'
 const STORE = 'assets'
@@ -90,7 +92,7 @@ export async function loadOverworldSprites(): Promise<void> {
   } catch { /* the game falls back to the drawn characters */ }
 }
 
-const VERSION = 39 // 39 = ... + no X pictures / one-direction objects among the characters;  38 = ... + no X inside characters;  37 = ... + title dragon;  36 = ... + Elixir icon;  35 = ... + no placeholder characters;  34 = ... + message frames;  33 = ... + PC wallpapers;  32 = ... + party panels, summary pages;  31 = ... + Bag and Summary backgrounds;  30 = ... + HP boxes;  29 = ... + potion/vitamin colours;  28 = ... + move-effect shapes;  27 = ... + all item icons by file;  26 = ... + item ball;  25 = ... + running pictures;  24 = ... + water animation data;  23 = ... + sound effects and cries;  22 = ... + menu backdrops;  21 = ... + music;  20 = gym buildings;  19 = buildings fixed;  18 = ... + buildings;  17 = ... + emote bubbles;  16 = ... + start menu art;  15 = battle buttons rebuilt;  14 = ... + battle command buttons;  13 = ... + menu icons;  12 = ... + walking characters;  11 = ... + the game's own trainer colours
+const VERSION = 40 // 40 = ... + walking Pokémon (followers);  39 = ... + no X pictures / one-direction objects among the characters;  38 = ... + no X inside characters;  37 = ... + title dragon;  36 = ... + Elixir icon;  35 = ... + no placeholder characters;  34 = ... + message frames;  33 = ... + PC wallpapers;  32 = ... + party panels, summary pages;  31 = ... + Bag and Summary backgrounds;  30 = ... + HP boxes;  29 = ... + potion/vitamin colours;  28 = ... + move-effect shapes;  27 = ... + all item icons by file;  26 = ... + item ball;  25 = ... + running pictures;  24 = ... + water animation data;  23 = ... + sound effects and cries;  22 = ... + menu backdrops;  21 = ... + music;  20 = gym buildings;  19 = buildings fixed;  18 = ... + buildings;  17 = ... + emote bubbles;  16 = ... + start menu art;  15 = battle buttons rebuilt;  14 = ... + battle command buttons;  13 = ... + menu icons;  12 = ... + walking characters;  11 = ... + the game's own trainer colours
 
 let colorsApplied = false
 /** Makes the colour choices of the character maker use the colours the game really uses (snaps each to the nearest real one). */
@@ -165,6 +167,7 @@ export async function importRom(file: RomSource, onProgress: (text: string, frac
   if (ballPic) await put('field:ball', ballPic)
   await put('ow:list', ow)
   await put('emote:list', await decodeEmotes(parseNarc(await nds.get(EMOTE_NARC)), (i, b) => put(`emote:${i}`, b)))
+  try { await decodeFollowers(owFiles, FOLLOWER_FILES, (k, b) => put(k, b)) } catch { /* followers fall back to the menu icon */ }
   onProgress('Reading the move effects…', 0.9843)
   try { await decodeFx(await nds.get(FX_NARC), (name, b) => put(`ui:fx:${name}`, b)) } catch { /* the battle uses plain flashes */ }
   try { // the 3D dragon of the title screen (two small files: the model and its skeleton animation)
@@ -319,4 +322,24 @@ export async function loadTitleFiles(): Promise<{ model: Uint8Array; anim: Uint8
     if (!m || !a) return null
     return { model: new Uint8Array(await m.arrayBuffer()), anim: new Uint8Array(await a.arrayBuffer()) }
   } catch { return null }
+}
+
+const followerPics = new Map<number, Promise<HTMLImageElement | null>>()
+/** The strip of walking pictures (up, up, down, down, left, left, right, right; 32 x 32 each) of one walking-Pokémon file, or null when not imported. */
+export function loadFollowerPicture(file: number): Promise<HTMLImageElement | null> {
+  let p = followerPics.get(file)
+  if (!p) {
+    p = (async () => {
+      try {
+        const blob = await get<Blob>(`pow:${file}`)
+        if (!blob) return null
+        const img = new Image()
+        const url = URL.createObjectURL(blob)
+        await new Promise<void>((res) => { img.onload = () => res(); img.onerror = () => res(); img.src = url })
+        return img.naturalWidth ? img : null
+      } catch { return null }
+    })()
+    followerPics.set(file, p)
+  }
+  return p
 }

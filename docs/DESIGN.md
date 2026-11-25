@@ -244,3 +244,10 @@ Next ideas if this is picked up again: (1) the "!" emote for trainers spotting t
 - Characters: some overworld sprites only have the pictures the game needs; the rest is a big X (black or white) or empty. Those pictures are now replaced by the standing picture of the same character, and one-direction objects / tiny creatures (e.g. files 117, 118, 122, 126, 291, 298, 303) are left out of the character list (`rom/overworld.ts`, import VERSION 39).
 - HUD: info boxes use the game's own dark message window; the party bar uses the game's party-screen panels (empty slots faded); the in-game menu is a vertical list of the game's menu slabs (party bar hides while it is open); screens and menu items slide/fade in (CSS `pq-*` keyframes at the end of App.css, switched off with "reduce motion").
 - Not verifiable in the sandbox browser: online (Gen 6-9) sprites in battles (blocked there) and real frame rate.
+
+## Followers = the game's walking Pokémon (a/0/4/8, files 355+)
+- The same archive as the walking characters holds 620 small "walking Pokémon" files (32x32, up/down/left x2 pictures, right in 8-picture files). `rom/followerSprites.ts` rebuilds them as 8-picture strips (`pow:<file>`), `data/followerMap.ts` says which file belongs to which Pokémon (numbers only).
+- The table was worked out with the dev tool `?folmap` (lines the files up with the game's own Pokémon pictures by colour + shape, then checked by eye). Verified: Pokémon 1-386 and Gen 4 up to Arceus (493), except Shellos / Gastrodon. NOT covered: 494+ (Unova: only ~50 files, order unclear) -> shown with the game's menu icon; Gen 6-9 keep the online pixel picture.
+- `GameView3D` draws the follower facing the way it walks, two pictures alternating while walking (slowly while standing).
+- Characters: `ow.ts` never shows a placeholder X even for game files stored by an older version of this site (it swaps to a real picture).
+- NOT done: real move animations. The move scripts are in `a/0/6/6` (+ `a/0/6/7`) and the particle files in `a/0/0/6`; the script format is not documented anywhere I could find.

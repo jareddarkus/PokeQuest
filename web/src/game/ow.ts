@@ -14,17 +14,36 @@ export function registerOw(idx: number, img: HTMLImageElement) {
 export const hasOw = (idx: number | undefined) => idx !== undefined && strips.has(idx)
 
 const frameCache = new Map<string, HTMLCanvasElement>()
-/** One 32x32 picture: dir 0 down, 1 left, 2 right, 3 up; frame 0 stand, 1 / 2 step. */
+const rawFrame = (img: HTMLImageElement, slot: number): HTMLCanvasElement => {
+  const c = document.createElement('canvas')
+  c.width = OW_FRAME
+  c.height = OW_FRAME
+  c.getContext('2d')!.drawImage(img, slot * OW_FRAME, 0, OW_FRAME, OW_FRAME, 0, 0, OW_FRAME, OW_FRAME)
+  return c
+}
+/** A picture is a placeholder (the game's big "X", or empty) when almost nothing of it is visible. Safety net for game files stored by an older version of this site. */
+const looksEmpty = (c: HTMLCanvasElement): boolean => {
+  const d = c.getContext('2d')!.getImageData(0, 0, c.width, c.height).data
+  let o = 0
+  for (let i = 3; i < d.length; i += 4) if (d[i] > 0) o++
+  return o <= 100
+}
+/** One 32x32 picture: dir 0 down, 1 left, 2 right, 3 up; frame 0 stand, 1 / 2 step. A placeholder picture is never shown: the standing picture of the same / another direction is used instead. */
 export function owFrame(idx: number, dir: number, frame: number, run = false): HTMLCanvasElement | null {
   const img = strips.get(idx)
   if (!img) return null
   const key = `${idx}|${dir}|${frame}|${run ? 1 : 0}`
   let c = frameCache.get(key)
   if (c) return c
-  c = document.createElement('canvas')
-  c.width = OW_FRAME
-  c.height = OW_FRAME
-  c.getContext('2d')!.drawImage(img, ((run ? 12 : 0) + dir * 3 + frame) * OW_FRAME, 0, OW_FRAME, OW_FRAME, 0, 0, OW_FRAME, OW_FRAME)
+  const base = run ? 12 : 0
+  c = rawFrame(img, base + dir * 3 + frame)
+  if (looksEmpty(c)) {
+    const tries = [[dir, 0], [0, 0], [1, 0], [2, 0], [3, 0]]
+    for (const [d, f] of tries) {
+      const alt = rawFrame(img, base + d * 3 + f)
+      if (!looksEmpty(alt)) { c = alt; break }
+    }
+  }
   frameCache.set(key, c)
   return c
 }

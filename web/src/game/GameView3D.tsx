@@ -10,6 +10,8 @@ import { safeTileFor, type GameEvents, type GameHandle, type OtherPlayer } from 
 import { hash2 } from './rng'
 import { dexNum } from '../data/dex'
 import { MAX_ROM_DEX } from '../rom/sprites'
+import { loadFollowerPicture, romIconUrl } from '../rom/store'
+import { FOLLOWER_FILE } from '../data/followerMap'
 import { getAnim, warmAnim } from '../ui/AnimSprite'
 import { pixelDom } from '../ui/MonSprite'
 import type { AnimatedSprite } from '../rom/anim'
@@ -303,17 +305,18 @@ export default function GameView3D(props: Props) {
     // the follower: the first Pokémon of the team walks one tile behind you (it steps onto the tile you just left).
     // From the game file: the Pokémon's own animation, drawn on a small canvas. Newer Pokémon: Showdown's pixel picture as a page element.
     const fol = {
-      x: me.x, y: me.y, fromX: me.x, fromY: me.y, t: 1, stepSec: WALK_SECONDS, key: '', mode: 'none' as 'none' | 'rom' | 'dom',
+      x: me.x, y: me.y, fromX: me.x, fromY: me.y, t: 1, stepSec: WALK_SECONDS, key: '', mode: 'none' as 'none' | 'rom' | 'dom' | 'ow', dir: 1, strip: null as CanvasImageSource | null, owCanvas: document.createElement('canvas'), owTex: null as THREE.CanvasTexture | null,
       sprite: new THREE.Sprite(new THREE.SpriteMaterial({ transparent: true, alphaTest: 0.1, depthWrite: false })), shadow: makeShadow(scene, 0.8),
       anim: null as AnimatedSprite | null, canvas: document.createElement('canvas'), tex: null as THREE.CanvasTexture | null,
       dom: null as { wrap: HTMLElement; w: number; h: number } | null,
     }
     fol.canvas.width = 96; fol.canvas.height = 96
+    fol.owCanvas.width = 32; fol.owCanvas.height = 32
     fol.sprite.visible = false
     fol.sprite.renderOrder = 3
     scene.add(fol.sprite)
     const clearFollower = () => {
-      fol.mode = 'none'; fol.anim = null; fol.sprite.visible = false
+      fol.mode = 'none'; fol.anim = null; fol.strip = null; fol.sprite.visible = false
       if (fol.dom) { fol.dom.wrap.remove(); fol.dom = null }
     }
     const loadFollower = (species: string, shiny: boolean) => {
@@ -321,7 +324,26 @@ export default function GameView3D(props: Props) {
       clearFollower()
       fol.key = key
       const dx = dexNum(species)
-      if (dx > 0 && dx <= MAX_ROM_DEX) {
+      // the walking Pokémon picture of the game (the real "follower" look); a Pokémon without one shows its menu icon
+      const setupOw = (strip: CanvasImageSource) => {
+        const probe = document.createElement('canvas')
+        probe.width = 32; probe.height = 32
+        const pc = probe.getContext('2d')!
+        pc.drawImage(strip, 2 * 32, 0, 32, 32, 0, 0, 32, 32) // the standing-down picture: where are the feet?
+        const d = pc.getImageData(0, 0, 32, 32).data
+        let bottom = 31
+        for (let y = 31; y >= 0; y--) { let any = false; for (let x = 0; x < 32 && !any; x++) any = d[(y * 32 + x) * 4 + 3] > 0; if (any) { bottom = y; break } }
+        fol.strip = strip
+        if (!fol.owTex) {
+          fol.owTex = new THREE.CanvasTexture(fol.owCanvas)
+          fol.owTex.magFilter = THREE.NearestFilter; fol.owTex.minFilter = THREE.NearestFilter; fol.owTex.colorSpace = THREE.SRGBColorSpace
+        }
+        fol.sprite.material.map = fol.owTex
+        fol.sprite.material.needsUpdate = true
+        fol.sprite.center.set(0.5, 1 - (bottom + 1) / 32)
+        fol.mode = 'ow'
+      }
+      const romFallback = () => {
         void warmAnim(species, false, shiny).then(() => {
           if (fol.key !== key) return
           const a = getAnim(species, false, shiny)
@@ -334,6 +356,31 @@ export default function GameView3D(props: Props) {
           fol.sprite.material.needsUpdate = true
           fol.mode = 'rom'
         })
+      }
+      if (dx > 0 && dx <= MAX_ROM_DEX) {
+        void (async () => {
+          let strip: CanvasImageSource | null = null
+          const file = FOLLOWER_FILE[dx]
+          if (file) strip = await loadFollowerPicture(file)
+          if (!strip) { // no walking picture: the game's own menu icon (the same picture for every direction)
+            const url = await romIconUrl(dx)
+            if (url) {
+              const img = new Image()
+              await new Promise<void>((res) => { img.onload = () => res(); img.onerror = () => res(); img.src = url })
+              if (img.naturalWidth) {
+                const c = document.createElement('canvas')
+                c.width = 32 * 8; c.height = 32
+                const cx = c.getContext('2d')!
+                cx.imageSmoothingEnabled = false
+                for (let i = 0; i < 8; i++) cx.drawImage(img, 0, 0, 32, 32, i * 32, 0, 32, 32)
+                strip = c
+              }
+            }
+          }
+          if (fol.key !== key) return
+          if (strip) setupOw(strip)
+          else romFallback()
+        })()
       } else {
         const px = pixelDom(species, shiny)
         const wrap = document.createElement('div')
@@ -612,14 +659,24 @@ export default function GameView3D(props: Props) {
       if (fol.t < 1) fol.t = Math.min(1, fol.t + dt / fol.stepSec)
       const folVisible = !!fs && fol.mode !== 'none'
       fol.shadow.visible = folVisible
-      fol.sprite.visible = folVisible && fol.mode === 'rom'
+      fol.sprite.visible = folVisible && (fol.mode === 'rom' || fol.mode === 'ow')
       if (folVisible) {
         const fx = fol.fromX + (fol.x - fol.fromX) * fol.t
         const fy = fol.fromY + (fol.y - fol.fromY) * fol.t
         const fh = heightAt(fx + 0.5, fy + 0.5)
         const hop = fol.t < 1 ? Math.abs(Math.sin(fol.t * Math.PI)) * 0.12 : 0
         fol.shadow.position.set(fx + 0.5, fh + 0.03, fy + 0.5)
-        if (fol.mode === 'rom' && fol.anim) {
+        if (fol.mode === 'ow' && fol.strip) {
+          const dxm = fol.x - fol.fromX, dym = fol.y - fol.fromY
+          if (fol.t < 1 && (Math.abs(dxm) > 0.01 || Math.abs(dym) > 0.01)) fol.dir = Math.abs(dxm) > Math.abs(dym) ? (dxm > 0 ? 3 : 2) : (dym > 0 ? 1 : 0) // 0 up, 1 down, 2 left, 3 right
+          const frame = fol.t < 1 ? (fol.t < 0.5 ? 0 : 1) : Math.floor(now / 500) % 2 // two pictures: they alternate while walking, and slowly while standing
+          const cx = fol.owCanvas.getContext('2d')!
+          cx.clearRect(0, 0, 32, 32)
+          cx.drawImage(fol.strip, (fol.dir * 2 + frame) * 32, 0, 32, 32, 0, 0, 32, 32)
+          if (fol.owTex) fol.owTex.needsUpdate = true
+          fol.sprite.scale.set(2, 2, 1) // 32 picture pixels = 2 tiles, like the characters
+          place(fol.sprite, camera, fx + 0.5, fh + 0.2 + hop, fy + 0.5)
+        } else if (fol.mode === 'rom' && fol.anim) {
           const cx = fol.canvas.getContext('2d')!
           cx.clearRect(0, 0, 96, 96)
           fol.anim.draw(cx, (now / 1000) * 60)
