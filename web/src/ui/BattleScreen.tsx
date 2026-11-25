@@ -279,7 +279,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
   const say = async (t: string, hold = 800) => { setText(t); await wait(typeMs(t) + hold) }
   const [mode, setMode] = useState<'wait' | 'menu' | 'fight' | 'switch' | 'bag' | 'done'>('wait')
   const S = dsScale()
-  const Kd = useDsK()
+  const KdBase = useDsK()
   const [req, setReq] = useState<Request | null>(null)
   const sessionRef = useRef<BattleSession | null>(null)
   const queue = useRef<BattleEvent[]>([])
@@ -297,6 +297,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
   const [layout, setLayoutState] = useState<BattleLayout | null>(null)
   const layoutRef = useRef<BattleLayout | null>(null)
   const setLayout = (l: BattleLayout) => { layoutRef.current = l; setLayoutState(l) }
+  const Kd = layout ? Math.max(1, snap(layout.frame.h / 192)) : KdBase // screen pixels per picture pixel of the game's 4:3 screen as it is drawn now
   const fxCanvas = useRef<HTMLCanvasElement>(null)
   const fxRef = useRef<MoveFx | null>(null)
   const environment = 'grass'
@@ -653,7 +654,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
   }
 
   return (
-    <div className={`fullscreen battle ${showScene ? '' : 'pre'}`} style={{ ["--menu-h" as string]: `${236 * S}px`, ["--bottom-h" as string]: `${bottomHeight()}px`, ["--k" as string]: `${Kd}px`, ["--s" as string]: `${S}px` }}>
+    <div className={`fullscreen battle ${showScene ? '' : 'pre'}`} style={{ ["--menu-h" as string]: `${236 * S}px`, ["--bottom-h" as string]: `${bottomHeight()}px`, ["--k" as string]: `${Kd}px`, ["--s" as string]: `${S}px`, ["--frame-l" as string]: `${layout?.frame.l ?? 0}px`, ["--frame-t" as string]: `${layout?.frame.t ?? 0}px`, ["--frame-b" as string]: layout ? `${layout.frame.b}px` : `${bottomHeight()}px` }}>
       <div className={`stage-cam ${mode === 'fight' ? 'zoom' : ''}`}>
       <BattleBackdrop env={environment} onLayout={setLayout} sceneRef={sceneRef} />
       <canvas ref={fxCanvas} className="fx-canvas" />
@@ -665,8 +666,8 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
         </div>
       )}
       {layout && myPic && !trGone.me && (
-        <div className="stage-sprite trainer-me" style={{ left: layout.me.x, width: layout.me.w }}>
-          <TrainerFigure sprite={myPic} k={snapNear(layout.me.w / 136)} side="me" out={trOut.me} play={throwKey} />
+        <div className="stage-sprite trainer-me" style={{ left: layout.frame.l + layout.frame.w * 0.23, width: layout.me.w }}>
+          <TrainerFigure sprite={myPic} k={snapNear(layout.frame.w / 256)} side="me" out={trOut.me} play={throwKey} />
         </div>
       )}
       {layout && foe && (
