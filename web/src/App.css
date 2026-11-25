@@ -444,7 +444,6 @@ button.big small { opacity: .7; font-size: .75rem; }
 .tr-fig.sil1 { animation: pq-sil .9s linear both; }
 @keyframes pq-sil { 0%, 45% { filter: brightness(0); } 100% { filter: none; } }
 /* wide windows: the message band sits at the very bottom of the picture, the command screen above it */
-@media (min-width: 1000px) { .battle-bottom { flex-direction: column-reverse; } }
 
 /* the lower screen: dim closed ball while waiting; the commands zoom in and light up (a little over the end size first), like the reference video */
 .idle-ball .idle-ball-pic { transform: scale(.62); filter: brightness(.32); transform-origin: 50% 53%; animation: pq-idle-in .3s ease-in; }
@@ -473,3 +472,7 @@ button.big small { opacity: .7; font-size: .75rem; }
 @keyframes pq-so-beam { 0% { opacity: 0; transform: translateY(calc(var(--hv, 100px) * -.62)) rotate(var(--rot)) scaleY(.1); } 20% { opacity: 1; transform: translateY(calc(var(--hv, 100px) * -.62)) rotate(var(--rot)) scaleY(1); } 100% { opacity: 0; transform: translateY(calc(var(--hv, 100px) * -.62)) rotate(var(--rot)) scaleY(1); } }
 .so-ring { position: absolute; left: 50%; bottom: 0; width: 7px; height: 7px; margin-left: -3px; border-radius: 50%; border: 2px solid #ffb070; background: rgba(255, 255, 255, .6); opacity: 0; box-sizing: border-box; animation: pq-so-ring .95s ease-out .15s forwards; }
 @keyframes pq-so-ring { 0% { opacity: 0; transform: translate(0, calc(var(--hv, 100px) * -.65)) scale(.4); } 12% { opacity: 1; } 100% { opacity: 0; transform: translate(calc(cos(var(--a)) * var(--d)), calc(var(--hv, 100px) * -.65 + sin(var(--a)) * var(--d))) scale(1); } }
+
+/* the lower screen sits at the very bottom, the log box right above it, both the same width (256 DS pixels x S) */
+.battle-bottom { align-items: center; flex-direction: column !important; }
+.battle-band { width: calc(256 * var(--s)) !important; height: calc(44 * var(--s)) !important; padding: calc(9 * var(--s)) calc(8 * var(--s)) !important; }

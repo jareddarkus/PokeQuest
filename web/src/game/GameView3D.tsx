@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { hardEdges } from '../rom/anim'
 import * as THREE from 'three'
 import type { BuiltWorld } from '../rom/chunkWorld'
 import { drawCharacter, lookSprite, randomLook, type Look } from './character'
@@ -204,7 +205,7 @@ export default function GameView3D(props: Props) {
     const mount = mountRef.current!
     const { world, built } = propsRef.current
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true })
+    const renderer = new THREE.WebGLRenderer({ antialias: false })
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
     mount.appendChild(renderer.domElement)
     renderer.domElement.className = 'game-canvas'
@@ -710,6 +711,7 @@ export default function GameView3D(props: Props) {
           const cx = fol.canvas.getContext('2d')!
           cx.clearRect(0, 0, 96, 96)
           fol.anim.draw(cx, (now / 1000) * 60)
+          hardEdges(cx, 96, 96)
           if (fol.tex) fol.tex.needsUpdate = true
           fol.sprite.scale.set(1.9, 1.9, 1) // 96 picture pixels = 1.9 tiles
           place(fol.sprite, camera, fx + 0.5, fh + 0.05 + hop, fy + 0.5)

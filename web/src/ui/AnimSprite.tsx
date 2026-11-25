@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { hardEdges } from '../rom/anim'
 import { dexNum } from '../data/dex'
 import { buildAnimatedSprite, type AnimatedSprite } from '../rom/anim'
 import { getSpriteFiles, romSpriteUrl } from '../rom/store'
@@ -100,6 +101,7 @@ export default function AnimSprite({ species, back, shiny, scale: wanted = 2 }: 
     const loop = () => {
       ctx.clearRect(0, 0, 96, 96)
       sprite.draw(ctx, ((performance.now() - t0) / 1000) * 60)
+      hardEdges(ctx, 96, 96)
       raf = requestAnimationFrame(loop)
     }
     loop()

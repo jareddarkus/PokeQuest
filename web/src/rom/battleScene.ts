@@ -45,7 +45,7 @@ export class BattleBackdrop3D {
 
   constructor(mount: HTMLElement, files: Uint8Array[], env: BattleEnvironment, ballRaw?: Uint8Array | null) {
     this.mount = mount
-    this.renderer = new THREE.WebGLRenderer({ antialias: true })
+    this.renderer = new THREE.WebGLRenderer({ antialias: false })
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
     mount.appendChild(this.renderer.domElement)
     this.renderer.domElement.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:block'

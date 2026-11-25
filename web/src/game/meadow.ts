@@ -6,6 +6,15 @@ import type { BuiltWorld } from '../rom/chunkWorld'
 import { C, RADIUS, RING_INNER, SIZE, T, dist, ringAt, type World } from './world'
 import { hash2, valueNoise } from './rng'
 
+/** How much higher each ring is than the ring outside it (tiles): the island is a mountain, every ring a terrace with cliffs towards the next one. */
+export const RING_LIFT = 2.4
+const smooth = (a: number, b: number, x: number) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t) }
+/** The extra height at distance d from the centre (the same formula as in the map's vertex shader). */
+export function liftAt(d: number): number {
+  let l = 0
+  for (const b of RING_INNER.slice(0, 3)) l += 1 - smooth(b - 1, b, d)
+  return l * RING_LIFT
+}
 const BEACH = 3 // the outermost tiles are sand
 const ROAD_R = 67 // radius of the ring road
 
@@ -45,6 +54,9 @@ export function prepareMeadow(built: BuiltWorld, seed: number): void {
   }
   built.pathMask = path
   built.uniforms.uHide.value = RING_INNER[0] - 0.2 // the real map is not drawn in the meadow
+  // the inner rings are higher (terraces): the ground heights and the map's pictures (vertex shader) are lifted the same way
+  built.uniforms.uLift.value = RING_LIFT
+  for (let y = 0; y < SIZE; y++) for (let x = 0; x < SIZE; x++) { const d = dist(x, y); if (d < RING_INNER[0]) built.height[y * SIZE + x] += liftAt(d) }
 }
 
 /** More tall grass in the inner rings: patches on the plain grass tiles of the real map (returns the tile numbers that were changed). */
@@ -121,5 +133,31 @@ export function buildMeadowVisuals(world: World, built: BuiltWorld, extra: numbe
   flat(tallsB, tallB ?? tallA, 0.02, 0x2a8a3a, false, true, () => hm)
   const ex = extra.filter((i) => !(dist(i % SIZE, (i / SIZE) | 0) >= RING_INNER[0]))
   flat(ex, tallA, 0.04, 0x2a8a3a, false, true, (i) => built.height[i])
+  // the cliffs between the rings: a wall of the game's cliff picture from the lower ring up to the higher one, following the ground of both
+  const cliff = built.textureNamed('gake01a', true, (r, gg, b) => r - b - Math.abs(gg - r) * 0.2)
+  const hAt = (fx: number, fz: number): number => built.height[Math.max(0, Math.min(SIZE - 1, Math.floor(fz))) * SIZE + Math.max(0, Math.min(SIZE - 1, Math.floor(fx)))]
+  for (const b of RING_INNER.slice(0, 3)) {
+    const N = 360
+    const pos: number[] = [], uv: number[] = [], idx: number[] = []
+    const r = b - 0.5
+    for (let k = 0; k <= N; k++) {
+      const a = (k / N) * Math.PI * 2
+      const cx = Math.cos(a), cz = Math.sin(a)
+      const top = hAt(C + cx * (b - 1.6), C + cz * (b - 1.6)) + 0.1
+      const bottom = hAt(C + cx * (b + 1.6), C + cz * (b + 1.6)) - 0.6
+      const x = C + cx * r, z = C + cz * r
+      pos.push(x, top, z, x, bottom, z)
+      const u = (k / N) * Math.PI * 2 * r / 4
+      uv.push(u, top / 4, u, bottom / 4)
+      if (k < N) { const i0 = k * 2; idx.push(i0, i0 + 1, i0 + 2, i0 + 1, i0 + 3, i0 + 2) }
+    }
+    const geo = new THREE.BufferGeometry()
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2))
+    geo.setIndex(idx)
+    const mesh = new THREE.Mesh(geo, groundMat(cliff, 0x8a6a3a, built))
+    mesh.frustumCulled = false
+    g.add(mesh)
+  }
   return g
 }

@@ -20,7 +20,7 @@ import { Dex } from '@pkmn/sim'
 import { music } from '../audio/music'
 import { warmAnim } from './AnimSprite'
 import { trainerBackPic, trainerFrontPic } from '../rom/trainerPics'
-import type { AnimatedSprite } from '../rom/anim'
+import { hardEdges, type AnimatedSprite } from '../rom/anim'
 import { playerBackClass, trainerClassFor } from '../data/trainerClasses'
 import { MoveFx, FX_NAMES } from './moveFx'
 import { trText, useLang } from '../i18n'
@@ -66,10 +66,10 @@ export function TypedText({ text, ms, skip }: { text: string; ms: number; skip: 
     return () => window.clearInterval(id)
   }, [full, ms])
   useEffect(() => { if (skip) setN(full.length) }, [skip])
-  // the game's own font at the size of the real top screen: white letters with a light grey shadow (measured on the reference video)
-  const K = useDsK()
-  const bandW = Math.min(window.innerWidth, 256 * K)
-  return <FontText text={full} reveal={n} k={K} font={0} color="#f8f8f8" shadow="#a4b0b0" maxWidth={Math.floor((bandW - 16 * K) / K)} style={{ textAlign: 'left' }} />
+  // the log box is as wide as the lower screen, so its text is as big as the lower screen's pixels (the game's own font: white with a light grey shadow)
+  const S = dsScale()
+  useDsK() // (re-draw when the window changes size)
+  return <FontText text={full} reveal={n} k={S} font={0} color="#f8f8f8" shadow="#a4b0b0" maxWidth={Math.floor(256 - 16)} style={{ textAlign: 'left' }} />
 }
 
 /**
@@ -100,13 +100,14 @@ function TrainerFigure({ still, sprite, k, side, out, play, sil }: { still?: HTM
     ctx.clearRect(0, 0, size, size)
     if (still) { ctx.drawImage(still, 0, 0); return }
     if (!sprite) return
-    if (!play) { sprite.draw(ctx, 0); return }
+    if (!play) { sprite.draw(ctx, 0); hardEdges(ctx, size, size); return }
     let raf = 0
     const t0 = performance.now()
     const tick = () => {
       const t = ((performance.now() - t0) / 1000) * 60
       ctx.clearRect(0, 0, size, size)
       sprite.draw(ctx, Math.min(t, sprite.loopLength - 1))
+      hardEdges(ctx, size, size)
       if (t < sprite.loopLength) raf = requestAnimationFrame(tick)
     }
     tick()
@@ -152,7 +153,7 @@ export function useDsK(): number {
   return k
 }
 function dsK(): number {
-  const W = window.innerWidth, H = window.innerWidth >= 1000 ? window.innerHeight : window.innerHeight - 192 * dsScale()
+  const W = window.innerWidth, H = window.innerWidth >= 1000 ? window.innerHeight : window.innerHeight - 236 * dsScale()
   return snap(Math.max(1.2, Math.min(W / 256, H / 192)))
 }
 
@@ -625,7 +626,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
   }
 
   return (
-    <div className={`fullscreen battle ${showScene ? '' : 'pre'}`} style={{ ["--menu-h" as string]: `${192 * S}px`, ["--k" as string]: `${Kd}px` }}>
+    <div className={`fullscreen battle ${showScene ? '' : 'pre'}`} style={{ ["--menu-h" as string]: `${236 * S}px`, ["--k" as string]: `${Kd}px`, ["--s" as string]: `${S}px` }}>
       <div className={`stage-cam ${mode === 'fight' ? 'zoom' : ''}`}>
       <BattleBackdrop env={environment} onLayout={setLayout} sceneRef={sceneRef} />
       <canvas ref={fxCanvas} className="fx-canvas" />

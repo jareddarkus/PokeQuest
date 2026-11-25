@@ -118,7 +118,7 @@ export function buildChunkWorld(data: WorldData): BuiltWorld {
   const height = new Float32Array(size * size)
   const group = new THREE.Group()
   const uniforms: ClipUniforms = {
-    uCut: { value: 999 }, uCenter: { value: new THREE.Vector2(size / 2, size / 2) }, uTime: { value: 0 }, uWarn: { value: 0 }, uHide: { value: 9999 },
+    uCut: { value: 999 }, uCenter: { value: new THREE.Vector2(size / 2, size / 2) }, uTime: { value: 0 }, uWarn: { value: 0 }, uHide: { value: 9999 }, uLift: { value: 0 },
   }
   const texCache = new Map<number, ReturnType<typeof readTexFile>>()
   const animSets = (data.anims ?? []).map((f) => parseTextureAnim(f))

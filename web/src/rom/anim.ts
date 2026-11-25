@@ -186,6 +186,14 @@ function buildCell(oams0: Oam[], atlas: { w: number; h: number; px: Uint8Array }
   return { canvas, pixels }
 }
 
+/** Makes every pixel either fully see-through or fully solid: a turned / squashed part of a Pokémon keeps hard pixel edges, like on the DS (no soft edges). */
+export function hardEdges(ctx: CanvasRenderingContext2D, w: number, h: number): void {
+  const img = ctx.getImageData(0, 0, w, h)
+  const d = img.data
+  for (let i = 3; i < d.length; i += 4) d[i] = d[i] >= 128 ? 255 : 0
+  ctx.putImageData(img, 0, 0)
+}
+
 export interface AnimatedSprite {
   size: number
   /** draw the picture for time t (in 1/60 s) with its feet at the bottom middle of a 96 x 96 area */

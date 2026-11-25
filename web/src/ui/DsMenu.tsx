@@ -13,8 +13,9 @@ const cancel = () => { void music.playSfx('se:cancel') }
 
 /** The size of the "bottom screen" of the DS in screen pixels (the game's pictures are 256 x 192). */
 export function dsScale(): number {
-  // wide windows: the lower screen is twice the DS size; phones: as wide as fits; always whole device pixels per picture pixel
-  return snap(Math.max(1, window.innerWidth >= 1000 ? 2 : (window.innerWidth - 16) / 256))
+  // wide windows: a little smaller than twice the DS size where the screen allows it (otherwise 2); phones: as wide as fits; always whole device pixels per picture pixel
+  const dpr = window.devicePixelRatio || 1
+  return snap(Math.max(1, window.innerWidth >= 1000 ? (dpr >= 1.25 ? 1.75 : 2) : (window.innerWidth - 16) / 256))
 }
 
 const recolored = new Map<string, string>()
@@ -155,17 +156,11 @@ function BallHalves({ S, open, onDone }: { S: number; open: boolean; onDone?: ()
   )
 }
 
-/** The bar at the top of the lower screen of the real game: the time, and the (switched off) IR / ONLINE / WIRELESS lights. */
-function ScreenBar({ S }: { S: number }) {
-  const [now, setNow] = useState(() => new Date())
-  useEffect(() => { const id = window.setInterval(() => setNow(new Date()), 15000); return () => window.clearInterval(id) }, [])
-  const hh = String(now.getHours()).padStart(2, '0'), mm = String(now.getMinutes()).padStart(2, '0')
-  const k = Math.max(1, S)
+/** The lower battle screen without the black bar at the top of the DS screen (time / IR / ONLINE / WIRELESS): its top 16 pixels are cut away. */
+function Lower({ S, children }: { S: number; children: React.ReactNode }) {
   return (
-    <div style={{ position: 'absolute', left: 0, top: 0, width: 256 * S, height: 12 * S, background: '#16181e', pointerEvents: 'none', zIndex: 4 }}>
-      <div style={{ position: 'absolute', left: 8 * S, top: 1 * S }}><FontText text={`${hh}:${mm}`} font={1} k={k} color="#d8dae4" shadow={null} /></div>
-      <div style={{ position: 'absolute', left: 72 * S, top: 1 * S, opacity: 0.45 }}><FontText text="•IR  •ONLINE  •WIRELESS" font={1} k={k} color="#8a8c98" shadow={null} /></div>
-      <div style={{ position: 'absolute', right: 8 * S, top: 3 * S, width: 7 * S, height: 6 * S, border: `${Math.max(1, S)}px solid #d8dae4`, borderRadius: 1 }} />
+    <div style={{ width: 256 * S + 6, height: 176 * S + 3, overflow: 'hidden', flex: 'none' }}>
+      <div style={{ marginTop: -16 * S }}>{children}</div>
     </div>
   )
 }
@@ -196,11 +191,12 @@ function PartyDots({ S, party, foeCount }: { S: number; party?: Array<'ok' | 'fn
 export function IdleBall({ S }: { S: number }) {
   const bg = useUiUrl('menu:bg')
   return (
+    <Lower S={S}>
     <div className="ds-screen idle-ball" style={{ width: 256 * S, height: 192 * S, overflow: 'hidden', background: '#101216' }}>
-      <ScreenBar S={S} />
       <div className="idle-ball-pic" style={{ position: 'absolute', inset: 0, backgroundImage: bg ? `url(${bg})` : undefined, backgroundSize: '100% 100%', imageRendering: 'pixelated' }} />
       <div style={{ position: 'absolute', left: '50%', top: '53%', width: 118 * S, height: 118 * S, transform: 'translate(-50%,-50%)', borderRadius: '50%', border: `${Math.max(1, S)}px solid rgba(255,255,255,.1)`, boxShadow: '0 0 0 ' + 6 * S + 'px rgba(255,255,255,.05)' }} />
     </div>
+    </Lower>
   )
 }
 
@@ -223,10 +219,10 @@ export function CommandScreen({ S, onFight, onBag, onPokemon, onRun, closing, pa
     </button>
   )
   return (
+<Lower S={S}>
  <div style={{ width: 256 * S, height: 192 * S, overflow: 'hidden', background: '#101216', position: 'relative' }}>
  <div className="ds-screen cmd-in" style={{ width: 256 * S, height: 192 * S, backgroundImage: closingNow && movesBg ? `url(${movesBg})` : bg ? `url(${bg})` : undefined }}>
       {closingNow && <BallHalves S={S} open={false} onDone={() => setClosingNow(false)} />}
-      <ScreenBar S={S} />
       {!closingNow && <PartyDots S={S} party={party} foeCount={foeCount} />}
       <button className="ds-btn" aria-label="Fight" onClick={() => { decide(); onFight() }} style={{ left: 84 * S, top: 86 * S, width: 89 * S, height: 21 * S }}>
         {fight ? <img className="ds-fight-label" src={fight} alt="Fight" draggable={false} style={{ width: '100%', height: '100%' }} /> : null}
@@ -236,6 +232,7 @@ export function CommandScreen({ S, onFight, onBag, onPokemon, onRun, closing, pa
       <Btn img={poke} x={177} y={147} w={79} h={46} label="Pokémon" onClick={onPokemon} />
     </div>
  </div>
+</Lower>
   )
 }
 
@@ -246,13 +243,17 @@ export function MoveScreen({ S, moves, onMove, onBack }: { S: number; moves: Mov
   const pos: Array<[number, number]> = [[0, 26], [129, 26], [0, 76], [129, 76]]
   const [info, setInfo] = useState<MoveView | null>(null)
   return (
-    <div className="ds-screen" style={{ width: 256 * S, height: 192 * S, backgroundImage: bg ? `url(${bg})` : undefined }}>
-      <BallHalves S={S} open />
-      {moves.slice(0, 4).map((mv, i) => <MoveButton key={mv.id} mv={mv} x={pos[i][0]} y={pos[i][1]} S={S} onClick={() => onMove(i)} onInfo={setInfo} />)}
+    <div style={{ position: 'relative' }}>
+      <Lower S={S}>
+        <div className="ds-screen" style={{ width: 256 * S, height: 192 * S, backgroundImage: bg ? `url(${bg})` : undefined }}>
+          <BallHalves S={S} open />
+          {moves.slice(0, 4).map((mv, i) => <MoveButton key={mv.id} mv={mv} x={pos[i][0]} y={pos[i][1]} S={S} onClick={() => onMove(i)} onInfo={setInfo} />)}
+          <button className="ds-btn" aria-label="Back" onClick={() => { cancel(); onBack() }} style={{ left: 88 * S, top: 136 * S, width: 80 * S, height: 44 * S }}>
+            {back ? <img src={back} alt="Back" draggable={false} style={{ width: '100%', height: '100%' }} /> : 'Back'}
+          </button>
+        </div>
+      </Lower>
       {info && <MoveInfoCard mv={info} S={S} />}
-      <button className="ds-btn" aria-label="Back" onClick={() => { cancel(); onBack() }} style={{ left: 88 * S, top: 136 * S, width: 80 * S, height: 44 * S }}>
-        {back ? <img src={back} alt="Back" draggable={false} style={{ width: '100%', height: '100%' }} /> : 'Back'}
-      </button>
     </div>
   )
 }

@@ -12,6 +12,7 @@ export interface ClipUniforms {
   uCenter: { value: THREE.Vector2 }
   uTime: { value: number }
   uWarn: { value: number } // 1 = tint the band that is about to fall
+  uLift: { value: number } // how much higher each ring is than the one outside it (the island is a mountain)
   uHide: { value: number } // the real map is not drawn further than this from the centre (the outer ring is a meadow made by us)
 }
 
@@ -96,9 +97,10 @@ export function buildModelObject(model: Model, tex: NonNullable<ReturnType<typeo
         shader.uniforms.uTime = clip.uTime
         shader.uniforms.uWarn = clip.uWarn
         shader.uniforms.uHide = hide ? clip.uHide : { value: 9999 }
+        shader.uniforms.uLift = hide ? clip.uLift : { value: 0 }
         shader.vertexShader = shader.vertexShader
-          .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;')
-          .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWPos = (modelMatrix * vec4(position, 1.0)).xyz;')
+          .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;\nuniform float uLift;\nuniform vec2 uCenter;')
+          .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWPos = (modelMatrix * vec4(position, 1.0)).xyz;\nfloat pqd0 = length(vWPos.xz - uCenter);\ntransformed.y += uLift * ((1.0 - smoothstep(59.0, 60.0, pqd0)) + (1.0 - smoothstep(39.0, 40.0, pqd0)) + (1.0 - smoothstep(19.0, 20.0, pqd0)));')
         shader.fragmentShader = shader.fragmentShader
           .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;\nuniform float uCut;\nuniform vec2 uCenter;\nuniform float uTime;\nuniform float uWarn;\nuniform float uHide;')
           .replace('#include <clipping_planes_fragment>', '#include <clipping_planes_fragment>\nfloat pqD = length(vWPos.xz - uCenter);\nif (pqD > uCut || pqD > uHide) discard;')
