@@ -9,6 +9,7 @@ import Customizer from './ui/Customizer'
 import SettingsPanel from './ui/SettingsPanel'
 import PlayScreen from './ui/PlayScreen'
 import RomGate from './ui/RomGate'
+import { ProgressBar } from './ui/ProgressBar'
 import { getRomMeta } from './rom/store'
 import { music } from './audio/music'
 import LobbyScreen from './ui/LobbyScreen'
@@ -117,7 +118,7 @@ export default function App() {
 
   if (!ready) return null
   if (!session && !guest) return <><TitleDragon /><Login onGuest={() => setGuest(true)} /></>
-  if (rom === 'checking') return null
+  if (rom === 'checking') return <div className="fullscreen center menu-bg"><div className="panel card"><p className="sub">Checking the game file saved in this browser…</p><ProgressBar indeterminate p={{ text: 'Checking…', frac: 0 }} /></div></div>
   if (rom === 'missing') return <RomGate onReady={() => setRom('ready')} />
 
   const logout = async () => {

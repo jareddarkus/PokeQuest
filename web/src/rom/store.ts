@@ -1,5 +1,6 @@
 // Where the pictures taken from the player's own game file are kept: the browser's private storage on THEIR computer.
 // They are never uploaded, and never put into the website or the database.
+import type { Progress } from '../ui/ProgressBar'
 import { NdsFile, parseNarc, type RomSource } from './nds'
 import { SPRITE_NARC, decodeAllSprites, spriteKey } from './sprites'
 import { WORLD_WINDOW, extractWorldData, type WorldData } from './worldData'
@@ -134,59 +135,92 @@ export async function getRomMeta(): Promise<RomMeta | null> {
   }
 }
 
+/** How many files each step of the import stores (measured on a real import; only used to show "done / total", a step that stores more just shows its own count). */
+const EXPECTED_FILES: Record<string, number> = { open: 1, sprites: 2596, scenery: 1, icons: 465, menus: 100, menuIcons: 649, colors: 1, walkers: 274, followers: 479, fonts: 4, effects: 27, sounds: 2411, map: 1 }
+
 /** Reads the player's game file and stores the pictures. Returns what was found. */
-export async function importRom(file: RomSource, onProgress: (text: string, frac: number) => void): Promise<RomMeta> {
-  onProgress('Opening the game file…', 0.02)
+export async function importRom(file: RomSource, onProgress: (p: Progress) => void): Promise<RomMeta> {
+  const STEPS = 13
+  let stepNo = 0
+  /** Starts a step: returns a `put` that counts the files it stores and shows "done / total". */
+  const step = (key: string, text: string, frac: number) => {
+    stepNo++
+    let n = 0
+    const total = () => Math.max(EXPECTED_FILES[key] ?? 1, n)
+    const report = () => onProgress({ text, frac, done: n, total: total(), step: stepNo, steps: STEPS, unit: 'files' })
+    report()
+    return {
+      put: async (k: string, v: unknown) => { n++; if (n % 6 === 0) { report(); await new Promise((r) => setTimeout(r)) } return put(k, v) },
+      end: () => { if (import.meta.env.DEV) console.info('[import]', key, n); n = Math.max(n, 1); report() },
+      report,
+    }
+  }
+  let st = step('open', 'Opening the game file…', 0.0)
   const nds = new NdsFile(file)
   await nds.open()
   const code = nds.header.gameCode
   if (!/^I[RA][ABD]/.test(code) && !/^IR[ABDE]/.test(code)) {
     throw new Error(`This is "${nds.header.title}" (${code}). Please choose Pokémon Black 2 or White 2 (or Black / White).`)
   }
-  onProgress('Reading the Pokémon pictures…', 0.05)
+  st.end()
+  st = step('sprites', 'Converting the Pokémon pictures…', 0.02)
   const narc = await nds.get(SPRITE_NARC)
   await put('sprites:narc', new Blob([new Uint8Array(narc)]))
-  onProgress('Reading the battle scenery…', 0.97)
-  await put('battle:narc', new Blob([new Uint8Array(await nds.get(BATTLE_NARC))]))
   let count = 0
-  count = await decodeAllSprites(narc, (d, t) => onProgress(`Converting Pokémon ${d} of ${t}…`, 0.1 + 0.88 * (d / t)), (k, b) => put(`sprite:${k}`, b))
-  onProgress('Reading the item icons…', 0.975)
-  await decodeItemIcons(await nds.get(ITEM_ICON_NARC), (id, b) => put(`item:${id}`, b))
+  count = await decodeAllSprites(narc, (d, t) => onProgress({ text: 'Converting the Pokémon pictures…', frac: 0.02 + 0.78 * (d / t), done: d, total: t, unit: 'Pokémon', step: stepNo, steps: STEPS }), (k, b) => put(`sprite:${k}`, b))
+  st.end()
+  st = step('scenery', 'Reading the battle scenery…', 0.8)
+  await st.put('battle:narc', new Blob([new Uint8Array(await nds.get(BATTLE_NARC))]))
+  st.end()
+  st = step('icons', 'Reading the item icons…', 0.81)
+  await decodeItemIcons(await nds.get(ITEM_ICON_NARC), (id, b) => st.put(`item:${id}`, b))
+  st.end()
+  st = step('menus', 'Reading the menus and battle screens…', 0.83)
   const uiNarc = await nds.get(UI_NARC)
-  await decodePlates(uiNarc, (name, b) => put(`plate:${name}`, b))
-  await decodeBattleUi(uiNarc, (name, b) => put(`ui:${name}`, b))
+  await decodePlates(uiNarc, (name, b) => st.put(`plate:${name}`, b))
+  await decodeBattleUi(uiNarc, (name, b) => st.put(`ui:${name}`, b))
   const commandNarc = await nds.get(COMMAND_NARC)
-  await decodeCommandUi(commandNarc, (name, b) => put(`ui:${name}`, b))
-  try { await decodeHpBoxes(parseNarc(commandNarc), /^IR[DB]/.test(code), (name, b) => put(`ui:${name}`, b)) } catch { /* the page draws plain boxes */ }
-  await decodeMenuUi(await nds.get(MENU_NARC), (name, b) => put(`ui:${name}`, b))
-  try { await decodeScreens(await nds.get(BAG_NARC), await nds.get(SUMMARY_NARC), await nds.get(PARTY_NARC), await nds.get(PC_NARC), await nds.get(BOX_NARC), (name, b) => put(`ui:${name}`, b)) } catch { /* the menus keep a plain look */ }
-  onProgress('Reading the menu icons…', 0.981)
-  await decodeIcons(parseNarc(await nds.get(ICON_NARC)), async (dex) => (await get<Blob>(`sprite:${spriteKey(dex, false, false)}`)) ?? null, (dex, b) => put(`icon:${dex}`, b))
-  onProgress('Reading the trainer colours…', 0.982)
+  await decodeCommandUi(commandNarc, (name, b) => st.put(`ui:${name}`, b))
+  try { await decodeHpBoxes(parseNarc(commandNarc), /^IR[DB]/.test(code), (name, b) => st.put(`ui:${name}`, b)) } catch { /* the page draws plain boxes */ }
+  await decodeMenuUi(await nds.get(MENU_NARC), (name, b) => st.put(`ui:${name}`, b))
+  try { await decodeScreens(await nds.get(BAG_NARC), await nds.get(SUMMARY_NARC), await nds.get(PARTY_NARC), await nds.get(PC_NARC), await nds.get(BOX_NARC), (name, b) => st.put(`ui:${name}`, b)) } catch { /* the menus keep a plain look */ }
+  st.end()
+  st = step('menuIcons', 'Making the menu icons…', 0.86)
+  await decodeIcons(parseNarc(await nds.get(ICON_NARC)), async (dex) => (await get<Blob>(`sprite:${spriteKey(dex, false, false)}`)) ?? null, (dex, b) => st.put(`icon:${dex}`, b))
+  st.end()
+  st = step('colors', 'Reading the trainer colours…', 0.88)
   const trainerNarcs: Uint8Array[] = []
   for (const p of TRAINER_NARCS) { try { trainerNarcs.push(await nds.get(p)) } catch { /* not in this version */ } }
-  await put('colors', extractColors(trainerNarcs))
-  onProgress('Reading the walking characters…', 0.984)
+  await st.put('colors', extractColors(trainerNarcs))
+  st.end()
+  st = step('walkers', 'Reading the walking characters…', 0.89)
   const owFiles = parseNarc(await nds.get(OVERWORLD_NARC))
-  const ow = await decodeOverworld(owFiles, (i, b) => put(`ow:${i}`, b))
+  const ow = await decodeOverworld(owFiles, (i, b) => st.put(`ow:${i}`, b))
   const ballPic = await decodeFieldBall(owFiles)
-  if (ballPic) await put('field:ball', ballPic)
-  await put('ow:list', ow)
-  await put('emote:list', await decodeEmotes(parseNarc(await nds.get(EMOTE_NARC)), (i, b) => put(`emote:${i}`, b)))
-  try { await decodeFollowers(owFiles, FOLLOWER_FILES, (k, b) => put(k, b)) } catch { /* followers fall back to the menu icon */ }
-  try { await put('font:narc', new Blob([new Uint8Array(await nds.get('a/0/2/3'))])) } catch { /* the page's own font is used */ }
-  try { await put('ball:narc', new Blob([new Uint8Array(await nds.get('a/2/0/1'))])) } catch { /* the send-out ball is a plain disc */ }
-  try { await put('trainer:front', new Blob([new Uint8Array(await nds.get('a/0/7/1'))])); await put('trainer:back', new Blob([new Uint8Array(await nds.get('a/0/7/2'))])) } catch { /* battles go without trainer pictures */ }
-  onProgress('Reading the move effects…', 0.9843)
-  try { await decodeFx(await nds.get(FX_NARC), (name, b) => put(`ui:fx:${name}`, b)) } catch { /* the battle uses plain flashes */ }
+  if (ballPic) await st.put('field:ball', ballPic)
+  await st.put('ow:list', ow)
+  await st.put('emote:list', await decodeEmotes(parseNarc(await nds.get(EMOTE_NARC)), (i, b) => st.put(`emote:${i}`, b)))
+  st.end()
+  st = step('followers', 'Reading the walking Pokémon…', 0.91)
+  try { await decodeFollowers(owFiles, FOLLOWER_FILES, (k, b) => st.put(k, b)) } catch { /* followers fall back to the menu icon */ }
+  st.end()
+  st = step('fonts', 'Reading the fonts, balls and trainers…', 0.92)
+  try { await st.put('font:narc', new Blob([new Uint8Array(await nds.get('a/0/2/3'))])) } catch { /* the page's own font is used */ }
+  try { await st.put('ball:narc', new Blob([new Uint8Array(await nds.get('a/2/0/1'))])) } catch { /* the send-out ball is a plain disc */ }
+  try { await st.put('trainer:front', new Blob([new Uint8Array(await nds.get('a/0/7/1'))])); await st.put('trainer:back', new Blob([new Uint8Array(await nds.get('a/0/7/2'))])) } catch { /* battles go without trainer pictures */ }
+  st.end()
+  st = step('effects', 'Reading the move effects and the title…', 0.93)
+  try { await decodeFx(await nds.get(FX_NARC), (name, b) => st.put(`ui:fx:${name}`, b)) } catch { /* the battle uses plain flashes */ }
   try { // the 3D dragon of the title screen (two small files: the model and its skeleton animation)
     const t = titleFiles(code)
-    if (t) { const tf = parseNarc(await nds.get(TITLE_NARC)); await put('title:model', new Blob([new Uint8Array(tf[t.model])])); await put('title:anim', new Blob([new Uint8Array(tf[t.anim])])) }
+    if (t) { const tf = parseNarc(await nds.get(TITLE_NARC)); await st.put('title:model', new Blob([new Uint8Array(tf[t.model])])); await st.put('title:anim', new Blob([new Uint8Array(tf[t.anim])])) }
   } catch { /* no dragon on the title screen */ }
-  onProgress('Reading the music…', 0.9845)
-  try { await put('music:index', await extractMusic(nds, (id, d) => put(`music:${id}`, d))) } catch { /* no sound archive: the game stays quiet */ }
-  onProgress('Reading the island map…', 0.985)
-  await put('world', await extractWorldData(nds, WORLD_WINDOW))
+  st.end()
+  st = step('sounds', 'Reading the music and sounds…', 0.94)
+  try { await st.put('music:index', await extractMusic(nds, (id, d) => st.put(`music:${id}`, d))) } catch { /* no sound archive: the game stays quiet */ }
+  st.end()
+  st = step('map', 'Reading the island map…', 0.97)
+  await st.put('world', await extractWorldData(nds, WORLD_WINDOW, (_t, done, total) => onProgress({ text: 'Reading the island map…', frac: 0.97 + 0.02 * (done / Math.max(1, total)), done, total, unit: 'map pieces', step: stepNo, steps: STEPS })))
   const meta: RomMeta = { title: nds.header.title, gameCode: code, sprites: count, version: VERSION }
   await put(META_KEY, meta)
   colorsApplied = false
@@ -194,7 +228,8 @@ export async function importRom(file: RomSource, onProgress: (text: string, frac
   musicIndex = undefined
   await applyRomColors()
   await loadOverworldSprites()
-  onProgress('Done!', 1)
+  st.end()
+  onProgress({ text: 'Done!', frac: 1, step: STEPS, steps: STEPS })
   return meta
 }
 

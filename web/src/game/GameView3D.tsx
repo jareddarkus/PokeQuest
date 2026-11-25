@@ -18,6 +18,7 @@ import { getAnim, warmAnim } from '../ui/AnimSprite'
 import { pixelDom } from '../ui/MonSprite'
 import type { AnimatedSprite } from '../rom/anim'
 import type { Settings } from './settings'
+import { makeGrassCoverTexture } from './meadow'
 import {
   DX, DY, SIZE, T, TYPE_COLOR, collapseRadius, dist, inBounds, isWalkable, tileAt, type Dir, type NpcSpec, type World,
 } from './world'
@@ -294,6 +295,26 @@ export default function GameView3D(props: Props) {
     fit(mySprite)
     scene.add(mySprite)
     const myShadow = makeShadow(scene)
+    // standing in tall grass: the grass in front of the character covers its lower body (a picture drawn over the feet, like in the game)
+    const coverTex = makeGrassCoverTexture(built)
+    const makeCover = () => {
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: coverTex ?? undefined, color: coverTex ? 0xffffff : 0x2a8a3a, transparent: true, alphaTest: 0.1, depthWrite: false }))
+      sp.center.set(0.5, 0); sp.visible = false; scene.add(sp)
+      return sp
+    }
+    /** Characters are drawn south (nearer the camera) over north, always: the order follows the ground position. */
+    const order = (sp: THREE.Sprite, z: number) => { sp.renderOrder = 3 + z * 0.001 }
+    const cover = (sp: THREE.Sprite, on: boolean, x: number, ground: number, z: number, wide = 1.0) => {
+      sp.visible = on
+      if (!on) return
+      sp.renderOrder = 3 + z * 0.001 + 0.0005 // right above its character, below the characters further south
+      sp.scale.set(wide, 0.78 * wide, 1)
+      place(sp, camera, x, ground, z, PUSH + 0.04)
+    }
+    const myCover = makeCover(), folCover = makeCover()
+    const npcCovers = new Map<NpcRuntime, THREE.Sprite>()
+    const otherCovers = new Map<string, THREE.Sprite>()
+    const tallAt = (tx: number, ty: number) => tileAt(world, Math.round(tx), Math.round(ty)) === T.Tall
     const npcShadows = new Map<NpcRuntime, THREE.Mesh>()
 
     // the follower: the first Pokémon of the team walks one tile behind you (it steps onto the tile you just left).
@@ -667,7 +688,9 @@ export default function GameView3D(props: Props) {
       const myFrame = me.t >= 1 ? 0 : me.run ? [1, 0, 2, 0][me.cycle] : me.t < 0.5 ? 1 + me.step : 0
       mySprite.material = charMaterial(p.look, me.dir, myFrame, me.run && me.t < 1) // (standing still after a run: the normal standing picture)
       fit(mySprite)
-      { const grass = tileAt(world, Math.round(px), Math.round(py)) === T.Tall; place(mySprite, camera, px + 0.5, ph + lift(mySprite) - (grass ? 0.2 : 0), py + 0.5, grass ? 0 : PUSH) } // in tall grass the leaves cover the lower body, like in the game
+      place(mySprite, camera, px + 0.5, ph + lift(mySprite), py + 0.5)
+      order(mySprite, py + 0.5)
+      cover(myCover, me.t < 1 ? tallAt(me.t < 0.5 ? me.fromX : me.x, me.t < 0.5 ? me.fromY : me.y) : tallAt(me.x, me.y), px + 0.5, ph, py + 0.5) // in tall grass the leaves cover the lower body, like in the game
       myShadow.position.set(px + 0.5, ph + 0.03, py + 0.5)
       // the crates: on sand they sit a little in the sand; everywhere else they are pushed towards the camera (like the characters) so the ground does not cut them
       for (const sp of pickupSprites.values()) {
@@ -684,6 +707,7 @@ export default function GameView3D(props: Props) {
       fol.stepSec = me.stepSec
       if (fol.t < 1) fol.t = Math.min(1, fol.t + dt / fol.stepSec)
       const folVisible = !!fs && fol.mode !== 'none'
+      if (!folVisible) folCover.visible = false
       fol.shadow.visible = folVisible
       fol.sprite.visible = folVisible && (fol.mode === 'rom' || fol.mode === 'ow')
       if (folVisible) {
@@ -692,6 +716,8 @@ export default function GameView3D(props: Props) {
         const fh = heightAt(fx + 0.5, fy + 0.5)
         const hop = fol.t < 1 ? Math.abs(Math.sin(fol.t * Math.PI)) * 0.12 : 0
         fol.shadow.position.set(fx + 0.5, fh + 0.03, fy + 0.5)
+        order(fol.sprite, fy + 0.5)
+        cover(folCover, fol.sprite.visible && (fol.t < 0.5 ? tallAt(fol.fromX, fol.fromY) : tallAt(fol.x, fol.y)), fx + 0.5, fh, fy + 0.5, 1.2)
         if (fol.mode === 'ow' && fol.strip) {
           const dxm = fol.x - fol.fromX, dym = fol.y - fol.fromY
           if (fol.t < 1 && (Math.abs(dxm) > 0.01 || Math.abs(dym) > 0.01)) fol.dir = Math.abs(dxm) > Math.abs(dym) ? (dxm > 0 ? 3 : 2) : (dym > 0 ? 1 : 0) // 0 up, 1 down, 2 left, 3 right
@@ -729,7 +755,10 @@ export default function GameView3D(props: Props) {
         n.sprite.material = charMaterial(n.look, n.dir, frame, n.spec.behavior === 'run' && n.moving > 0)
         fit(n.sprite)
         const nh = n.spec.swim ? Math.max(heightAt(n.fx + 0.5, n.fy + 0.5), built.waterY - 0.02) : heightAt(n.fx + 0.5, n.fy + 0.5) // swimmers float on the water
-        { const grass = tileAt(world, Math.round(n.fx), Math.round(n.fy)) === T.Tall; place(n.sprite, camera, n.fx + 0.5, nh + lift(n.sprite) - (grass ? 0.2 : 0), n.fy + 0.5, grass ? 0 : PUSH) }
+        place(n.sprite, camera, n.fx + 0.5, nh + lift(n.sprite), n.fy + 0.5)
+        order(n.sprite, n.fy + 0.5)
+        { let nc = npcCovers.get(n); if (!nc) { nc = makeCover(); npcCovers.set(n, nc) }
+          cover(nc, !n.spec.swim && (n.moving > 0 && n.moving < 0.5 ? tallAt(n.fromX, n.fromY) : tallAt(n.x, n.y)), n.fx + 0.5, nh, n.fy + 0.5) }
         let sh = npcShadows.get(n)
         if (!sh) { sh = makeShadow(scene); npcShadows.set(n, sh) }
         sh.visible = !n.spec.swim
@@ -775,10 +804,13 @@ export default function GameView3D(props: Props) {
         fit(e.body)
         const h = heightAt(o.x + 0.5, o.y + 0.5)
         place(e.body, camera, o.x + 0.5, h + lift(e.body), o.y + 0.5)
+        order(e.body, o.y + 0.5)
+        { let oc = otherCovers.get(o.id); if (!oc) { oc = makeCover(); otherCovers.set(o.id, oc) }
+          cover(oc, tallAt(o.x, o.y), o.x + 0.5, h, o.y + 0.5) }
         e.shadow.position.set(o.x + 0.5, h + 0.03, o.y + 0.5)
         e.label.position.set(o.x + 0.5, h + 1.5, o.y + 0.5)
       }
-      for (const [id, e] of otherSprites) if (!seen.has(id)) { scene.remove(e.body, e.label, e.shadow); otherSprites.delete(id) }
+      for (const [id, e] of otherSprites) if (!seen.has(id)) { scene.remove(e.body, e.label, e.shadow); otherSprites.delete(id); const oc = otherCovers.get(id); if (oc) { scene.remove(oc); otherCovers.delete(id) } }
 
 
       // the collapsing island

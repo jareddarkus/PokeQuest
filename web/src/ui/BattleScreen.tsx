@@ -297,7 +297,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
   const [layout, setLayoutState] = useState<BattleLayout | null>(null)
   const layoutRef = useRef<BattleLayout | null>(null)
   const setLayout = (l: BattleLayout) => { layoutRef.current = l; setLayoutState(l) }
-  const Kd = layout ? Math.max(1, snap(layout.frame.h / 192)) : KdBase // screen pixels per picture pixel of the game's 4:3 screen as it is drawn now
+  const Kd = KdBase
   const fxCanvas = useRef<HTMLCanvasElement>(null)
   const fxRef = useRef<MoveFx | null>(null)
   const environment = 'grass'
@@ -654,7 +654,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
   }
 
   return (
-    <div className={`fullscreen battle ${showScene ? '' : 'pre'}`} style={{ ["--menu-h" as string]: `${236 * S}px`, ["--bottom-h" as string]: `${bottomHeight()}px`, ["--k" as string]: `${Kd}px`, ["--s" as string]: `${S}px`, ["--frame-l" as string]: `${layout?.frame.l ?? 0}px`, ["--frame-t" as string]: `${layout?.frame.t ?? 0}px`, ["--frame-b" as string]: layout ? `${layout.frame.b}px` : `${bottomHeight()}px` }}>
+    <div className={`fullscreen battle ${showScene ? '' : 'pre'}`} style={{ ["--menu-h" as string]: `${236 * S}px`, ["--bottom-h" as string]: `${bottomHeight()}px`, ["--k" as string]: `${Kd}px`, ["--s" as string]: `${S}px`, ["--zone-l" as string]: `${layout ? layout.frame.l : Math.max(0, (window.innerWidth - 256 * Kd) / 2)}px` }}>
       <div className={`stage-cam ${mode === 'fight' ? 'zoom' : ''}`}>
       <BattleBackdrop env={environment} onLayout={setLayout} sceneRef={sceneRef} />
       <canvas ref={fxCanvas} className="fx-canvas" />
@@ -666,7 +666,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
         </div>
       )}
       {layout && myPic && !trGone.me && (
-        <div className="stage-sprite trainer-me" style={{ left: layout.frame.l + layout.frame.w * 0.23, width: layout.me.w }}>
+        <div className="stage-sprite trainer-me" style={{ left: layout.frame.l + layout.frame.w * 0.23, bottom: layout.frame.b + (13 * layout.frame.w) / 256, width: layout.me.w }}>
           <TrainerFigure sprite={myPic} k={snapNear(layout.frame.w / 256)} side="me" out={trOut.me} play={throwKey} />
         </div>
       )}

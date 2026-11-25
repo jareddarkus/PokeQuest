@@ -19,7 +19,7 @@ export function liftAt(d: number): number {
 const BEACH = 3 // the outermost tiles are sand
 const ROAD_R = 67 // ring distance of the ring road
 
-const SHOW_SIDE = new URLSearchParams(location.search).has('side')
+const SHOW_SIDE = !new URLSearchParams(location.search).has('noside')
 /** The 2 x 2 tile cells of ring 1 that are forest (top-left tile numbers), made by prepareMeadow. */
 let forestCells: number[] = []
 
@@ -118,6 +118,25 @@ export function addExtraGrass(world: World, built: BuiltWorld, seed: number): nu
     }
   }
   return changed
+}
+
+/**
+ * The grass that covers the lower body of a character standing in tall grass: the game's three leaf pictures stacked like the grass of the map
+ * (squashed by the camera angle, each layer a little higher), as one picture. Drawn in front of the character's feet.
+ */
+export function makeGrassCoverTexture(built: BuiltWorld): THREE.CanvasTexture | null {
+  const green = (r: number, gr: number, b: number) => gr - 0.6 * (r + b) / 2
+  const layers = ['kusa_ec3', 'kusa_ec2', 'kusa_ec1'].map((n) => built.textureNamed(n, false, green))
+  if (layers.some((t) => !t)) return null
+  const c = document.createElement('canvas'); c.width = 16; c.height = 20
+  const ctx = c.getContext('2d')!
+  ctx.imageSmoothingEnabled = false
+  const toCanvas = (t: THREE.DataTexture): HTMLCanvasElement => { const k = document.createElement('canvas'); k.width = t.image.width; k.height = t.image.height; k.getContext('2d')!.putImageData(new ImageData(new Uint8ClampedArray(t.image.data as unknown as ArrayLike<number>), t.image.width, t.image.height), 0, 0); return k }
+  const ys = [8, 5, 2] // bottom layer lowest
+  layers.forEach((t, i) => ctx.drawImage(toCanvas(t!), 0, 0, 16, 16, 0, ys[i], 16, 12))
+  const tex = new THREE.CanvasTexture(c)
+  tex.magFilter = THREE.NearestFilter; tex.minFilter = THREE.NearestFilter; tex.colorSpace = THREE.SRGBColorSpace
+  return tex
 }
 
 function groundMat(tex: THREE.Texture | null, color: number, built: BuiltWorld): THREE.MeshBasicMaterial {

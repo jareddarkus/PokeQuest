@@ -163,15 +163,12 @@ export class BattleBackdrop3D {
     // on around it (sides and below) so the field looks the same all over the window.
     const bottom = parseFloat(getComputedStyle(this.mount).getPropertyValue('--bottom-h')) || 0
     const hl = Math.max(1, h - bottom)
-    // The game's screen is drawn bigger than the free part of the window when the lower screen takes much room: its empty sky at the top is cut off and its bottom
-    // fifth lies under the log box / lower screen (as the log box does in the game), so both platforms and Pokémon look close.
-    // (whole device pixels per picture pixel of the game's screen: the biggest size whose platform stays above the log box)
-    const dpr = window.devicePixelRatio || 1
-    const cut = (fh: number) => (fh > hl ? Math.min(0.16 * fh, Math.max(0, 0.79 * fh - 0.97 * hl)) : 0)
-    let K = Math.max(1 / dpr, Math.floor(((w * 3) / 4 / 192) * dpr) / dpr)
-    while (K > 1 / dpr && (0.66 * 192 * K - cut(192 * K) > 0.83 * hl || 192 * K > hl * 1.6)) K -= 1 / dpr
-    const fh = 192 * K, fw = 256 * K
-    const t = cut(fh) // how much of the top of the frame is cut off
+    // The game's 4:3 screen is drawn as big as the window allows: the lower screen / log lie on top of its bottom part (as the log box does in the game), so the empty
+    // sky at its top is cut off until the platform of your Pokémon ends just above the log. Not more than 98% of the window's width (the far platform and the
+    // trainer must not leave the picture).
+    const fh = Math.min(hl * 2.2, w * 0.735), fw = (fh * 4) / 3
+    let t = 0.79 * fh - 0.97 * hl // how much of the top of the screen is cut off (negative: there is spare room, the picture moves down by half of it)
+    if (t < 0) t *= 0.5
     this.frame = { l: (w - fw) / 2, t: -t, w: fw, h: fh, b: h - (fh - t) }
     this.camera.aspect = 4 / 3
     this.camera.fov = FIT.fov

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { devRomSource } from '../rom/devSource'
 import type { RomSource } from '../rom/nds'
 import { importRom, type RomMeta } from '../rom/store'
+import { ProgressBar, type Progress } from './ProgressBar'
 
 interface Props {
   onReady: (meta: RomMeta) => void
@@ -11,8 +12,7 @@ interface Props {
 export default function RomGate({ onReady }: Props) {
   const input = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
-  const [text, setText] = useState('')
-  const [frac, setFrac] = useState(0)
+  const [prog, setProg] = useState<Progress | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   // developer test server only: ?play reads the game file straight from the Desktop
@@ -28,7 +28,7 @@ export default function RomGate({ onReady }: Props) {
     setError(null)
     setBusy(true)
     try {
-      const meta = await importRom(file, (t, f) => { setText(t); setFrac(f) })
+      const meta = await importRom(file, (p) => setProg(p))
       onReady(meta)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not read that file.')
@@ -55,8 +55,7 @@ export default function RomGate({ onReady }: Props) {
         )}
         {busy && (
           <>
-            <div className="hpbar"><div style={{ width: `${frac * 100}%`, background: '#4cd964' }} /></div>
-            <p className="sub">{text}</p>
+            <ProgressBar p={prog ?? { text: 'Starting…', frac: 0 }} />
           </>
         )}
         {error && <p className="error">{error}</p>}

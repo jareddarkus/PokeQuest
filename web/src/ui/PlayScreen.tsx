@@ -26,6 +26,7 @@ import { supabase } from '../supabase'
 import { useMatchPlayers } from '../net/useMatchPlayers'
 import { useChat } from './useChat'
 import { music } from '../audio/music'
+import { ProgressBar, type Progress } from './ProgressBar'
 
 export interface RoyaleInfo { id: string; seed: number; players: string[]; startsAt: number }
 
@@ -448,22 +449,41 @@ export type { Dir }
 
 export default function PlayScreen(props: Props) {
   const [loaded, setLoaded] = useState<{ world: World; built: BuiltWorld } | 'missing' | null>(null)
+  const [prog, setProg] = useState<Progress>({ text: 'Reading the map pieces from your game file…', frac: 0, step: 1, steps: 5 })
   useEffect(() => {
     let live = true
-    void loadWorldData().then((data) => {
+    const pause = () => new Promise<void>((r) => setTimeout(r, 30)) // lets the page draw the bar before the next heavy step
+    void (async () => {
+      await pause()
+      const data = await loadWorldData()
       if (!live) return
       if (!data) { setLoaded('missing'); return }
+      const n = data.chunks.length
+      setProg({ text: 'Reading the map pieces from your game file…', frac: 0.2, step: 1, steps: 5, done: n, total: n, unit: 'map pieces' })
+      await pause()
+      setProg({ text: 'Building the map pieces…', frac: 0.25, step: 2, steps: 5, done: 0, total: n, unit: 'map pieces' })
+      await pause()
       const built = buildChunkWorld(data)
+      setProg({ text: 'Building the map pieces…', frac: 0.6, step: 2, steps: 5, done: n, total: n, unit: 'map pieces' })
+      await pause()
       const seed = props.royale ? props.royale.seed : Math.floor(Math.random() * 1e9)
+      setProg({ text: 'Making the meadow, paths and forests…', frac: 0.65, step: 3, steps: 5, done: 0, total: 1, unit: 'step' })
+      await pause()
       prepareMeadow(built, seed) // ring 1 = a meadow (lots of tall grass, a ring road and paths, a beach)
+      setProg({ text: 'Placing gyms, trainers and items…', frac: 0.8, step: 4, steps: 5, done: 0, total: 1, unit: 'step' })
+      await pause()
       const world = generateWorld(seed, built.ground)
       const extra = addExtraGrass(world, built, seed) // and more tall grass in the inner rings
+      setProg({ text: 'Drawing the island…', frac: 0.9, step: 5, steps: 5, done: 0, total: 1, unit: 'step' })
+      await pause()
       built.group.add(buildMeadowVisuals(world, built, extra))
+      if (!live) return
+      setProg({ text: 'Ready!', frac: 1, step: 5, steps: 5, done: 1, total: 1, unit: 'step' })
       setLoaded({ built, world })
-    })
+    })()
     return () => { live = false }
   }, [])
-  if (loaded === null) return <div className="fullscreen center menu-bg"><div className="panel card"><p className="sub">Building the island from your game file…</p></div></div>
+  if (loaded === null) return <div className="fullscreen center menu-bg"><div className="panel card"><p className="sub">Building the island from your game file…</p><ProgressBar p={prog} /></div></div>
   if (loaded === 'missing') return <div className="fullscreen center menu-bg"><div className="panel card"><p>The map pieces are missing. Please import your game file again (clear this site's data, then reload).</p><button onClick={props.onExit}>Back</button></div></div>
   return <PlayInner {...props} world={loaded.world} built={loaded.built} />
 }

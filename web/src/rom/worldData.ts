@@ -19,7 +19,7 @@ export interface WorldData {
   anims?: Uint8Array[] // texture animation files (water ...), a/0/6/8
 }
 
-export async function extractWorldData(nds: NdsFile, win: WorldWindow, onProgress?: (t: string) => void): Promise<WorldData> {
+export async function extractWorldData(nds: NdsFile, win: WorldWindow, onProgress?: (t: string, done: number, total: number) => void): Promise<WorldData> {
   const maps = parseNarc(await nds.get('a/0/0/8'))
   const texFiles = parseNarc(await nds.get('a/0/1/4'))
   const archiveNames = texFiles.map((t) => { const f = readTexFile(t); return f ? new Set(f.texs.map((x) => x.name)) : null })
@@ -31,6 +31,7 @@ export async function extractWorldData(nds: NdsFile, win: WorldWindow, onProgres
   const chunks: ChunkData[] = []
   const textures: Record<number, Uint8Array> = {}
   for (let i = 0; i < maps.length; i++) {
+    if (i % 25 === 0) { onProgress?.('Reading the island map…', i, maps.length); await new Promise((r) => setTimeout(r)) }
     const m = maps[i]
     const dv = new DataView(m.buffer, m.byteOffset, m.byteLength)
     const bmd = m.subarray(dv.getUint32(4, true))
@@ -39,7 +40,6 @@ export async function extractWorldData(nds: NdsFile, win: WorldWindow, onProgres
     if (!mm) continue
     const gx = Number(mm[1]), gy = Number(mm[2])
     if (gx < win.x0 || gx >= win.x0 + win.n || gy < win.y0 || gy >= win.y0 + win.n) continue
-    onProgress?.(`Map piece ${gx},${gy}`)
     const model = readModels(bmd)[0]
     const need = Array.from(new Set(model.materials.map((x) => x.texture).filter(Boolean))) as string[]
     const texIndex = archiveNames.findIndex((s) => s !== null && need.every((n) => s.has(n)))
@@ -62,6 +62,7 @@ export async function extractWorldData(nds: NdsFile, win: WorldWindow, onProgres
       }
     }
   }
+  onProgress?.('Reading the island map…', maps.length, maps.length)
   for (const g of GYM_MODELS) if (!usedPacks[g.pack] && packFiles[g.pack]) usedPacks[g.pack] = { bld: new Uint8Array(packFiles[g.pack]), tex: new Uint8Array(packTex[g.pack]) }
   let anims: Uint8Array[] = []
   try { anims = parseNarc(await nds.get('a/0/6/8')).map((f) => new Uint8Array(f)) } catch { /* no animations */ }

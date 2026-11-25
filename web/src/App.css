@@ -480,10 +480,19 @@ button.big small { opacity: .7; font-size: .75rem; }
 /* the picture of the top screen ends where the log box begins; your trainer's feet touch that border */
 .fullscreen.battle .stage-cam, .fullscreen.battle .foe-zone, .fullscreen.battle .me-zone, .fullscreen.battle .team-balls, .fullscreen.battle .tbs { bottom: var(--bottom-h, 0px) !important; inset: 0 0 var(--bottom-h, 0px) 0 !important; height: auto !important; overflow: hidden; }
 .me-zone .hp2 { bottom: calc(50 * var(--k)) !important; }
-.stage-sprite.trainer-me { top: auto !important; bottom: calc(var(--frame-b, var(--bottom-h, 0px)) + 13 * var(--k)); transform: translateX(-50%); }
+.stage-sprite.trainer-me { top: auto !important; transform: translateX(-50%); }
 
 /* the battle picture fills the whole window; the log and the lower screen lie on top of it */
 .fullscreen.battle .stage-cam { inset: 0 !important; bottom: 0 !important; }
 
-/* the game's 4:3 screen sits in the middle of the window: the boxes (HP, team balls) belong to it */
-.fullscreen.battle .foe-zone, .fullscreen.battle .me-zone, .fullscreen.battle .team-balls, .fullscreen.battle .tbs { inset: var(--frame-t, 0px) var(--frame-l, 0px) var(--frame-b, var(--bottom-h, 0px)) var(--frame-l, 0px) !important; width: auto !important; height: auto !important; overflow: visible !important; }
+/* the HP boxes / team balls belong to the game's 4:3 screen as it fits above the lower screen, in the middle of the window */
+.fullscreen.battle .foe-zone, .fullscreen.battle .me-zone, .fullscreen.battle .team-balls, .fullscreen.battle .tbs { inset: 0 var(--zone-l, 0px) var(--bottom-h, 0px) var(--zone-l, 0px) !important; width: auto !important; height: auto !important; overflow: visible !important; }
+
+/* the progress bar shown whenever the page reads or builds something */
+.pq-progress { width: min(440px, 86vw); margin: 14px auto 4px; text-align: left; }
+.pq-progress-track { position: relative; height: 16px; background: rgba(255,255,255,.14); border: 2px solid rgba(255,255,255,.55); border-radius: 9px; overflow: hidden; }
+.pq-progress-fill { height: 100%; background: linear-gradient(#7dff8a, #29b94a); transition: width .15s linear; }
+.pq-progress-track.indet .pq-progress-fill { position: absolute; width: 35%; animation: pq-indet 1.1s ease-in-out infinite alternate; }
+@keyframes pq-indet { from { left: 0; } to { left: 65%; } }
+.pq-progress-line { display: flex; justify-content: space-between; gap: 12px; margin-top: 7px; font-size: 14px; }
+.pq-progress-count { margin-top: 3px; font-size: 14px; opacity: .85; font-variant-numeric: tabular-nums; }
