@@ -69,7 +69,7 @@ function TopScreen({ mon }: { mon: Mon }) {
         <span style={{ position: 'absolute', left: 6 * K, top: 38 * K, width: 80 * K, height: 80 * K, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}><MonSprite species={mon.species} shiny={mon.shiny} scale={K * 0.9} animated /></span>
         <DsText x={92} y={12} K={K} size={11}>{mon.species}{mon.shiny ? ' ★' : ''}</DsText>
         <DsText x={92} y={28} K={K} size={8}>Lv{mon.level}  {mon.gender === 'M' ? '♂' : mon.gender === 'F' ? '♀' : ''}</DsText>
-        <span style={{ position: 'absolute', left: 92 * K, top: 42 * K, display: 'flex', gap: 3 * K }}>{speciesTypes(mon.species).map((t) => <TypePlate key={t} type={t} scale={K * 1.15} />)}</span>
+        <span style={{ position: 'absolute', left: 92 * K, top: 42 * K, display: 'flex', gap: 3 * K }}>{speciesTypes(mon.species).map((t) => <TypePlate key={t} type={t} scale={K * 1.0} />)}</span>
         <span style={{ position: 'absolute', left: 92 * K, top: 58 * K }}><HpBar hp={mon.hp} max={mx} scale={K} /></span>
         <DsText x={92} y={70} w={120} K={K} size={7.5} align="right">{mon.hp}/{mx}</DsText>
         <DsText x={92} y={86} K={K} size={7.5} color="#ffd84a">{mon.ability}</DsText>
@@ -125,7 +125,7 @@ function MovesScreen({ mon, pickFor, onPick }: { mon: Mon; pickFor: number | nul
               <DsText x={6} y={4} K={K} size={7.5}>{mv}</DsText>
               <DsText x={124} y={4} K={K} size={7.5} color="#181820">PP {info.pp}</DsText>
               <DsText x={172} y={4} K={K} size={7.5} color="#181820">Pow {info.power || '—'}</DsText>
-              <span style={{ position: 'absolute', left: 212 * K, top: 2 * K }}><TypePlate type={info.type} scale={K * 1.1} /></span>
+              <span style={{ position: 'absolute', left: 212 * K, top: 2 * K }}><TypePlate type={info.type} scale={K * 0.95} /></span>
             </button>
           )
         })}
@@ -183,7 +183,7 @@ export function Summary({ mon, onChange, onBack }: { mon: Mon; onChange: (m: Mon
                   onClick={() => { onChange({ ...mon, moves: mon.moves.map((x, k) => (k === pickFor ? o : x)) }); setPickFor(null) }}
                   style={{ boxShadow: `inset 4px 0 0 ${TYPE_COLOR[info.type as PType] ?? '#888'}` }}
                 >
-                  <span>{o}</span><small style={{ display: 'flex', alignItems: 'center', gap: 6 }}><TypePlate type={info.type} scale={2.2} />{info.power || '—'}</small>
+                  <span>{o}</span><small style={{ display: 'flex', alignItems: 'center', gap: 6 }}><TypePlate type={info.type} scale={1.9} />{info.power || '—'}</small>
                 </button>
               )
             })}

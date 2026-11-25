@@ -69,6 +69,9 @@ export class BattleBackdrop3D {
     const w = this.mount.clientWidth, h = this.mount.clientHeight
     this.renderer.setSize(w, h, false)
     this.camera.aspect = w / Math.max(1, h)
+    // on a tall (phone) screen the same sideways view needs a wider angle, or the two platforms fall off the sides of the screen
+    const REF_ASPECT = 1.5
+    this.camera.fov = this.camera.aspect >= REF_ASPECT ? CAMERA.fov : Math.min(88, (2 * Math.atan(Math.tan((CAMERA.fov * Math.PI) / 360) * REF_ASPECT / this.camera.aspect) * 180) / Math.PI)
     // slide the picture up so both platforms stay above the menu at the bottom of the screen
     this.camera.setViewOffset(w, h, 0, Math.round(h * 0.2), w, h)
     this.camera.updateProjectionMatrix()

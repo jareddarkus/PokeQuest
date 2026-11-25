@@ -78,7 +78,7 @@ function MoveButton({ mv, x, y, S, onClick, onInfo }: { mv: MoveView; x: number;
     >
       <span className="ds-move-name" style={{ fontSize: 8.5 * S }}>{mv.name}</span>
       <span className="ds-move-meta" style={{ fontSize: 7 * S }}>
-        <TypePlate type={mv.type} scale={S * 1.15} />
+        <TypePlate type={mv.type} scale={S * 1.0} />
         <b>PP {mv.pp}/{mv.maxpp}</b>
       </span>
     </button>
@@ -134,7 +134,7 @@ function MoveInfoCard({ mv, S }: { mv: MoveView; S: number }) {
     <div style={{ position: 'absolute', left: 0, bottom: '100%', marginBottom: 6, width: 256 * S, padding: `${4 * S}px ${6 * S}px`, boxSizing: 'border-box', maxHeight: 150 * S, overflow: 'hidden', background: 'rgba(16,18,26,.94)', border: '2px solid rgba(255,255,255,.7)', borderRadius: 6, color: '#fff', fontSize: 7.5 * S, lineHeight: 1.3, zIndex: 40, pointerEvents: 'none' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 * S, marginBottom: 2 * S }}>
         <strong style={{ fontSize: 9 * S }}>{mv.name}</strong>
-        <TypePlate type={mv.type} scale={S * 1.25} />
+        <TypePlate type={mv.type} scale={S * 1.05} />
         <span>{lang === 'es' ? CATEGORY[m.category] ?? m.category : m.category}</span>
         <span style={{ marginLeft: 'auto' }}>{lang === 'es' ? 'Potencia' : 'Power'} {m.basePower || '—'} · {lang === 'es' ? 'Precisión' : 'Accuracy'} {m.accuracy === true ? '—' : m.accuracy}</span>
       </div>
