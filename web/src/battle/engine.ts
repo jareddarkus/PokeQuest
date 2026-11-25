@@ -12,6 +12,8 @@ export type BattleEvent =
   | { kind: 'hp'; side: Side; uid: string; hp: number; maxHp: number; status?: string }
   | { kind: 'faint'; side: Side; uid: string }
   | { kind: 'status'; side: Side; uid: string; status: string }
+  /** confusion / infatuation shown on a Pokémon (the game's own animation) */
+  | { kind: 'volatile'; side: Side; uid: string; what: 'confusion' | 'attract' }
   | { kind: 'move'; side: Side; uid: string; move: string }
   | { kind: 'stat'; side: Side; uid: string; amount: number }
   | { kind: 'turn'; n: number }
@@ -241,6 +243,15 @@ export class BattleSession {
           const names: Record<string, string> = { brn: 'was burned', par: 'is paralyzed', slp: 'fell asleep', psn: 'was poisoned', tox: 'was badly poisoned', frz: 'was frozen solid' }
           ev.push({ kind: 'status', side: sideOf(p[1]), uid: this.nameOf(p[1]), status: p[2] })
           ev.push({ kind: 'text', text: `${this.pretty(this.nameOf(p[1]), view)} ${names[p[2]] ?? 'has a status'}!` })
+          break
+        }
+        case '-start': case '-activate': case '-end': {
+          const who = this.pretty(this.nameOf(p[1]), view)
+          const what = /confusion/i.test(p[2] ?? '') ? 'confusion' : /attract/i.test(p[2] ?? '') ? 'attract' : null
+          if (!what) break
+          if (cmd === '-end') { if (what === 'confusion') ev.push({ kind: 'text', text: `${who} snapped out of its confusion!` }); break }
+          ev.push({ kind: 'volatile', side: sideOf(p[1]), uid: this.nameOf(p[1]), what })
+          ev.push({ kind: 'text', text: what === 'confusion' ? (cmd === '-start' ? `${who} became confused!` : `${who} is confused!`) : (cmd === '-start' ? `${who} fell in love!` : `${who} is in love!`) })
           break
         }
         case '-curestatus': ev.push({ kind: 'status', side: sideOf(p[1]), uid: this.nameOf(p[1]), status: '' }); break

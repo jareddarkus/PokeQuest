@@ -375,6 +375,11 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
           await sleep(Math.max(700, (Math.abs(ev.hp - before) / Math.max(1, ev.maxHp)) * 48 / 30 * 1000 + 350)) // the gauge drains at the game's speed
           break
         }
+        case 'volatile': {
+          const sd: 'me' | 'foe' = ev.side === 'p1' ? 'me' : 'foe'
+          await runScript('effect', ev.what === 'confusion' ? 42 : 43, sd, sd) // the game's own animation (birds circling the head / hearts)
+          break
+        }
         case 'status': {
           const upd = (s: Side | null): Side | null => (s && s.uid === ev.uid ? { ...s, status: ev.status } : s)
           if (ev.side === 'p1') setMe(upd); else setFoe(upd)
