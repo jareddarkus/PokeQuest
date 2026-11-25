@@ -274,3 +274,11 @@ Next ideas if this is picked up again: (1) the "!" emote for trainers spotting t
 - The fonts are in archive `a/0/2/3` (five NFTR files: 12x15 main text, 10x10 small, 11x13 medium, two tiny ones). Every glyph starts with 3 bytes (left offset, picture width, pen advance), then a 2-bit picture (MSB first, row after row). `rom/font.ts` reads them (`parseNftr`, `renderLine`), the archive is stored at import (`font:narc`, `VERSION` 41), `ui/FontText.tsx` draws text with it (canvas, whole-number scale). Dev viewer: `?fontview`.
 - Used so far in: battle message box (typewriter), HP boxes (name, level, HP numbers), move buttons, move info card, trainer speech. NOT yet: summary / bag / party screens, menus, login (those still use the page font).
 - Not yet done to match the official look: the DS status bar (clock / IR / ONLINE / WIRELESS) on the bottom screen, the row of party balls above the Poké Ball, the little Poké Ball icon and dots below it, gender symbols in the HP boxes.
+
+## Reference recording (speedrun video, melonDS)
+Studied frame by frame (frames cut with ffmpeg from the user's two .mov files; kept only in the scratchpad, not in the repo). What was copied so far:
+- HP boxes: name in white with a dark outline ABOVE the plate (no grey name bar), gender sign, gold "Lv" + level; the plate shows HP gauge (yours: HP numbers over the gauge + EXP gauge).
+- The message is a see-through dark band, no frame.
+- Command screen: top bar with time and IR / ONLINE / WIRELESS, rows of party balls (trainer's small dots above, yours below).
+- Send-out: a small ball hangs high above the platform, opens, golden burst with a beam and sparks, the Pokémon appears as a white shape and drops onto the platform (about 1 second).
+Seen in the recording but NOT done: the trainers' battle sprites (the foe trainer fades out, yours throws the ball), the trainer's row of 6 balls on the top screen, the camera pan / zoom at the start of a trainer battle, the HP boxes sliding in, the intro screen transition, the "Go! X!" / "sent out X!" timing, the move animations (only the very start of Earthquake was filmed).
