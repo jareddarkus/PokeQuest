@@ -320,6 +320,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
     if (r && !r.wait) {
       reqRef.current = null
       setReq(r)
+      void sceneRef.current?.moveCamera(8, 24, 0, 10) // back to the usual camera
       setMode(r.forceSwitch ? 'switch' : 'menu')
       setText(r.forceSwitch ? 'Choose your next Pokémon.' : `What will ${r.bench.find((b) => b.active)?.species ?? 'your Pokémon'} do?`)
     }
@@ -525,6 +526,13 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
         return anim.finished.then(() => { d.style.opacity = String(to); anim.cancel() }, () => undefined)
       },
       cry: (s) => { if (s !== 'all' && species.current[s]) void music.cry(dexNum(species.current[s])) },
+      camera: (type, preset, frames, wait, brake) => {
+        // which of the game's cameras a preset number means in a single battle: 9 / 10 = the attacker's, 11 / 12 = the defender's, 8 = the usual one
+        const view = (s: MonSide) => (s === 'me' ? 0 : 1)
+        const id = preset === 9 || preset === 10 ? view(attacker) : preset === 11 || preset === 12 ? view(defender) : preset === 14 || preset === 19 || preset === 20 || preset === 21 ? 14 : preset === 0 || preset === 1 ? preset : preset === 15 || preset === 16 ? -1 : 8
+        if (id < 0) return Promise.resolve()
+        return sceneRef.current?.moveCamera(id, type === 0 ? 0 : Math.max(1, frames), wait, brake) ?? Promise.resolve()
+      },
       shakeCamera: (amp, frames, count) => {
         const c = document.querySelector<HTMLElement>('.stage-cam')
         if (!c) return Promise.resolve()

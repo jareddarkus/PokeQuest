@@ -19,6 +19,8 @@ export interface EffHost {
   dim(from: number, to: number, frames: number): Promise<void>
   cry(side: Side | 'all'): void
   shakeCamera(amplitude: number, frames: number, count: number): Promise<void>
+  /** moves the camera to a preset of the game (`moveType` 0 = jump, 1 = move) */
+  camera(moveType: number, preset: number, frames: number, wait: number, brake: number): Promise<void>
   call(effect: number): Uint8Array | null
 }
 
@@ -44,7 +46,7 @@ export async function runEffScript(d: Uint8Array, host: EffHost, depth = 0): Pro
     const next = pos + 2 + n * 4
     pos = next
     switch (op) {
-      case 0x00: pending.push(sleep(a[2])); break // camera move (the pause is kept; the picture itself does not move)
+      case 0x00: pending.push(host.camera(a[0], a[1], a[2], a[3], a[4])); break
       case 0x03: pending.push(host.shakeCamera(a[1] / 4096, a[3], a[5])); break
       case 0x06: host.load(a[0]); break
       case 0x07: case 0x08: case 0x09: {
