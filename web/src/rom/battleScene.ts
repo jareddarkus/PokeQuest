@@ -16,7 +16,7 @@ export const ENVIRONMENTS: Record<string, BattleEnvironment> = {
 // The framing of the real game's top screen, fitted on a screenshot of it (a 4:3 picture): both platforms are the same model, the camera is low and looks almost
 // level (pitch 4.4 degrees, vertical field of view 51.5 degrees), the picture is shifted up a little (lens shift). Distances are in units of the platform's
 // radius (0.5808 in the fit); `U` turns them into scene units once the real radius of the platform model is known.
-const FIT = { r: 0.5808, h: 0.49, pitch: (4.399 * Math.PI) / 180, fov: 51.458, lens: 0.0812, me: { x: 0.0406, z: -1.7676 }, foe: { x: 1.0868, z: -2.6552 } } as const
+const FIT = { r: 0.5808, h: 0.49, pitch: (4.399 * Math.PI) / 180, fov: 51.458, lens: 0.0812, me: { x: -0.454, z: -1.7676 }, foe: { x: 1.0868, z: -2.6552 } } as const
 // the opening shot (reference video): the camera starts low and close to the ground beside the far platform and flies back to the usual view in about 0.9 s
 const INTRO_REL = { pos: [-0.42, 0.22, 0.57], target: [-0.02, 0.16, 0] } as const // relative to the far platform, in the old units (old platform radius = 0.85 of the real one)
 

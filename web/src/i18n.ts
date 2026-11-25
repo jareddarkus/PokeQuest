@@ -24,8 +24,46 @@ for (const table of [es.species, es.moves, es.abilities, es.items, es.types, es.
 const EXTRA_NAMES: Record<string, string> = { 'Poke Ball': 'Poké Ball', 'Exp. Share': 'Repartir Exp.', 'Exp Share': 'Repartir Exp.', 'Never-Melt Ice': 'Antiderretir', 'Poke Balls': 'Poké Balls' }
 for (const [en, sp] of Object.entries(EXTRA_NAMES)) NAMES.set(en, sp)
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-const nameRe = new RegExp(`(?<![A-Za-zÀ-ÿ])(${[...NAMES.keys()].sort((a, b) => b.length - a.length).map(escapeRe).join('|')})(?![A-Za-zÀ-ÿ])`, 'g')
+const buildNameRe = () => new RegExp(`(?<![A-Za-zÀ-ÿ])(${[...NAMES.keys()].sort((a, b) => b.length - a.length).map(escapeRe).join('|')})(?![A-Za-zÀ-ÿ])`, 'g')
+let nameRe = buildNameRe()
 const translateNames = (s: string) => s.replace(nameRe, (m) => NAMES.get(m) ?? m)
+
+/**
+ * The names of moves, Pokémon, abilities and items in Spanish, live from Pokémon Showdown's own translation files (smogon/pokemon-showdown, data/text/es: the same
+ * names Smogon shows). The page starts with the bundled PokeAPI table (works offline); the live names replace it as soon as they are loaded (kept for a day).
+ */
+const SD = 'https://raw.githubusercontent.com/smogon/pokemon-showdown/master/data/text/es/'
+const toId = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '')
+function applyShowdown(kind: 'moves' | 'abilities' | 'items' | 'pokedex', text: string): number {
+  let n = 0
+  const re = /^\t"?([a-z0-9]+)"?: \{\s*\n\t\tname: (?:"((?:[^"\\]|\\.)*)"|null)/gm
+  for (let m = re.exec(text); m; m = re.exec(text)) {
+    if (!m[2]) continue
+    const id = m[1]
+    const en = kind === 'moves' ? Dex.moves.get(id) : kind === 'abilities' ? Dex.abilities.get(id) : kind === 'items' ? Dex.items.get(id) : Dex.species.get(id)
+    if (!en.exists || toId(en.name) !== id) continue
+    const sp = m[2].replace(/\\"/g, '"')
+    if (en.name.length > 2 && NAMES.get(en.name) !== sp) { NAMES.set(en.name, sp); n++ }
+  }
+  return n
+}
+export async function loadLiveNames(): Promise<void> {
+  if (typeof fetch === 'undefined') return
+  const KEY = 'pq.showdown.es.v1'
+  let cached: { at: number; files: Record<string, string> } | null = null
+  try { cached = JSON.parse(localStorage.getItem(KEY) ?? 'null') } catch { /* no cache */ }
+  let changed = 0
+  const apply = (files: Record<string, string>) => { for (const k of ['moves', 'abilities', 'items', 'pokedex'] as const) if (files[k]) changed += applyShowdown(k, files[k]) }
+  if (cached) apply(cached.files)
+  if (!cached || Date.now() - cached.at > 24 * 3600 * 1000) {
+    try {
+      const files: Record<string, string> = {}
+      for (const k of ['moves', 'abilities', 'items', 'pokedex']) { const r = await fetch(`${SD}${k}.ts`); if (r.ok) files[k] = await r.text() }
+      if (files.moves) { apply(files); try { localStorage.setItem(KEY, JSON.stringify({ at: Date.now(), files })) } catch { /* too big for the storage: it is fetched again next time */ } }
+    } catch { /* offline: the bundled names stay */ }
+  }
+  if (changed) { nameRe = buildNameRe(); retranslateAll(); listeners.forEach((f) => f()) }
+}
 
 /** The Spanish (or English) name of a thing, for code that builds its own text. */
 export const nameOf = (en: string) => (lang === 'es' ? NAMES.get(en) ?? en : en)
@@ -226,6 +264,7 @@ let started = false
 export function startTranslator() {
   if (started || typeof document === 'undefined') return
   started = true
+  void loadLiveNames()
   walk(document.body)
   new MutationObserver((list) => {
     for (const m of list) {

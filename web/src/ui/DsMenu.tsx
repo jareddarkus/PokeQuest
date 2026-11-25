@@ -14,9 +14,8 @@ const cancel = () => { void music.playSfx('se:cancel') }
 /** The size of the "bottom screen" of the DS in screen pixels (the game's pictures are 256 x 192). */
 export function dsScale(): number {
   // wide windows: a little smaller than twice the DS size where the screen allows it (otherwise 2); phones: as wide as fits; always whole device pixels per picture pixel
-  const dpr = window.devicePixelRatio || 1
-  const byWidth = window.innerWidth >= 1000 ? (dpr >= 1.25 ? 1.75 : 2) : (window.innerWidth - 16) / 256
-  const byHeight = (window.innerHeight * 0.5 - 6) / 220 // the lower screen never takes more than about half of the window's height (the battle needs the room above it)
+  const byWidth = window.innerWidth >= 2500 ? 3 : window.innerWidth >= 1800 ? 2.5 : window.innerWidth >= 1000 ? 2 : (window.innerWidth - 16) / 256
+  const byHeight = (window.innerHeight * 0.55 - 6) / 220 // the lower screen never takes more than about half of the window's height (the battle needs the room above it)
   return snap(Math.max(1, Math.min(byWidth, byHeight)))
 }
 
