@@ -98,7 +98,6 @@ function HpBox({ side, mine, exp }: { side: Side; mine: boolean; exp?: number })
           <div style={{ position: 'absolute', left: 0, top: u(1), height: u(1), width: `${expFrac * 100}%`, background: '#38b6f5', transition: 'width .5s ease' }} />
         </div>
       )}
-      {mine && <span style={{ ...text, right: u(8), top: u(29), color: '#fff', textShadow: '1px 1px 0 #000, -1px 0 0 #000, 0 -1px 0 #000' }}>{Math.max(0, side.hp)}/{side.maxHp}</span>}
       <div style={{ position: 'absolute', right: u(mine ? 14 : 22), top: u(stripY) }}><StatusIcon status={side.fainted ? 'fnt' : side.status} scale={K / 1.5} /></div>
     </div>
   )

@@ -16,7 +16,56 @@ export function dsScale(): number {
 
 const recolored = new Map<string, string>()
 
-/** The game's grey move button with its outline painted in the colour of a move type. */
+/** The game's move button picture comes with a few stray specks around it (pieces of the neighbouring pictures): keep only the biggest piece and trim the edges. */
+function cleanedFrame(img: HTMLImageElement): HTMLCanvasElement {
+  const c = document.createElement('canvas')
+  c.width = img.width
+  c.height = img.height
+  const x = c.getContext('2d')!
+  x.drawImage(img, 0, 0)
+  const d = x.getImageData(0, 0, c.width, c.height)
+  const W = c.width, H = c.height
+  const label = new Int32Array(W * H).fill(-1)
+  const sizes: number[] = []
+  for (let s = 0; s < W * H; s++) {
+    if (label[s] >= 0 || d.data[s * 4 + 3] === 0) continue
+    const id = sizes.length
+    let n = 0
+    const stack = [s]
+    label[s] = id
+    while (stack.length) {
+      const p = stack.pop()!
+      n++
+      const px = p % W, py = (p / W) | 0
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const nx = px + dx, ny = py + dy
+        if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue
+        const q = ny * W + nx
+        if (label[q] >= 0 || d.data[q * 4 + 3] === 0) continue
+        label[q] = id
+        stack.push(q)
+      }
+    }
+    sizes.push(n)
+  }
+  if (sizes.length < 2) return c
+  const keep = sizes.indexOf(Math.max(...sizes))
+  let x0 = W, y0 = H, x1 = -1, y1 = -1
+  for (let i = 0; i < W * H; i++) {
+    if (label[i] !== keep) { d.data[i * 4 + 3] = 0; continue }
+    const px = i % W, py = (i / W) | 0
+    x0 = Math.min(x0, px); x1 = Math.max(x1, px); y0 = Math.min(y0, py); y1 = Math.max(y1, py)
+  }
+  x.putImageData(d, 0, 0)
+  if (x1 < 0) return c
+  const out = document.createElement('canvas')
+  out.width = x1 - x0 + 1
+  out.height = y1 - y0 + 1
+  out.getContext('2d')!.drawImage(c, x0, y0, out.width, out.height, 0, 0, out.width, out.height)
+  return out
+}
+
+/** The game's grey move button (cleaned) with its outline painted in the colour of a move type. */
 function useTypedFrame(type: string): string | null {
   const grey = useUiUrl('move:grey')
   const [url, setUrl] = useState<string | null>(null)
@@ -26,26 +75,24 @@ function useTypedFrame(type: string): string | null {
     const hit = recolored.get(key)
     if (hit) { setUrl(hit); return }
     const col = TYPE_COLOR[type as PType]
-    if (!col) { setUrl(grey); return }
     const img = new Image()
     img.onload = () => {
-      const c = document.createElement('canvas')
-      c.width = img.width
-      c.height = img.height
-      const x = c.getContext('2d')!
-      x.drawImage(img, 0, 0)
-      const d = x.getImageData(0, 0, c.width, c.height)
-      const n = parseInt(col.slice(1), 16)
-      const R = (n >> 16) & 255, G = (n >> 8) & 255, B = n & 255
-      for (let i = 0; i < d.data.length; i += 4) {
-        if (!d.data[i + 3]) continue
-        const lum = Math.max(d.data[i], d.data[i + 1], d.data[i + 2])
-        if (lum > 120) { // the light outline pixels
-          const f = 0.5 + 0.5 * (lum / 255)
-          d.data[i] = R * f; d.data[i + 1] = G * f; d.data[i + 2] = B * f
+      const c = cleanedFrame(img)
+      if (col) {
+        const x = c.getContext('2d')!
+        const d = x.getImageData(0, 0, c.width, c.height)
+        const n = parseInt(col.slice(1), 16)
+        const R = (n >> 16) & 255, G = (n >> 8) & 255, B = n & 255
+        for (let i = 0; i < d.data.length; i += 4) {
+          if (!d.data[i + 3]) continue
+          const lum = Math.max(d.data[i], d.data[i + 1], d.data[i + 2])
+          if (lum > 120) { // the light outline pixels
+            const f = 0.5 + 0.5 * (lum / 255)
+            d.data[i] = R * f; d.data[i + 1] = G * f; d.data[i + 2] = B * f
+          }
         }
+        x.putImageData(d, 0, 0)
       }
-      x.putImageData(d, 0, 0)
       const out = c.toDataURL()
       recolored.set(key, out)
       setUrl(out)

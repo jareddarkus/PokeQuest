@@ -266,3 +266,4 @@ Next ideas if this is picked up again: (1) the "!" emote for trainers spotting t
 - Power points: the simulator starts every move at the PP-Up maximum (x8/5); the battle now starts moves at their normal PP (Tackle 35), Elixir tops up to that. The move data is `@pkmn/sim` 0.11.0 (the newest release on npm, from Smogon's Showdown data).
 - Type plates are bigger; the black outline on the battle move squares came from the global slab button style (`.ds-move`, `.ds-screen2 button` now opt out).
 - Battle scenery on tall (phone) screens: the camera angle widens when the screen is narrower than 3:2, so both platforms stay on screen (`rom/battleScene.ts` `layout()`).
+- The game file's move button pictures carry a few stray specks (bits of neighbouring pictures); `cleanedFrame` in `ui/DsMenu.tsx` keeps only the biggest piece at display time (no re-import needed). The player's HP number under its HP box was removed.
