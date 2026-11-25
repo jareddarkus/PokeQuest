@@ -18,6 +18,7 @@ import { music } from '../audio/music'
 import { warmAnim } from './AnimSprite'
 import { MoveFx, FX_NAMES } from './moveFx'
 import { trText, useLang } from '../i18n'
+import ItemIcon from './ItemIcon'
 
 export type BattleKind = 'wild' | 'trainer' | 'gym'
 export type BattleOutcome = 'win' | 'lose' | 'caught' | 'ran'
@@ -36,6 +37,7 @@ interface Side { uid: string; species: string; level: number; hp: number; maxHp:
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
 let statKey = 0
+let sendKey = 0
 
 /** Milliseconds per typed letter (a tap on the message box finishes the sentence at once). */
 export const CHAR_MS = { slow: 55, normal: 30, fast: 13, instant: 0 }
@@ -54,6 +56,16 @@ export function TypedText({ text, ms, skip }: { text: string; ms: number; skip: 
   }, [full, ms])
   useEffect(() => { if (skip) setN(full.length) }, [skip])
   return <>{full.slice(0, n)}</>
+}
+
+/** A Poké Ball drops onto the platform and opens in a flash (the Pokémon grows out of it: see .so-mon in the stylesheet). */
+function SendOut() {
+  return (
+    <div className="so" aria-hidden>
+      <span className="so-ball"><ItemIcon name="Poke Ball" size={26} /></span>
+      <span className="so-flash" />
+    </div>
+  )
 }
 
 /** A rising / falling stat: three arrows float over the Pokémon (blue and up when raised, red and down when lowered). */
@@ -110,6 +122,8 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, textSpee
   const [foe, setFoe] = useState<Side | null>(null)
   const [text, setText] = useState('')
   const [skip, setSkip] = useState(0)
+  const fromFight = useRef(false) // coming back from the move screen: the Poké Ball closes
+  const [send, setSend] = useState<null | { side: 'me' | 'foe'; key: number }>(null) // a Pokémon being sent out of its ball
   const wake = useRef<(() => void) | null>(null)
   const [statFx, setStatFx] = useState<null | { side: 'me' | 'foe'; up: boolean; big: boolean; key: number }>(null)
   const msPer = CHAR_MS[textSpeed] ?? 30
@@ -172,10 +186,14 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, textSpee
           await say(ev.text, 750); break
         case 'switch': {
           const s: Side = { uid: ev.uid, species: ev.species, level: ev.level, hp: ev.hp, maxHp: ev.maxHp, shiny: ev.shiny, fainted: false }
+          const ballOut = ev.side === 'p1' || kind !== 'wild' // trainers' Pokémon (and yours) come out of a Poké Ball; a wild Pokémon just appears
+          if (ballOut) setSend({ side: ev.side === 'p1' ? 'me' : 'foe', key: ++sendKey })
           if (ev.side === 'p1') setMe(s); else setFoe(s)
           hpOf.current[ev.uid] = ev.hp
+          if (ballOut) { void music.playSfx('se:throw'); await sleep(750) }
           void music.cry(dexNum(ev.species))
-          await sleep(1100)
+          await sleep(ballOut ? 900 : 1100)
+          setSend(null)
           break
         }
         case 'hp': {
@@ -442,7 +460,8 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, textSpee
         <>
           <div className="stage-shadow" style={{ left: layout.foe.x, top: layout.foe.y + layout.foe.w * 0.03, width: layout.foe.w * 0.78 * shadowFor(foe.species) }} />
           <div className={`stage-sprite ${shake === 'foe' ? 'hit' : ''} ${foe.fainted ? 'fainted' : ''} ${lunge === 'foe' ? 'lunge-foe' : ''}`} style={{ left: layout.foe.x, top: layout.foe.y + layout.foe.w * 0.1, width: layout.foe.w }}>
-            {!ball && <MonSprite species={foe.species} shiny={foe.shiny} scale={(layout.foe.w * 1.05) / 76.8} platform={layout.foe.w} animated />}
+            {!ball && <div className={send?.side === 'foe' ? 'so-mon' : undefined} key={send?.side === 'foe' ? send.key : 'foe'}><MonSprite species={foe.species} shiny={foe.shiny} scale={(layout.foe.w * 1.05) / 76.8} platform={layout.foe.w} animated /></div>}
+            {send?.side === 'foe' && <SendOut />}
             {ball && <div className={`ball shake-${ball.shakes}`} />}
             {statFx?.side === 'foe' && <StatArrows key={statFx.key} up={statFx.up} big={statFx.big} />}
           </div>
@@ -452,7 +471,8 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, textSpee
         <>
           <div className="stage-shadow" style={{ left: layout.me.x, top: layout.me.y + layout.me.w * 0.03, width: layout.me.w * 0.78 * shadowFor(me.species) }} />
           <div className={`stage-sprite ${shake === 'me' ? 'hit' : ''} ${me.fainted ? 'fainted' : ''} ${lunge === 'me' ? 'lunge-me' : ''}`} style={{ left: layout.me.x, top: layout.me.y + layout.me.w * 0.1, width: layout.me.w }}>
-            <MonSprite species={me.species} back shiny={me.shiny} scale={(layout.me.w * 0.92) / 76.8} platform={layout.me.w} animated />
+            <div className={send?.side === 'me' ? 'so-mon' : undefined} key={send?.side === 'me' ? send.key : 'me'}><MonSprite species={me.species} back shiny={me.shiny} scale={(layout.me.w * 0.92) / 76.8} platform={layout.me.w} animated /></div>
+            {send?.side === 'me' && <SendOut />}
             {statFx?.side === 'me' && <StatArrows key={statFx.key} up={statFx.up} big={statFx.big} />}
           </div>
         </>
@@ -470,7 +490,8 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, textSpee
         {mode === 'menu' && req && (
           <CommandScreen
             S={S}
-            onFight={() => setMode('fight')}
+            closing={fromFight.current}
+            onFight={() => { fromFight.current = false; setMode('fight') }}
             onBag={() => setMode('bag')}
             onPokemon={() => setMode('switch')}
             onRun={doRun}
@@ -480,7 +501,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, textSpee
         )}
 
         {mode === 'fight' && req && (
-          <MoveScreen S={S} moves={req.moves} onMove={doMove} onBack={() => setMode('menu')} />
+          <MoveScreen S={S} moves={req.moves} onMove={doMove} onBack={() => { fromFight.current = true; setMode('menu') }} />
         )}
 
         {mode === 'switch' && req && (

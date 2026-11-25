@@ -132,10 +132,32 @@ function MoveButton({ mv, x, y, S, onClick, onInfo }: { mv: MoveView; x: number;
   )
 }
 
+/**
+ * The Poké Ball of the command screens opens (to show the moves) and closes (back to the commands): the closed ball is cut in two halves
+ * that slide away / together. `open` = the halves slide away (moves screen starts), otherwise they slide together (back to the commands).
+ */
+function BallHalves({ S, open, onDone }: { S: number; open: boolean; onDone?: () => void }) {
+  const closed = useUiUrl('menu:bg')
+  if (!closed) return null
+  const half = (top: boolean): React.CSSProperties => ({
+    position: 'absolute', left: 0, width: 256 * S, height: 96 * S, top: top ? 0 : 96 * S, overflow: 'hidden', pointerEvents: 'none', zIndex: 6,
+    backgroundImage: `url(${closed})`, backgroundSize: `${256 * S}px ${192 * S}px`, backgroundPosition: top ? '0 0' : `0 -${96 * S}px`, imageRendering: 'pixelated',
+    animation: `${open ? (top ? 'pq-half-up' : 'pq-half-down') : (top ? 'pq-half-in-up' : 'pq-half-in-down')} .34s cubic-bezier(.5,0,.5,1) forwards`,
+  })
+  return (
+    <>
+      <div style={half(true)} onAnimationEnd={onDone} />
+      <div style={half(false)} />
+    </>
+  )
+}
+
 /** The battle command screen drawn like the original: Poké Ball backdrop, FIGHT in the middle, BAG / POKÉMON / RUN below. */
-export function CommandScreen({ S, onFight, onBag, onPokemon, onRun, pokemonOff, runOff }: {
-  S: number; onFight: () => void; onBag: () => void; onPokemon: () => void; onRun: () => void; pokemonOff: boolean; runOff: boolean
+export function CommandScreen({ S, onFight, onBag, onPokemon, onRun, pokemonOff, runOff, closing }: {
+  S: number; onFight: () => void; onBag: () => void; onPokemon: () => void; onRun: () => void; pokemonOff: boolean; runOff: boolean; closing?: boolean
 }) {
+  const [closingNow, setClosingNow] = useState(!!closing)
+  const movesBg = useUiUrl('moves:bg')
   const bg = useUiUrl('menu:bg')
   const fight = useUiUrl('cmd:fight')
   const bag = useUiUrl('cmd:bag'), poke = useUiUrl('cmd:pokemon'), run = useUiUrl('cmd:run')
@@ -145,7 +167,8 @@ export function CommandScreen({ S, onFight, onBag, onPokemon, onRun, pokemonOff,
     </button>
   )
   return (
-    <div className="ds-screen" style={{ width: 256 * S, height: 192 * S, backgroundImage: bg ? `url(${bg})` : undefined }}>
+ <div className="ds-screen" style={{ width: 256 * S, height: 192 * S, backgroundImage: closingNow && movesBg ? `url(${movesBg})` : bg ? `url(${bg})` : undefined }}>
+      {closingNow && <BallHalves S={S} open={false} onDone={() => setClosingNow(false)} />}
       <button className="ds-btn" aria-label="Fight" onClick={() => { decide(); onFight() }} style={{ left: 84 * S, top: 86 * S, width: 89 * S, height: 21 * S }}>
         {fight ? <img className="ds-fight-label" src={fight} alt="Fight" draggable={false} style={{ width: '100%', height: '100%' }} /> : null}
       </button>
@@ -164,6 +187,7 @@ export function MoveScreen({ S, moves, onMove, onBack }: { S: number; moves: Mov
   const [info, setInfo] = useState<MoveView | null>(null)
   return (
     <div className="ds-screen" style={{ width: 256 * S, height: 192 * S, backgroundImage: bg ? `url(${bg})` : undefined }}>
+      <BallHalves S={S} open />
       {moves.slice(0, 4).map((mv, i) => <MoveButton key={mv.id} mv={mv} x={pos[i][0]} y={pos[i][1]} S={S} onClick={() => onMove(i)} onInfo={setInfo} />)}
       {info && <MoveInfoCard mv={info} S={S} />}
       <button className="ds-btn" aria-label="Back" onClick={() => { cancel(); onBack() }} style={{ left: 88 * S, top: 136 * S, width: 80 * S, height: 44 * S }}>

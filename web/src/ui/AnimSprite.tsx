@@ -72,7 +72,9 @@ function StillPicture({ dex, back, shiny, scale, hover }: { dex: number; back?: 
 }
 
 /** A Pokémon that moves, built from the animation data in the player's own Pokémon White 2 file. */
-export default function AnimSprite({ species, back, shiny, scale = 2 }: { species: string; back?: boolean; shiny?: boolean; scale?: number }) {
+export default function AnimSprite({ species, back, shiny, scale: wanted = 2 }: { species: string; back?: boolean; shiny?: boolean; scale?: number }) {
+  // whole-number sizes keep every picture pixel the same size (crisp); only on small screens the size stays as asked
+  const scale = wanted >= 1.5 ? Math.round(wanted) : wanted
   const ref = useRef<HTMLCanvasElement>(null)
   const [sprite, setSprite] = useState<AnimatedSprite | null>(null)
   const dex = dexNum(species)

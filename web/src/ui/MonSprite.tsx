@@ -42,7 +42,7 @@ export default function MonSprite({ species, back, shiny, scale = 2, className, 
         className={`mon-sprite rom ${className ?? ''}`}
         src={romUrl}
         alt={species}
-        style={{ transform: `scale(${scale * 0.8})`, transformOrigin: 'bottom center' }}
+        style={{ transform: `scale(${scale * 0.8})`, transformOrigin: 'bottom center', imageRendering: 'pixelated' }}
         draggable={false}
       />
     )
