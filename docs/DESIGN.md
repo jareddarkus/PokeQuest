@@ -224,3 +224,6 @@ Next ideas if this is picked up again: (1) the "!" emote for trainers spotting t
 - Summary: a top screen (summary panel map 69) with the Pokémon, types, HP, ability + description and item; pages Info / Stats / Moves below; the nature shows what it does ("Pícara (+Ataque, −Def. Esp.)"); the IV / EV bars are folded away. Spanish descriptions of moves, abilities and items are the official PokeAPI texts.
 - NOTE: the production preview (`vite preview`) hung the sandbox browser even for older commits, so the production build could not be checked here; the development server works.
 - RomMeta.version 36.
+
+### Hotfix (2026-11-25): the page froze on the login screen
+- Cause: `MusicManager.play()` retried itself forever (in its `finally`) when the asked song was missing from the saved music list (no game file imported yet, or an older import without the title song). Each retry was a new promise, so the browser never got time to draw: "Page Unresponsive". Only the production build showed it (the dev server always had the song). Fix: retry only when a DIFFERENT song was asked for meanwhile (`audio/music.ts`).

@@ -116,7 +116,8 @@ class MusicManager {
       player.start()
     } catch { /* music is optional */ } finally {
       this.busy = false
-      if (this.wanted && this.wanted !== this.current?.key && this.enabled) void this.play(this.wanted)
+      // try again only if a DIFFERENT song was asked for meanwhile (retrying the same missing song looped forever and froze the page)
+      if (this.wanted && this.wanted !== key && this.wanted !== this.current?.key && this.enabled) void this.play(this.wanted)
     }
   }
 }
