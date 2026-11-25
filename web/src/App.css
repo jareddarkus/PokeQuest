@@ -482,5 +482,5 @@ button.big small { opacity: .7; font-size: .75rem; }
 .me-zone .hp2 { bottom: calc(50 * var(--k)) !important; }
 .stage-sprite.trainer-me { top: auto !important; bottom: 0; transform: translateX(-50%); }
 
-/* the area around the lower screen is plain black (nothing of the map shows through) */
-.fullscreen.battle { background: #000; }
+/* the battle picture fills the whole window; the log and the lower screen lie on top of it */
+.fullscreen.battle .stage-cam { inset: 0 !important; bottom: 0 !important; }

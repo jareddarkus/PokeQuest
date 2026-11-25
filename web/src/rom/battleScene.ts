@@ -137,12 +137,15 @@ export class BattleBackdrop3D {
   layout(): BattleLayout {
     const w = this.mount.clientWidth, h = this.mount.clientHeight
     this.renderer.setSize(w, h, false)
-    this.camera.aspect = w / Math.max(1, h)
+    // the picture fills the whole window, but the scene is framed for the part above the lower screen / log (`--bottom-h`): the view just carries on below it
+    const bottom = parseFloat(getComputedStyle(this.mount).getPropertyValue('--bottom-h')) || 0
+    const hl = Math.max(1, h - bottom)
+    this.camera.aspect = w / hl
     // on a tall (phone) screen the same sideways view needs a wider angle, or the two platforms fall off the sides of the screen
     const REF_ASPECT = 1.5
     this.camera.fov = this.camera.aspect >= REF_ASPECT ? CAMERA.fov : Math.min(88, (2 * Math.atan(Math.tan((CAMERA.fov * Math.PI) / 360) * REF_ASPECT / this.camera.aspect) * 180) / Math.PI)
     // slide the picture up so both platforms stay above the menu at the bottom of the screen
-    this.camera.setViewOffset(w, h, 0, Math.round(h * 0.2), w, h)
+    this.camera.setViewOffset(w, hl, 0, Math.round(hl * 0.2), w, h)
     this.camera.updateProjectionMatrix()
     // where things are on screen is always measured from the usual view (the opening shot only moves the picture, before anything stands on it)
     const keepPos = this.camera.position.clone(), keepQuat = this.camera.quaternion.clone()
