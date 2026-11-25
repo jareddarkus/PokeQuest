@@ -459,11 +459,12 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
     if (!splRef.current) { const f = new SplFx(); splRef.current = f; void f.load() }
     splRef.current.attach(c)
     if (import.meta.env.DEV) (window as unknown as { __spl?: SplFx }).__spl = splRef.current
-  }, [splScale, layout])
+  }, [splScale, layout?.frame.w, layout?.frame.h])
   /** Plays effect files on a Pokémon (or flying from one to the other). */
   const playSpl = async (ids: number[], from: 'me' | 'foe', to: 'me' | 'foe', travel = false, maxFrames = 150) => {
     const spl = splRef.current, L = layoutRef.current
     if (!spl?.ready || !L || !ids.length) return
+    const splScale = Math.max(1, L.frame.w / 256) // (worked out now: this function may be a copy from before the picture had its size)
     // the middle of the Pokémon's body: its picture stands on the platform's centre (yours is bigger and taller)
     const centre = (a: { x: number; y: number; w: number }, mine: boolean) => ({ x: a.x / splScale, y: (a.y - a.w * (mine ? 0.17 : 0.1)) / splScale })
     const a = from === 'me' ? L.me : L.foe, b = to === 'me' ? L.me : L.foe
@@ -474,9 +475,11 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
   const runScript = async (kind: 'move' | 'effect', index: number, attacker: MonSide, defender: MonSide): Promise<boolean> => {
     const spl = splRef.current, L = layoutRef.current
     if (!spl?.ready || !L) return false
+    const splScale = Math.max(1, L.frame.w / 256) // (worked out now: this function may be a copy from before the picture had its size)
     const data = kind === 'move' ? spl.moveScript(index) : spl.effectScript(index)
     if (!data) return false
-    const feet = (s: MonSide) => { const a = s === 'me' ? L.me : L.foe; return { x: a.x / splScale, y: (a.y + a.w * 0.1) / splScale } }
+    // (read when needed: the camera moves while a script runs and the Pokémon move on the screen with it)
+    const feet = (s: MonSide) => { const L2 = layoutRef.current ?? L; const k = Math.max(1, L2.frame.w / 256); const a = s === 'me' ? L2.me : L2.foe; return { x: a.x / k, y: (a.y + a.w * 0.1) / k } }
     const el = (s: MonSide) => document.querySelector<HTMLElement>(`.stage-sprite[data-mon="${s}"]`)
     const pxUnit = 16 * splScale // screen pixels of one unit of the effects
     const host: EffHost = {
@@ -535,6 +538,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
     return true
   }
 
+  if (import.meta.env.DEV) (window as unknown as { __run?: unknown; __layout?: unknown }).__layout = () => layoutRef.current
   if (import.meta.env.DEV) (window as unknown as { __run?: unknown }).__run = runScript
   if (import.meta.env.DEV) (window as unknown as { __splTest?: unknown }).__splTest = (ids: number[], a: 'me' | 'foe', b: 'me' | 'foe', travel = false) => playSpl(ids, a, b, travel) // developer hook
 
@@ -576,29 +580,29 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
     const L = layoutRef.current, spl = splRef.current
     const F = 1000 / 60
     if (!L || !spl?.ready) { await sleep(520); show(); void music.cry(dexNum(s.species)); return 1700 }
-    const { x, y, sc } = feetPx(side)
-    const top = { x, y: y - 4 * 16 } // where the ball opens: 4 units above the platform
+    const { sc } = feetPx(side)
+    const topNow = () => { const f = feetPx(side); return { x: f.x, y: f.y - 4 * 16 } } // where the ball opens: 4 units above the platform (read when needed: the camera may still be moving)
     const ballId = 60 // the Poké Ball picture of the effect files (48 + 4 per ball kind, the Poké Ball is the third)
     spl.preload(ballId); spl.preload(6); spl.preload(325)
     if (thrown) { // the ball flies from the hand of your trainer: it leaves 34 frames after the throw starts and takes 30 frames
       await sleep(34 * F)
       void music.playSeq(1382)
       const cx = (L.frame.l + L.frame.w / 2) / sc, cy = (L.frame.t + L.frame.h / 2) / sc
-      void spl.emit(ballId, 0, { x: cx - 2.5 * 16, y: cy - 1.9 * 16 }, top, 16, { frames: 30, height: 3, maxFrames: 31 })
+      void spl.emit(ballId, 0, { x: cx - 2.5 * 16, y: cy - 1.9 * 16 }, topNow(), 16, { frames: 30, height: 3, maxFrames: 31 })
       await sleep(30 * F)
     } else { // a trainer's Pokémon (or one that comes later): the ball shows up where the Pokémon will be
       await sleep(6 * F)
       void music.playSeq(1382)
-      void spl.emit(ballId, 0, top, null, 16, { maxFrames: 25 })
+      void spl.emit(ballId, 0, topNow(), null, 16, { maxFrames: 25 })
       await sleep(25 * F)
     }
     void music.playSeq(1383)
-    void spl.emit(6, null, top, null, 16, side === 'me' ? { radius: 0.5, life: 1, size: 0.5 } : { radius: 1, life: 1, size: 1 })
+    void spl.emit(6, null, topNow(), null, 16, side === 'me' ? { radius: 0.5, life: 1, size: 0.5 } : { radius: 1, life: 1, size: 1 })
     show()
     void music.cry(dexNum(s.species))
     await new Promise<void>((r) => requestAnimationFrame(() => r()))
     const total = playMon(side, side === 'me' ? 0.7 : 1.2, side === 'me' ? 0.5 : 1.0, sc)
-    window.setTimeout(() => { void music.playSeq(1400); void spl.emit(325, 2, { x, y }, null, 16, { maxFrames: 60 }) }, 32 * F + 32 * F + 10 * F)
+    window.setTimeout(() => { void music.playSeq(1400); const f = feetPx(side); void spl.emit(325, 2, { x: f.x, y: f.y }, null, 16, { maxFrames: 60 }) }, 32 * F + 32 * F + 10 * F)
     return total + 100
   }
 

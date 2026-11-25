@@ -188,13 +188,13 @@ export class BattleBackdrop3D {
     this.ballUntil = this.ballT0 + ms
   }
 
-  /** The opening shot: the camera starts low and close to the far platform and flies to the player's camera of the game (`ms` long). */
+  /** The opening shot: the camera starts low and close to the far platform and flies to the usual camera of the game (`ms` long). */
   startIntro(ms = 900) {
     const k = this.R / 3
     this.camPos.set(this.foeP.x + 3 * k, this.foeP.y + 1.6 * k, this.foeP.z + 5 * k)
     this.camTarget.set(this.foeP.x, this.foeP.y + 1.4 * k, this.foeP.z)
     this.applyCamera()
-    void this.moveCamera(0, Math.round((ms * 60) / 1000), 0, 6)
+    void this.moveCamera(8, Math.round((ms * 60) / 1000), 0, 6) // (ends at the usual camera: both Pokémon are in view)
   }
 
   /** where the two platforms (and the Pokémon standing on them) are on screen with the camera as it is right now */
