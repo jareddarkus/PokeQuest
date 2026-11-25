@@ -57,6 +57,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
   const [panel, setPanel] = useState<null | 'settings' | 'team' | 'bag' | 'pc' | 'chat'>(null)
   const [toast, setToast] = useState<string | null>(null)
   const toastFrame = useFrameStyle('white', 2)
+  const hudFrame = useFrameStyle('dark', 1) // the game's own dark message window for the info boxes
   const [ring, setRing] = useState(1)
   const [secs, setSecs] = useState(0)
   const [radius, setRadius] = useState(RADIUS)
@@ -231,7 +232,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
         follower={trainer.team[0] && trainer.team[0].hp > 0 ? { species: trainer.team[0].species, shiny: !!trainer.team[0].shiny } : null}
       />
 
-      <div className="hud-top-left panel">
+      <div className="hud-top-left panel" style={hudFrame ?? undefined}>
         <strong>Ring {ring}</strong>
         <span>
           {waiting ? 'Island falls when the match starts' : collapseOn ? `Next band falls in ${Math.ceil(secs)}s · island radius ${Math.max(0, radius)}` : 'Island collapse is off'}
@@ -245,6 +246,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
       </div>
 
       <div className="hud-top-right">
+        <MenuButton icon={9} label="Menu" badge={menuOpen ? 0 : chat.unread} onClick={() => setMenuOpen((o) => !o)} />
         {menuOpen && (
           <>
             <MenuButton icon={12} label="Team" onClick={() => { setPanel('team'); setMenuOpen(false) }} />
@@ -255,21 +257,20 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
             <MenuButton icon={11} label="Exit" onClick={onExit} />
           </>
         )}
-        <MenuButton icon={9} label="Menu" badge={menuOpen ? 0 : chat.unread} onClick={() => setMenuOpen((o) => !o)} />
       </div>
 
-      <PartyBar team={trainer.team} onOpen={() => setPanel('team')} onReorder={(a, b) => { const team = [...trainerRef.current.team]; if (a === b || !team[a] || !team[b]) return; [team[a], team[b]] = [team[b], team[a]]; setTrainer({ ...trainerRef.current, team }) }} />
+      <PartyBar hidden={menuOpen} team={trainer.team} onOpen={() => setPanel('team')} onReorder={(a, b) => { const team = [...trainerRef.current.team]; if (a === b || !team[a] || !team[b]) return; [team[a], team[b]] = [team[b], team[a]]; setTrainer({ ...trainerRef.current, team }) }} />
 
-      {waiting && <div className="match-wait panel"><strong>Get ready!</strong><span>The match begins in {Math.max(0, Math.ceil((t0 - now) / 1000))} seconds. Everybody is picking a starter…</span></div>}
+      {waiting && <div className="match-wait panel" style={hudFrame ?? undefined}><strong>Get ready!</strong><span>The match begins in {Math.max(0, Math.ceil((t0 - now) / 1000))} seconds. Everybody is picking a starter…</span></div>}
 
       {!battle && !royale && (
-        <div className="hud-practice panel">
+        <div className="hud-practice panel" style={hudFrame ?? undefined}>
           <small>Practice tools</small>
           <button onClick={() => setTrainer({ ...trainer, team: trainer.team.map((m) => ({ ...m, hp: maxHp(m) })) })}>Heal team</button>
         </div>
       )}
 
-      {toast && <div className="toast panel" style={toastFrame ?? undefined}>{toast}</div>}
+      {toast && <div key={toast} className="toast panel" style={toastFrame ?? undefined}>{toast}</div>}
       {panel === 'chat' && <ChatPanel messages={chat.messages} status={chat.status} send={chat.send} canChat={!!username} onClose={() => setPanel(null)} />}
       {panel === 'settings' && <SettingsPanel settings={settings} onChange={onSettings} onClose={() => setPanel(null)} onCustomize={onCustomize} />}
       {panel === 'team' && <TeamPanel trainer={trainer} setTrainer={setTrainer} onClose={() => setPanel(null)} onMessage={say} />}
@@ -304,7 +305,7 @@ export default function PlayScreen(props: Props) {
     })
     return () => { live = false }
   }, [])
-  if (loaded === null) return <div className="fullscreen center menu-bg"><div className="panel card"><p className="sub">Building the island from your game file�</p></div></div>
+  if (loaded === null) return <div className="fullscreen center menu-bg"><div className="panel card"><p className="sub">Building the island from your game file…</p></div></div>
   if (loaded === 'missing') return <div className="fullscreen center menu-bg"><div className="panel card"><p>The map pieces are missing. Please import your game file again (clear this site's data, then reload).</p><button onClick={props.onExit}>Back</button></div></div>
   return <PlayInner {...props} world={loaded.world} built={loaded.built} />
 }

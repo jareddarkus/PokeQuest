@@ -1,13 +1,20 @@
 import { useRef, useState } from 'react'
 import { maxHp, type Mon } from '../data/dex'
 import { MonIcon } from './MonSprite'
+import { useUiUrl } from './CmdButton'
 
 /**
  * Your six Pokémon on the right side of the screen (empty places included), like the party bar of PokeMMO: icon, level and HP bar.
  * Drag a Pokémon onto another place to swap them (mouse or finger); a click opens the team screen. The first place is your follower.
  */
-export default function PartyBar({ team, onOpen, onReorder }: { team: Mon[]; onOpen: () => void; onReorder: (from: number, to: number) => void }) {
+export default function PartyBar({ team, onOpen, onReorder, hidden }: { team: Mon[]; onOpen: () => void; onReorder: (from: number, to: number) => void; hidden?: boolean }) {
   const slots = Array.from({ length: 6 }, (_, i) => team[i] ?? null)
+  // the game's own party panels (picture 126 x 43 of the party screen) when the game file is imported; scaled to fit the corner of the screen
+  const normalArt = useUiUrl('screen:party:5')
+  const faintedArt = useUiUrl('screen:party:3')
+  const emptyArt = useUiUrl('screen:party:6')
+  const art = !!(normalArt && faintedArt && emptyArt)
+  const pk = window.innerWidth <= 640 ? 0.58 : 1.05
   const drag = useRef<{ from: number; x: number; y: number; moved: boolean } | null>(null)
   const [dragging, setDragging] = useState<{ from: number; over: number | null; x: number; y: number } | null>(null)
   const slotAt = (x: number, y: number): number | null => {
@@ -36,9 +43,10 @@ export default function PartyBar({ team, onOpen, onReorder }: { team: Mon[]; onO
   }
   const mon = dragging ? team[dragging.from] : null
   return (
-    <div className="party-bar" onPointerMove={move} onPointerUp={up} onPointerCancel={() => { drag.current = null; setDragging(null) }}>
+    <div className={`party-bar ${hidden ? 'hidden' : ''}`} onPointerMove={move} onPointerUp={up} onPointerCancel={() => { drag.current = null; setDragging(null) }}>
       {slots.map((m, i) => {
-        if (!m) return <button key={i} data-slot={i} className="party-slot empty" onClick={onOpen} aria-label="empty place" />
+        const box: React.CSSProperties | undefined = art ? { width: 126 * pk, height: 43 * pk, padding: 0, border: 'none', borderRadius: 0, boxShadow: i === 0 ? 'inset 3px 0 0 #ffd84a' : 'none', imageRendering: 'pixelated' } : undefined
+        if (!m) return <button key={i} data-slot={i} className="party-slot empty" onClick={onOpen} aria-label="empty place" style={art ? { ...box, background: `url(${emptyArt}) 0 0 / 100% 100% no-repeat`, opacity: 0.4 } : undefined} />
         const max = maxHp(m)
         const f = Math.max(0, Math.min(1, m.hp / max))
         const color = m.hp <= 0 ? '#777' : f > 0.5 ? '#2fdc5a' : f > 0.2 ? '#f0b000' : '#ee3d5e'
@@ -50,13 +58,25 @@ export default function PartyBar({ team, onOpen, onReorder }: { team: Mon[]; onO
             className={`party-slot ${m.hp <= 0 ? 'fainted' : ''} ${dragging?.from === i ? 'lifted' : ''} ${over ? 'drop' : ''} ${i === 0 ? 'lead' : ''}`}
             onPointerDown={(e) => down(e, i)}
             title={`${m.species} Lv${m.level} ${m.hp}/${max}`}
-            style={{ touchAction: 'none' }}
+            style={{ touchAction: 'none', ...(art ? { ...box, position: 'relative', background: `url(${m.hp <= 0 ? faintedArt : normalArt}) 0 0 / 100% 100% no-repeat`, opacity: 1 } : null) }}
           >
-            <MonIcon species={m.species} shiny={m.shiny} size={40} />
-            <span className="party-info">
-              <small>Lv{m.level}</small>
-              <span className="party-hp"><span style={{ width: `${f * 100}%`, background: color }} /></span>
-            </span>
+            {art ? (
+              <>
+                <span style={{ position: 'absolute', left: 5 * pk, top: 5 * pk, pointerEvents: 'none' }}><MonIcon species={m.species} shiny={m.shiny} size={32 * pk} /></span>
+                {pk > 0.8 && <small style={{ position: 'absolute', left: 44 * pk, top: 6 * pk, fontSize: 9 * pk, fontWeight: 700, textShadow: '0 1px 0 #000', pointerEvents: 'none' }}>Lv{m.level}</small>}
+                <span style={{ position: 'absolute', left: (pk > 0.8 ? 44 : 38) * pk, top: 27 * pk, width: (pk > 0.8 ? 72 : 80) * pk, height: 5 * pk, background: '#101018', boxShadow: '0 0 0 1px #000', pointerEvents: 'none' }}>
+                  <span className="party-fill" style={{ display: 'block', height: '100%', width: `${f * 100}%`, background: color }} />
+                </span>
+              </>
+            ) : (
+              <>
+                <MonIcon species={m.species} shiny={m.shiny} size={40} />
+                <span className="party-info">
+                  <small>Lv{m.level}</small>
+                  <span className="party-hp"><span style={{ width: `${f * 100}%`, background: color }} /></span>
+                </span>
+              </>
+            )}
           </button>
         )
       })}

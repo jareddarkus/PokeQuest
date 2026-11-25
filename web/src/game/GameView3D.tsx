@@ -496,8 +496,11 @@ export default function GameView3D(props: Props) {
       }
 
       if (!paused && !p.paused) {
+        let spill = 0 // the part of this frame that was left over after the step ended: it counts for the next step, so walking has no tiny hitch at every tile
         if (me.t < 1) {
-          me.t = Math.min(1, me.t + dt / me.stepSec)
+          const raw = me.t + dt / me.stepSec
+          spill = Math.max(0, raw - 1) * me.stepSec
+          me.t = Math.min(1, raw)
           if (me.t >= 1) {
             const tile = tileAt(world, me.x, me.y)
             p.events.onStep?.(me.x, me.y, tile)
@@ -530,6 +533,7 @@ export default function GameView3D(props: Props) {
             me.turn -= dt
           } else {
             tryStep(w.dir, elapsed)
+            if (me.t === 0 && spill > 0) me.t = Math.min(0.9, spill / me.stepSec) // a new step began in this very frame: it starts with the time that was left over
             tapRef.current = null
           }
           if (!w.held && tapRef.current === null) me.turn = Math.min(me.turn, 0)

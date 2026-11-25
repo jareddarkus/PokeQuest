@@ -238,3 +238,9 @@ Next ideas if this is picked up again: (1) the "!" emote for trainers spotting t
 - `rom/nitro.ts` reads the skeleton (`readObjects`, `readPose`, `poseFrameCount`, matrix-stack restore in display lists) so the model is posed from its BCA0 animation.
 - `ui/TitleDragon.tsx` draws it with three.js on the login page and main menu (transparent, spinning, animation frames baked in the background, `pointer-events: none`). `?nodragon` turns it off.
 - Only appears after the player imports their own game file. Remove it by deleting `ui/TitleDragon.tsx` and its two uses in `App.tsx`.
+
+## Battle Royale polish round
+- Walking: leftover frame time at the end of a step now carries into the next step (no tiny hitch at every tile).
+- Characters: some overworld sprites only have the pictures the game needs; the rest is a big X (black or white) or empty. Those pictures are now replaced by the standing picture of the same character, and one-direction objects / tiny creatures (e.g. files 117, 118, 122, 126, 291, 298, 303) are left out of the character list (`rom/overworld.ts`, import VERSION 39).
+- HUD: info boxes use the game's own dark message window; the party bar uses the game's party-screen panels (empty slots faded); the in-game menu is a vertical list of the game's menu slabs (party bar hides while it is open); screens and menu items slide/fade in (CSS `pq-*` keyframes at the end of App.css, switched off with "reduce motion").
+- Not verifiable in the sandbox browser: online (Gen 6-9) sprites in battles (blocked there) and real frame rate.

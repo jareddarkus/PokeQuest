@@ -31,8 +31,42 @@ function mirrored(src: HTMLCanvasElement): HTMLCanvasElement {
   return c
 }
 
-/** The 12 pictures (dir 0..3 x 3 frames) of one walking character, or null if this file is not a normal walker. */
-export function buildStrip(raw: Uint8Array): HTMLCanvasElement | null {
+/** A cheap fingerprint of a picture (used to recognise the game's identical "X" placeholder pictures) and how many pixels of it are visible. */
+function pictureInfo(c: HTMLCanvasElement): { hash: string; mask: string; opaque: number } {
+  const d = c.getContext('2d')!.getImageData(0, 0, c.width, c.height).data
+  let h = 2166136261, m = 2166136261, o = 0
+  for (let k = 0; k < d.length; k += 4) {
+    if (d[k + 3] > 0) o++
+    m = Math.imul(m ^ d[k + 3], 16777619)
+    if (k % 28 === 0) h = Math.imul(h ^ d[k], 16777619)
+  }
+  return { hash: `${c.width}x${c.height}:${h >>> 0}`, mask: `${m >>> 0}`, opaque: o }
+}
+
+/** What the game uses to fill pictures a character never needs: the shapes (silhouettes) of its big "X" pictures. */
+export interface Placeholders { masks: Set<string> }
+
+/**
+ * Some characters only have the pictures the game needs (a gym leader that only ever faces you has no "up" pictures, no step pictures ...):
+ * the game file fills the rest with a big X (black or white) or leaves the picture empty. We swap every such picture for a real picture of
+ * the same character (the standing picture of the same direction, or of another direction when that one is missing too).
+ * Returns null when the file is a one-direction object / a tiny creature and not a character.
+ */
+function withoutPlaceholders(g: HTMLCanvasElement[], bad: Placeholders): HTMLCanvasElement[] | null {
+  const isBad = (c: HTMLCanvasElement) => { const i = pictureInfo(c); return i.opaque < 60 || bad.masks.has(i.mask) }
+  const stands = [0, 1, 2, 3].map((d) => g[d * 3]).filter((c) => !isBad(c))
+  if (stands.length < 3 || isBad(g[0]) || pictureInfo(g[0]).opaque < 120) return null
+  const out = g.slice()
+  for (let d = 0; d < 4; d++) {
+    const stand = isBad(g[d * 3]) ? stands[0] : g[d * 3]
+    out[d * 3] = stand
+    for (const k of [1, 2]) if (isBad(g[d * 3 + k])) out[d * 3 + k] = stand
+  }
+  return out
+}
+
+/** The 12 pictures (dir 0..3 x 3 frames) of one walking character, or null if this file is not a normal walker. `count` collects how often each picture appears in the whole game; `bad` = the placeholder pictures to replace. */
+export function buildStrip(raw: Uint8Array, opts?: { count?: Map<string, { n: number; mask: string; opaque: number }>; bad?: Placeholders }): HTMLCanvasElement | null {
   const t = readTexFile(raw)
   if (!t || !t.pals.length) return null
   const n = t.texs.length
@@ -40,6 +74,10 @@ export function buildStrip(raw: Uint8Array): HTMLCanvasElement | null {
   const frames = t.texs.map((tex) => decodeTexture(tex, t.pals[0]))
   if (frames.some((f) => f.width !== OW_FRAME || f.height !== OW_FRAME)) return null
   const f = frames.map(frameCanvas)
+  if (opts?.count) {
+    const here = new Map(f.map((c) => { const i = pictureInfo(c); return [i.hash, i] as const }))
+    for (const [h, i] of here) { const e = opts.count.get(h); if (e) e.n++; else opts.count.set(h, { n: 1, mask: i.mask, opaque: i.opaque }) }
+  }
   const make = (g: HTMLCanvasElement[]): HTMLCanvasElement[] => {
     // order: down x3, left x3, right x3, up x3 (stand, step, step)
     if (n === 7) {
@@ -55,8 +93,11 @@ export function buildStrip(raw: Uint8Array): HTMLCanvasElement | null {
     const b = [g[9], g[10], g[11]]
     return FIRST_SIDE_IS_LEFT ? [...down, ...a, ...b, ...up] : [...down, ...b, ...a, ...up]
   }
-  const walk = make(f.slice(0, n === 7 ? 7 : 12))
-  const run = n === 24 ? make(f.slice(12, 24)) : walk // only the 24-picture files (the heroes) have separate running pictures
+  const walk0 = make(f.slice(0, n === 7 ? 7 : 12))
+  const walk = opts?.bad ? withoutPlaceholders(walk0, opts.bad) : walk0
+  if (!walk) return null
+  const run0 = n === 24 ? make(f.slice(12, 24)) : null
+  const run = run0 ? (opts?.bad ? withoutPlaceholders(run0, opts.bad) ?? walk : run0) : walk // only the 24-picture files (the heroes) have separate running pictures
   const slots = [...walk, ...run]
   const strip = document.createElement('canvas')
   strip.width = OW_FRAME * 24
@@ -79,19 +120,22 @@ export async function decodeOverworld(files: Uint8Array[], put: (idx: number, bl
   }
   const seen = new Map<string, number>()
   const hashes = new Map<number, string>()
+  const count = new Map<string, { n: number; mask: string; opaque: number }>() // how many files contain each single picture
   for (let i = OW_FIRST; i <= OW_LAST && i < files.length; i++) {
     try {
-      const strip = buildStrip(files[i])
+      const strip = buildStrip(files[i], { count })
       if (!strip) continue
       const h = hashOf(strip)
       hashes.set(i, h)
       seen.set(h, (seen.get(h) ?? 0) + 1)
     } catch { /* not a walker */ }
   }
+  const bad: Placeholders = { masks: new Set() } // a single picture that shows up in many different files is the placeholder "X": remember its shape
+  for (const e of count.values()) if (e.n >= 12 && e.opaque >= 60 && e.opaque <= 100) bad.masks.add(e.mask)
   for (const [i, h] of hashes) {
     if ((seen.get(h) ?? 0) >= 4) continue
     try {
-      const strip = buildStrip(files[i])
+      const strip = buildStrip(files[i], { bad })
       if (!strip) continue
       const blob = await new Promise<Blob | null>((res) => strip.toBlob(res, 'image/png'))
       if (blob) { await put(i, blob); ok.push(i) }
