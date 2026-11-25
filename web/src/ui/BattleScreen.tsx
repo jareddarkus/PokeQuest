@@ -299,6 +299,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
 
   const teamRef = useRef(playerTeam)
   const hpOf = useRef<Record<string, number>>({})
+  const pendingHit = useRef<string | null>(null)
 
   const showMenuIfReady = () => {
     if (endedRef.current) return
@@ -318,8 +319,9 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
       const ev = queue.current.shift()!
       switch (ev.kind) {
         case 'text':
-          if (/super effective/i.test(ev.text)) void music.playSfx('se:hitStrong')
-          else if (/not very effective/i.test(ev.text)) void music.playSfx('se:hitWeak')
+          // "It's super effective!" comes before the damage: the game plays ONE hit sound for the damage (strong / normal / weak), so the choice is kept for the HP change
+          if (/super effective/i.test(ev.text)) pendingHit.current = 'se:hitStrong'
+          else if (/not very effective/i.test(ev.text)) pendingHit.current = 'se:hitWeak'
           if (/ sent out /i.test(ev.text)) setRows(null)
           if (/^Go! /.test(ev.text) && !trSent.current.me) setRows('me')
           await say(ev.text, 750); break
@@ -358,7 +360,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
         case 'hp': {
           const upd = (s: Side | null): Side | null => (s && s.uid === ev.uid ? { ...s, hp: ev.hp, maxHp: ev.hp === 0 ? s.maxHp : ev.maxHp, status: ev.status ?? s.status } : s)
           if (ev.side === 'p1') setMe(upd); else setFoe(upd)
-          if (ev.uid in hpOf.current && ev.hp < hpOf.current[ev.uid]) void music.playSfx('se:hit')
+          if (ev.uid in hpOf.current && ev.hp < hpOf.current[ev.uid]) { void music.playSfx(pendingHit.current ?? 'se:hit'); pendingHit.current = null }
           else if (ev.uid in hpOf.current && ev.hp > hpOf.current[ev.uid]) void music.playSfx('se:heal')
           const before = hpOf.current[ev.uid] ?? ev.hp
           hpOf.current[ev.uid] = ev.hp

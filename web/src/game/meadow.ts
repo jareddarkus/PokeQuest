@@ -25,26 +25,47 @@ export const meadowHeight = (built: BuiltWorld): number => built.waterY + 0.35
 /** Makes the ring-1 tiles (before the world is generated from them): grass, scattered tall grass, paths, beach. */
 export function prepareMeadow(built: BuiltWorld, seed: number): void {
   const hm = meadowHeight(built)
-  const path = new Uint8Array(SIZE * SIZE)
+  let path = new Uint8Array(SIZE * SIZE)
+  for (let y = 0; y < SIZE; y++) {
+    for (let x = 0; x < SIZE; x++) {
+      const d = dist(x, y)
+      if (d < RING_INNER[0] || d > RADIUS - BEACH) continue
+      const dx = x + 0.5 - C, dy = y + 0.5 - C
+      // the ring road (a wobbly square) and straight-ish paths from it to the inside and to the beach (3 on each side)
+      let road = Math.abs(d - (ROAD_R + (valueNoise(x, y, seed + 3, 20) - 0.5) * 3)) < 1.5
+      if (!road) {
+        const vertical = Math.abs(dy) >= Math.abs(dx) // north / south part: the path runs up-down, its place is the x coordinate
+        const along = vertical ? dy : dx, lateral = vertical ? dx : dy
+        for (const off of [-28, 0, 28]) {
+          const wob = (valueNoise(along, off + 200, seed + 5, 16) - 0.5) * 4
+          if (Math.abs(lateral - off - wob) < 1.5) { road = true; break }
+        }
+      }
+      if (road) path[y * SIZE + x] = 1
+    }
+  }
+  // smooth the paths: a majority filter removes one-tile bumps, notches and diagonal-only links, so the edges run in long clean lines
+  for (let pass = 0; pass < 2; pass++) {
+    const next = new Uint8Array(SIZE * SIZE)
+    for (let y = 1; y < SIZE - 1; y++) {
+      for (let x = 1; x < SIZE - 1; x++) {
+        const d = dist(x, y)
+        if (d < RING_INNER[0] || d > RADIUS - BEACH) continue
+        let n = 0
+        for (let b = -1; b <= 1; b++) for (let a = -1; a <= 1; a++) n += path[(y + b) * SIZE + x + a]
+        next[y * SIZE + x] = n >= 5 ? 1 : 0
+      }
+    }
+    path = next
+  }
   for (let y = 0; y < SIZE; y++) {
     for (let x = 0; x < SIZE; x++) {
       const d = dist(x, y)
       if (d < RING_INNER[0] || d > RADIUS) continue
       const i = y * SIZE + x
-      const dx = x + 0.5 - C, dy = y + 0.5 - C
-      // the ring road (a wobbly square) and straight-ish paths from it to the inside and to the beach (3 on each side)
-      let road = Math.abs(d - (ROAD_R + (valueNoise(x, y, seed + 3, 10) - 0.5) * 5)) < 1.5
-      if (!road && d < RADIUS - BEACH) {
-        const vertical = Math.abs(dy) >= Math.abs(dx) // north / south part: the path runs up-down, its place is the x coordinate
-        const along = vertical ? dy : dx, lateral = vertical ? dx : dy
-        for (const off of [-28, 0, 28]) {
-          const wob = (valueNoise(along, off + 200, seed + 5, 8) - 0.5) * 6
-          if (Math.abs(lateral - off - wob) < 1.5) { road = true; break }
-        }
-      }
       let code: number = T.Grass
       if (d > RADIUS - BEACH) code = T.Sand
-      else if (road) { code = T.Grass; path[i] = 1 }
+      else if (path[i]) { code = T.Grass }
       else {
         // scattered patches: a small-scale noise with random holes, not big uniform blocks
         const n = valueNoise(x, y, seed + 11, 4.2) * 0.75 + valueNoise(x, y, seed + 17, 11) * 0.25 + (hash2(x, y, seed) - 0.5) * 0.16
@@ -121,6 +142,14 @@ function roadTile(sand: THREE.DataTexture | null, fringe: THREE.DataTexture | nu
       ctx.drawImage(src, sx, 0, 16, 6, 0, 0, 16, 6) // the top 6 rows: grass edge over sand
       ctx.restore()
     }
+    // inner corners (the road goes on both ways but the tile diagonally is grass): the corner piece of the same edge picture
+    for (const [bit, rot] of [[16, 0], [32, 1], [64, 2], [128, 3]] as Array<[number, number]>) {
+      if (!(mask & bit)) continue
+      ctx.save()
+      ctx.translate(8, 8); ctx.rotate((rot * Math.PI) / 2); ctx.translate(-8, -8)
+      ctx.drawImage(src, sx, 0, 6, 6, 0, 0, 6, 6)
+      ctx.restore()
+    }
   }
   const t = new THREE.CanvasTexture(c)
   t.magFilter = THREE.NearestFilter; t.minFilter = THREE.NearestFilter; t.colorSpace = THREE.SRGBColorSpace
@@ -138,7 +167,6 @@ export function buildMeadowVisuals(world: World, built: BuiltWorld, extra: numbe
   const roadSand = built.textureNamed('michi01b', false, sandy)
   const roadEdge = built.textureNamed('michi01a', false, sandy)
   const tuft = built.textureNamed('kusa_ec1', false, green)
-  const bush = built.textureNamed('kusa_ec2', false, green)
   const mesh = (geo: THREE.BufferGeometry, mat: THREE.Material, y = 0) => { const m = new THREE.Mesh(geo, mat); m.position.y = y; m.frustumCulled = false; g.add(m) }
   mesh(squareRing(RING_INNER[0] - 0.2, RADIUS - BEACH, hm), groundMat(grass, 0x59b84a, built))
   mesh(squareRing(RADIUS - BEACH, RADIUS + 1.2, hm + 0.001), groundMat(sand, 0xe8d890, built))
@@ -157,28 +185,27 @@ export function buildMeadowVisuals(world: World, built: BuiltWorld, extra: numbe
   const pm = built.pathMask
   const isRoad = (x: number, y: number) => x >= 0 && y >= 0 && x < SIZE && y < SIZE && !!pm && pm[y * SIZE + x] === 1 && dist(x, y) >= RING_INNER[0] && dist(x, y) <= RADIUS - BEACH
   const roads = new Map<number, number[]>() // (neighbour mask * 2 + picture variant) -> tiles
-  const tuftsA: number[] = [], bushes: number[] = []
+  const tuftsA: number[] = []
   for (let i = 0; i < SIZE * SIZE; i++) {
     const x = i % SIZE, y = (i / SIZE) | 0
     const d = dist(x, y)
     if (d < RING_INNER[0] || d > RADIUS) continue
     if (isRoad(x, y) && world.tiles[i] === T.Grass) {
-      const mask = (isRoad(x, y - 1) ? 0 : 1) | (isRoad(x + 1, y) ? 0 : 2) | (isRoad(x, y + 1) ? 0 : 4) | (isRoad(x - 1, y) ? 0 : 8)
+      const n = isRoad(x, y - 1), e = isRoad(x + 1, y), s = isRoad(x, y + 1), w = isRoad(x - 1, y)
+      const mask = (n ? 0 : 1) | (e ? 0 : 2) | (s ? 0 : 4) | (w ? 0 : 8)
+        | (n && w && !isRoad(x - 1, y - 1) ? 16 : 0) | (n && e && !isRoad(x + 1, y - 1) ? 32 : 0)
+        | (s && e && !isRoad(x + 1, y + 1) ? 64 : 0) | (s && w && !isRoad(x - 1, y + 1) ? 128 : 0)
       const key = mask * 2 + (hash2(x, y, 9) < 0.5 ? 0 : 1)
       ;(roads.get(key) ?? roads.set(key, []).get(key)!).push(i)
     } else if (world.tiles[i] === T.Tall) {
-      const inside = [[1, 0], [-1, 0], [0, 1], [0, -1]].every(([a, b]) => world.tiles[(y + b) * SIZE + x + a] === T.Tall)
-      // the middle of a patch is full bushes, its edge lighter tufts (like the patches of the game)
-      ;((inside && hash2(x, y, 6) < 0.85) ? bushes : tuftsA).push(i)
+      tuftsA.push(i) // tall grass = the game's leaf picture on every tile (the darker bush picture has square edges that show as seams)
     }
   }
   for (const [key, tiles] of roads) flat(tiles, new THREE.MeshBasicMaterial({ map: roadTile(roadSand, roadEdge, key >> 1, key & 1) }), 0.012, () => hm)
   const alphaMat = (t: THREE.Texture | null) => new THREE.MeshBasicMaterial({ map: t ?? undefined, color: t ? 0xffffff : 0x2a8a3a, alphaTest: 0.4, side: THREE.DoubleSide })
   flat(tuftsA, alphaMat(tuft), 0.02, () => hm)
-  flat(bushes, alphaMat(bush ?? tuft), 0.03, () => hm, 1.1)
   const ex = extra.filter((i) => dist(i % SIZE, (i / SIZE) | 0) < RING_INNER[0])
-  flat(ex.filter((i) => hash2(i, 3, 4) < 0.5), alphaMat(tuft), 0.04, (i) => built.height[i])
-  flat(ex.filter((i) => hash2(i, 3, 4) >= 0.5), alphaMat(bush ?? tuft), 0.05, (i) => built.height[i], 1.1)
+  flat(ex, alphaMat(tuft), 0.04, (i) => built.height[i])
 
   // the cliffs between the rings: a slanted wall of the game's cliff picture (one picture per tile) from the lower ring up to the higher one, following the ground of both
   const cliff = built.textureNamed('yamagake01', true, (r, gg, b) => r - b - Math.abs(gg - r) * 0.2) // the game's tall mountain cliff face (16 x 32: one tile wide, two tall)
