@@ -26,16 +26,23 @@ const DB = 'pokequest-rom'
 const STORE = 'assets'
 const META_KEY = 'meta'
 
+let dbPromise: Promise<IDBDatabase> | null = null
+/** One connection for the whole session (opening the database again for every picture made Safari / Macs crawl or freeze). */
 function db(): Promise<IDBDatabase> {
-  return new Promise((res, rej) => {
-    const r = indexedDB.open(DB, 1)
-    r.onupgradeneeded = () => r.result.createObjectStore(STORE)
-    r.onsuccess = () => res(r.result)
-    r.onerror = () => rej(r.error)
-  })
+  if (!dbPromise) {
+    dbPromise = new Promise((res, rej) => {
+      const r = indexedDB.open(DB, 1)
+      r.onupgradeneeded = () => r.result.createObjectStore(STORE)
+      r.onsuccess = () => { r.result.onversionchange = () => { r.result.close(); dbPromise = null }; res(r.result) }
+      r.onerror = () => { dbPromise = null; rej(r.error) }
+    })
+  }
+  return dbPromise
 }
 
+let putCount = 0
 async function put(key: string, value: unknown): Promise<void> {
+  if ((++putCount & 15) === 0) await new Promise((r) => setTimeout(r)) // let the page breathe (the progress bar keeps moving, the browser does not look frozen)
   const d = await db()
   await new Promise<void>((res, rej) => {
     const tx = d.transaction(STORE, 'readwrite')
@@ -43,7 +50,6 @@ async function put(key: string, value: unknown): Promise<void> {
     tx.oncomplete = () => res()
     tx.onerror = () => rej(tx.error)
   })
-  d.close()
 }
 
 async function get<T>(key: string): Promise<T | undefined> {
@@ -53,7 +59,6 @@ async function get<T>(key: string): Promise<T | undefined> {
     r.onsuccess = () => res(r.result as T | undefined)
     r.onerror = () => rej(r.error)
   })
-  d.close()
   return v
 }
 
@@ -93,7 +98,7 @@ export async function loadOverworldSprites(): Promise<void> {
   } catch { /* the game falls back to the drawn characters */ }
 }
 
-const VERSION = 43 // 43 = ... + the game's own HP-box digits / gender signs / gauge pieces and team balls;  42 = ... + trainer pictures;  41 = ... + the game's fonts;  40 = ... + walking Pokémon (followers);  39 = ... + no X pictures / one-direction objects among the characters;  38 = ... + no X inside characters;  37 = ... + title dragon;  36 = ... + Elixir icon;  35 = ... + no placeholder characters;  34 = ... + message frames;  33 = ... + PC wallpapers;  32 = ... + party panels, summary pages;  31 = ... + Bag and Summary backgrounds;  30 = ... + HP boxes;  29 = ... + potion/vitamin colours;  28 = ... + move-effect shapes;  27 = ... + all item icons by file;  26 = ... + item ball;  25 = ... + running pictures;  24 = ... + water animation data;  23 = ... + sound effects and cries;  22 = ... + menu backdrops;  21 = ... + music;  20 = gym buildings;  19 = buildings fixed;  18 = ... + buildings;  17 = ... + emote bubbles;  16 = ... + start menu art;  15 = battle buttons rebuilt;  14 = ... + battle command buttons;  13 = ... + menu icons;  12 = ... + walking characters;  11 = ... + the game's own trainer colours
+const VERSION = 44 // 44 = ... + the Poké Ball model;  43 = 43 = ... + the game's own HP-box digits / gender signs / gauge pieces and team balls;  42 = ... + trainer pictures;  41 = ... + the game's fonts;  40 = ... + walking Pokémon (followers);  39 = ... + no X pictures / one-direction objects among the characters;  38 = ... + no X inside characters;  37 = ... + title dragon;  36 = ... + Elixir icon;  35 = ... + no placeholder characters;  34 = ... + message frames;  33 = ... + PC wallpapers;  32 = ... + party panels, summary pages;  31 = ... + Bag and Summary backgrounds;  30 = ... + HP boxes;  29 = ... + potion/vitamin colours;  28 = ... + move-effect shapes;  27 = ... + all item icons by file;  26 = ... + item ball;  25 = ... + running pictures;  24 = ... + water animation data;  23 = ... + sound effects and cries;  22 = ... + menu backdrops;  21 = ... + music;  20 = gym buildings;  19 = buildings fixed;  18 = ... + buildings;  17 = ... + emote bubbles;  16 = ... + start menu art;  15 = battle buttons rebuilt;  14 = ... + battle command buttons;  13 = ... + menu icons;  12 = ... + walking characters;  11 = ... + the game's own trainer colours
 
 let colorsApplied = false
 /** Makes the colour choices of the character maker use the colours the game really uses (snaps each to the nearest real one). */
@@ -170,6 +175,7 @@ export async function importRom(file: RomSource, onProgress: (text: string, frac
   await put('emote:list', await decodeEmotes(parseNarc(await nds.get(EMOTE_NARC)), (i, b) => put(`emote:${i}`, b)))
   try { await decodeFollowers(owFiles, FOLLOWER_FILES, (k, b) => put(k, b)) } catch { /* followers fall back to the menu icon */ }
   try { await put('font:narc', new Blob([new Uint8Array(await nds.get('a/0/2/3'))])) } catch { /* the page's own font is used */ }
+  try { await put('ball:narc', new Blob([new Uint8Array(await nds.get('a/2/0/1'))])) } catch { /* the send-out ball is a plain disc */ }
   try { await put('trainer:front', new Blob([new Uint8Array(await nds.get('a/0/7/1'))])); await put('trainer:back', new Blob([new Uint8Array(await nds.get('a/0/7/2'))])) } catch { /* battles go without trainer pictures */ }
   onProgress('Reading the move effects…', 0.9843)
   try { await decodeFx(await nds.get(FX_NARC), (name, b) => put(`ui:fx:${name}`, b)) } catch { /* the battle uses plain flashes */ }
@@ -217,7 +223,6 @@ export async function clearRom(): Promise<void> {
     tx.objectStore(STORE).clear()
     tx.oncomplete = () => res()
   })
-  d.close()
   urlCache.clear()
 }
 
@@ -287,6 +292,16 @@ export async function getBattleFiles(): Promise<Uint8Array[] | null> {
   } catch {
     return null
   }
+}
+let ballRaw: Uint8Array | null | undefined
+/** The game's Poké Ball model (3D, used for the thrown / hovering ball), or null. */
+export async function getBallModel(): Promise<Uint8Array | null> {
+  if (ballRaw !== undefined) return ballRaw
+  try {
+    const blob = await get<Blob>('ball:narc')
+    ballRaw = blob ? parseNarc(new Uint8Array(await blob.arrayBuffer()))[0] ?? null : null
+  } catch { ballRaw = null }
+  return ballRaw
 }
 /** A move-type label (or the physical / special / status icon) from the player's game file. */
 export async function romPlateUrl(name: string): Promise<string | null> {

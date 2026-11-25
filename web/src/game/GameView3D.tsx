@@ -11,6 +11,7 @@ import { hash2 } from './rng'
 import { dexNum } from '../data/dex'
 import { MAX_ROM_DEX } from '../rom/sprites'
 import { loadFollowerPicture, romIconUrl } from '../rom/store'
+import { loadPmdStrip } from '../rom/pmdFollower'
 import { FOLLOWER_FILE } from '../data/followerMap'
 import { getAnim, warmAnim } from '../ui/AnimSprite'
 import { pixelDom } from '../ui/MonSprite'
@@ -34,6 +35,8 @@ interface Props {
   paused: boolean
   /** the first Pokémon of your team walks behind you */
   follower?: { species: string; shiny: boolean } | null
+  /** trainers that other players are fighting right now: character id -> name of the player (they stand still and a Poké Ball spins above both) */
+  busy?: () => Map<string, string>
   /** false when all your Pokémon have fainted: trainers do not challenge you then, so you can still walk (to find a Revive) */
   canBattle?: boolean
 }
@@ -201,7 +204,7 @@ export default function GameView3D(props: Props) {
     const mount = mountRef.current!
     const { world, built } = propsRef.current
 
-    const renderer = new THREE.WebGLRenderer({ antialias: false })
+    const renderer = new THREE.WebGLRenderer({ antialias: true })
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
     mount.appendChild(renderer.domElement)
     renderer.domElement.className = 'game-canvas'
@@ -324,6 +327,7 @@ export default function GameView3D(props: Props) {
     { const f0 = followerSpot(me.x, me.y, me.dir); fol.x = f0.x; fol.y = f0.y; fol.fromX = f0.x; fol.fromY = f0.y; fol.t = 1 }
     fol.canvas.width = 96; fol.canvas.height = 96
     fol.owCanvas.width = 32; fol.owCanvas.height = 32
+    let folCw = 32, folCh = 32 // size of one picture of the follower's strip
     fol.sprite.visible = false
     fol.sprite.renderOrder = 3
     scene.add(fol.sprite)
@@ -337,22 +341,23 @@ export default function GameView3D(props: Props) {
       fol.key = key
       const dx = dexNum(species)
       // the walking Pokémon picture of the game (the real "follower" look); a Pokémon without one shows its menu icon
-      const setupOw = (strip: CanvasImageSource) => {
+      const setupOw = (strip: CanvasImageSource, cw = 32, ch = 32) => {
+        folCw = cw; folCh = ch
+        fol.owCanvas.width = cw; fol.owCanvas.height = ch
         const probe = document.createElement('canvas')
-        probe.width = 32; probe.height = 32
+        probe.width = cw; probe.height = ch
         const pc = probe.getContext('2d')!
-        pc.drawImage(strip, 2 * 32, 0, 32, 32, 0, 0, 32, 32) // the standing-down picture: where are the feet?
-        const d = pc.getImageData(0, 0, 32, 32).data
-        let bottom = 31
-        for (let y = 31; y >= 0; y--) { let any = false; for (let x = 0; x < 32 && !any; x++) any = d[(y * 32 + x) * 4 + 3] > 0; if (any) { bottom = y; break } }
+        pc.drawImage(strip, 2 * cw, 0, cw, ch, 0, 0, cw, ch) // the standing-down picture: where are the feet?
+        const d = pc.getImageData(0, 0, cw, ch).data
+        let bottom = ch - 1
+        for (let y = ch - 1; y >= 0; y--) { let any = false; for (let x = 0; x < cw && !any; x++) any = d[(y * cw + x) * 4 + 3] > 0; if (any) { bottom = y; break } }
         fol.strip = strip
-        if (!fol.owTex) {
-          fol.owTex = new THREE.CanvasTexture(fol.owCanvas)
-          fol.owTex.magFilter = THREE.NearestFilter; fol.owTex.minFilter = THREE.NearestFilter; fol.owTex.colorSpace = THREE.SRGBColorSpace
-        }
+        if (fol.owTex) fol.owTex.dispose()
+        fol.owTex = new THREE.CanvasTexture(fol.owCanvas)
+        fol.owTex.magFilter = THREE.NearestFilter; fol.owTex.minFilter = THREE.NearestFilter; fol.owTex.colorSpace = THREE.SRGBColorSpace
         fol.sprite.material.map = fol.owTex
         fol.sprite.material.needsUpdate = true
-        fol.sprite.center.set(0.5, 1 - (bottom + 1) / 32)
+        fol.sprite.center.set(0.5, 1 - (bottom + 1) / ch)
         fol.mode = 'ow'
       }
       const romFallback = () => {
@@ -369,31 +374,7 @@ export default function GameView3D(props: Props) {
           fol.mode = 'rom'
         })
       }
-      if (dx > 0 && dx <= MAX_ROM_DEX) {
-        void (async () => {
-          let strip: CanvasImageSource | null = null
-          const file = FOLLOWER_FILE[dx]
-          if (file) strip = await loadFollowerPicture(file)
-          if (!strip) { // no walking picture: the game's own menu icon (the same picture for every direction)
-            const url = await romIconUrl(dx)
-            if (url) {
-              const img = new Image()
-              await new Promise<void>((res) => { img.onload = () => res(); img.onerror = () => res(); img.src = url })
-              if (img.naturalWidth) {
-                const c = document.createElement('canvas')
-                c.width = 32 * 8; c.height = 32
-                const cx = c.getContext('2d')!
-                cx.imageSmoothingEnabled = false
-                for (let i = 0; i < 8; i++) cx.drawImage(img, 0, 0, 32, 32, i * 32, 0, 32, 32)
-                strip = c
-              }
-            }
-          }
-          if (fol.key !== key) return
-          if (strip) setupOw(strip)
-          else romFallback()
-        })()
-      } else {
+      const showDom = () => { // last resort (no walking picture found): the still pixel picture
         const px = pixelDom(species, shiny)
         const wrap = document.createElement('div')
         wrap.style.cssText = `position:absolute;left:0;top:0;pointer-events:none;z-index:2;transform-origin:50% 100%;width:${px.w}px;height:${px.h}px;will-change:transform`
@@ -402,6 +383,35 @@ export default function GameView3D(props: Props) {
         fol.dom = { wrap, w: px.w, h: px.h }
         fol.mode = 'dom'
       }
+      // 1) the game file's own walking picture; 2) a pixel-art walking picture (every other Pokémon, any generation); 3) the menu icon / the still picture
+      void (async () => {
+        let strip: CanvasImageSource | null = null
+        let cw = 32, ch = 32
+        if (dx > 0 && dx <= MAX_ROM_DEX) { const file = FOLLOWER_FILE[dx]; if (file) strip = await loadFollowerPicture(file) }
+        if (!strip && dx > 0) {
+          const pmd = await loadPmdStrip(dx)
+          if (pmd) { strip = pmd; cw = pmd.width / 8; ch = pmd.height }
+        }
+        if (!strip && dx > 0 && dx <= MAX_ROM_DEX) { // no walking picture at all: the game's own menu icon (the same picture for every direction)
+          const url = await romIconUrl(dx)
+          if (url) {
+            const img = new Image()
+            await new Promise<void>((res) => { img.onload = () => res(); img.onerror = () => res(); img.src = url })
+            if (img.naturalWidth) {
+              const c = document.createElement('canvas')
+              c.width = 32 * 8; c.height = 32
+              const cx = c.getContext('2d')!
+              cx.imageSmoothingEnabled = false
+              for (let i = 0; i < 8; i++) cx.drawImage(img, 0, 0, 32, 32, i * 32, 0, 32, 32)
+              strip = c
+            }
+          }
+        }
+        if (fol.key !== key) return
+        if (strip) setupOw(strip, cw, ch)
+        else if (dx > 0 && dx <= MAX_ROM_DEX) romFallback()
+        else showDom()
+      })()
     }
 
     let alert: { n: NpcRuntime; t: number } | null = null
@@ -434,6 +444,9 @@ export default function GameView3D(props: Props) {
     })
     if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__pq = { npcs, me, world, built, rayDown: (x: number, y: number, z: number) => { const maps = built.group.children.filter((c) => !c.userData.building); const rc = new THREE.Raycaster(); rc.set(new THREE.Vector3(x, y, z), new THREE.Vector3(0, -1, 0)); return rc.intersectObjects(maps, true).slice(0, 5).map((h) => [(h.object as THREE.Mesh).material instanceof THREE.Material ? ((h.object as THREE.Mesh).material as THREE.Material).name : '?', +h.point.y.toFixed(2)]) }, group: built.group, overlap: () => { const maps = built.group.children.filter((c) => !c.userData.building); const rc = new THREE.Raycaster(); return built.group.children.filter((c) => c.userData.building).map((c) => { const b = c.userData.building; rc.set(new THREE.Vector3(b.x, b.y + 4, b.z), new THREE.Vector3(0, -1, 0)); const hits = rc.intersectObjects(maps, true); return { m: b.model, pack: b.pack, x: b.x, z: b.z, y: b.y, top: hits.length ? +hits[0].point.y.toFixed(2) : null } }) }, pick: (nx: number, ny: number) => { const rc = new THREE.Raycaster(); rc.setFromCamera(new THREE.Vector2(nx, ny), camera); return rc.intersectObjects(built.group.children, true).slice(0, 4).map((h) => (h.object as THREE.Mesh).material as THREE.Material).map((m) => m.name) } } // developer test hook
     const otherSprites = new Map<string, { body: THREE.Sprite; label: THREE.Sprite; shadow: THREE.Mesh }>()
+    let busyMap = new Map<string, string>() // trainers other players are fighting (refreshed every frame)
+    const busyBalls = new Map<string, THREE.Sprite>() // the spinning Poké Balls above the fighters
+    const busyMat = ballMaterial()
     let paused = false
     const held = new Set<string>()
 
@@ -461,6 +474,9 @@ export default function GameView3D(props: Props) {
       if (me.t < 1 || paused || propsRef.current.paused) return
       const pk = world.pickups.find((q) => q.x === me.x + DX[me.dir] && q.y === me.y + DY[me.dir] && !removed.has(q.id))
       if (pk) propsRef.current.events.onPickup?.(pk.id)
+      const fx = me.x + DX[me.dir], fy = me.y + DY[me.dir]
+      const who = npcs.find((n) => !n.spec.swim && ((n.x === fx && n.y === fy) || (n.moving > 0 && Math.round(n.fx) === fx && Math.round(n.fy) === fy)))
+      if (who && !pk) propsRef.current.events.onNpcTalk?.(who.spec.id)
     }
     actionRef.current = doAction
     const onKeyDown = (e: KeyboardEvent) => {
@@ -599,7 +615,7 @@ export default function GameView3D(props: Props) {
           if (!w.held && tapRef.current === null) me.turn = Math.min(me.turn, 0)
         }
         for (const n of npcs) {
-          if (n.defeated || n.frozen || (alert && alert.n === n && n.moving === 0)) continue
+          if (n.defeated || n.frozen || (busyMap.has(n.spec.id) && n.moving === 0) || (alert && alert.n === n && n.moving === 0)) continue
           if (n.moving > 0) {
             n.moving = Math.min(1, n.moving + dt / (n.spec.behavior === 'run' ? 0.2 : WALK_SECONDS))
             n.fx = n.fromX + (n.x - n.fromX) * n.moving
@@ -630,7 +646,7 @@ export default function GameView3D(props: Props) {
               const sx = n.x + DX[n.dir] * k
               const sy = n.y + DY[n.dir] * k
               if (!isWalkable(world, sx, sy) && tileAt(world, sx, sy) !== T.GymDoor) break
-              if (sx === me.x && sy === me.y && me.t >= 1 && !alert && p.canBattle !== false) { // (trainers leave you alone when none of your Pokémon can fight)
+              if (sx === me.x && sy === me.y && me.t >= 1 && !alert && p.canBattle !== false && !busyMap.has(n.spec.id)) { // (trainers leave you alone when none of your Pokémon can fight)
                 const em = owEmote(15) // the game's own "!" bubble
                 if (em && bubble) { alert = { n, t: 0.9 }; bubble.visible = true; break }
                 p.events.onNpcSpotted?.(n.spec.id)
@@ -685,10 +701,10 @@ export default function GameView3D(props: Props) {
           if (fol.t < 1 && (Math.abs(dxm) > 0.01 || Math.abs(dym) > 0.01)) fol.dir = Math.abs(dxm) > Math.abs(dym) ? (dxm > 0 ? 3 : 2) : (dym > 0 ? 1 : 0) // 0 up, 1 down, 2 left, 3 right
           const frame = fol.t < 1 ? (fol.t < 0.5 ? 0 : 1) : Math.floor(now / 500) % 2 // two pictures: they alternate while walking, and slowly while standing
           const cx = fol.owCanvas.getContext('2d')!
-          cx.clearRect(0, 0, 32, 32)
-          cx.drawImage(fol.strip, (fol.dir * 2 + frame) * 32, 0, 32, 32, 0, 0, 32, 32)
+          cx.clearRect(0, 0, folCw, folCh)
+          cx.drawImage(fol.strip, (fol.dir * 2 + frame) * folCw, 0, folCw, folCh, 0, 0, folCw, folCh)
           if (fol.owTex) fol.owTex.needsUpdate = true
-          fol.sprite.scale.set(2, 2, 1) // 32 picture pixels = 2 tiles, like the characters
+          fol.sprite.scale.set(folCw / 16, folCh / 16, 1) // 16 picture pixels = 1 tile (32 = 2 tiles), like the characters
           place(fol.sprite, camera, fx + 0.5, fh + 0.2 + hop, fy + 0.5)
         } else if (fol.mode === 'rom' && fol.anim) {
           const cx = fol.canvas.getContext('2d')!
@@ -721,6 +737,27 @@ export default function GameView3D(props: Props) {
         if (!sh) { sh = makeShadow(scene); npcShadows.set(n, sh) }
         sh.visible = !n.spec.swim
         sh.position.set(n.fx + 0.5, nh + 0.03, n.fy + 0.5)
+      }
+      // fights between another player and a trainer: a Poké Ball spins above both of them (like PokéMMO), the trainer is busy
+      busyMap = p.busy ? p.busy() : new Map()
+      {
+        const want = new Map<string, { x: number; y: number }>()
+        const others = p.others()
+        for (const [npcId, by] of busyMap) {
+          const n = npcs.find((q) => q.spec.id === npcId)
+          if (n) want.set(`npc:${npcId}`, { x: n.fx, y: n.fy })
+          const o = others.find((q) => q.id === by)
+          if (o) want.set(`pl:${by}`, { x: o.x, y: o.y })
+        }
+        for (const [k, pos] of want) {
+          let sp = busyBalls.get(k)
+          if (!sp) { sp = new THREE.Sprite(busyMat); sp.center.set(0.5, 0); sp.renderOrder = 4; scene.add(sp); busyBalls.set(k, sp) }
+          const spin = Math.cos(now / 140) // a ball turning round: its width goes 1 -> 0 -> -1 ...
+          sp.scale.set(0.9 * Math.max(0.12, Math.abs(spin)), 0.9, 1)
+          const bh = heightAt(pos.x + 0.5, pos.y + 0.5)
+          sp.position.set(pos.x + 0.5, bh + 1.9 + Math.sin(now / 300) * 0.05, pos.y + 0.5)
+        }
+        for (const [k, sp] of busyBalls) if (!want.has(k)) { scene.remove(sp); busyBalls.delete(k) }
       }
       // other players (named, never yourself)
       const seen = new Set<string>()

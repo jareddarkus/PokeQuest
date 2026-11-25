@@ -73,23 +73,6 @@ export function crop(src: HTMLCanvasElement, x: number, y: number, w: number, h:
   return out
 }
 
-/**
- * BAG and POKÉMON are cut off by the edge of the screen map in the game file (one pointed end is missing, the buttons are
- * symmetric). We rebuild the missing end as the mirror image of the other end (n columns).
- */
-function mirrorEnd(src: HTMLCanvasElement, side: 'left' | 'right', n: number): HTMLCanvasElement {
-  const out = document.createElement('canvas')
-  out.width = src.width + n
-  out.height = src.height
-  const ctx = out.getContext('2d')!
-  ctx.drawImage(src, side === 'left' ? n : 0, 0)
-  ctx.save()
-  if (side === 'left') { ctx.translate(n, 0); ctx.scale(-1, 1); ctx.drawImage(src, src.width - n, 0, n, src.height, 0, 0, n, src.height) } // copy of the right end
-  else { ctx.translate(src.width + n, 0); ctx.scale(-1, 1); ctx.drawImage(src, 0, 0, n, src.height, 0, 0, n, src.height) } // copy of the left end
-  ctx.restore()
-  return out
-}
-
 const toBlob =(c: HTMLCanvasElement) => new Promise<Blob | null>((res) => c.toBlob(res, 'image/png'))
 
 /** Stores cmd:bag, cmd:run, cmd:pokemon, cmd:back, cmd:fight and move:grey / red / blue / yellow. */
@@ -101,9 +84,9 @@ export async function decodeCommandUi(narcData: Uint8Array, put: (name: string, 
   const save = async (name: string, c: HTMLCanvasElement) => { const b = await toBlob(c); if (b) { await put(name, b); n++ } }
   const row = renderScreen(files[361], files[358], pal)
   if (row) {
-    await save('cmd:bag', mirrorEnd(crop(row, 0, 140, 90, 56), 'left', 14))
+    await save('cmd:bag', crop(row, 0, 140, 90, 56)) // cut off by the screen edge, exactly as in the game
     await save('cmd:run', crop(row, 90, 140, 80, 56))
-    await save('cmd:pokemon', mirrorEnd(crop(row, 170, 140, 86, 56), 'right', 14))
+    await save('cmd:pokemon', crop(row, 170, 140, 86, 56))
     await save('cmd:back', crop(row, 420, 140, 92, 56))
   }
   const fight = renderScreen(files[372], files[358], pal)

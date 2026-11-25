@@ -136,9 +136,10 @@ export function generateWorld(seed: number, ground: Uint8Array): World {
     }
   }
 
+  const main = new Uint8Array(SIZE * SIZE) // 1 = part of the biggest connected piece of ground of its ring (where things are placed)
   const walkable = (x: number, y: number) => {
     const t = tiles[y * SIZE + x]
-    return t === T.Grass || t === T.Tall
+    return (t === T.Grass || t === T.Tall) && main[y * SIZE + x] === 1
   }
 
   // keep only the biggest connected piece of ground in each ring (no unreachable pockets, nothing placed in them)
@@ -167,9 +168,13 @@ export function generateWorld(seed: number, ground: Uint8Array): World {
       }
       comps.push({ ring, cells })
     }
+    // only tiny pockets (fewer than 6 tiles) are filled in; bigger grass areas stay walkable. Things (gyms, trainers, crates, spawns) are placed on the biggest piece of each ring only.
     const biggest = new Map<number, number>()
     for (const c of comps) biggest.set(c.ring, Math.max(biggest.get(c.ring) ?? 0, c.cells.length))
-    for (const c of comps) if (c.cells.length < (biggest.get(c.ring) ?? 0)) for (const i of c.cells) tiles[i] = T.Tree
+    for (const c of comps) {
+      if (c.cells.length < 6) for (const i of c.cells) tiles[i] = T.Tree
+      else if (c.cells.length === biggest.get(c.ring)) for (const i of c.cells) main[i] = 1
+    }
   }
   // gyms: 4 per ring (rings 1-3) at the north, east, south and west, on the nearest free ground inside the ring
   const gyms: Gym[] = []

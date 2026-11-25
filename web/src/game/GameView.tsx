@@ -29,6 +29,8 @@ export interface GameEvents {
   /** the island pushed the player to a new place */
   onPushed?: (x: number, y: number, ring: number) => void
   onNpcSpotted?: (npcId: string) => void
+  /** button A pressed in front of a character: talk to it */
+  onNpcTalk?: (npcId: string) => void
 }
 
 export interface GameHandle {

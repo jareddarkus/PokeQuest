@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { BattleBackdrop3D, ENVIRONMENTS, type BattleLayout } from '../rom/battleScene'
-import { getBattleFiles } from '../rom/store'
+import { getBallModel, getBattleFiles } from '../rom/store'
 
 /** The 3D battle scenery from the player's game file. It tells the screen where the two platforms are. */
 export default function BattleBackdrop({ env = 'grass', onLayout, sceneRef }: { env?: string; onLayout: (l: BattleLayout) => void; sceneRef?: React.MutableRefObject<BattleBackdrop3D | null> }) {
@@ -9,9 +9,9 @@ export default function BattleBackdrop({ env = 'grass', onLayout, sceneRef }: { 
     let live = true
     let scene: BattleBackdrop3D | null = null
     let onResize = () => {}
-    void getBattleFiles().then((files) => {
+    void Promise.all([getBattleFiles(), getBallModel()]).then(([files, ball]) => {
       if (!live || !files || !ref.current) return
-      scene = new BattleBackdrop3D(ref.current, files, ENVIRONMENTS[env] ?? ENVIRONMENTS.grass)
+      scene = new BattleBackdrop3D(ref.current, files, ENVIRONMENTS[env] ?? ENVIRONMENTS.grass, ball)
       onResize = () => scene && onLayout(scene.layout())
       scene.onFrame = onLayout
       if (sceneRef) sceneRef.current = scene

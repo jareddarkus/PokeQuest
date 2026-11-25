@@ -141,7 +141,8 @@ export async function decodeHpBoxes(files: Uint8Array[], white: boolean, put: (n
   try {
     const bc = readCells(files[422]), bpx = tilesOf(files[420]), bpal = paletteOf(files[421])
     if (bpal && bc[0] && bc[2]) {
-      for (const [ci, name] of [[0, 'bt:ball'], [2, 'bt:ballfnt'], [2, 'bt:ballno']] as Array<[number, string]>) {
+      for (const [ci, name] of [[0, 'bt:ball'], [2, 'bt:ballfnt'], [2, 'bt:ballno'], [3, 'bt:sring'], [4, 'bt:sball'], [6, 'bt:sfnt']] as Array<[number, string]>) {
+        if (!bc[ci] || !bc[ci][0]) continue
         const o = bc[ci][0]
         const c = drawObj(o, bpx, bpal)
         if (name === 'bt:ballno') { // an empty place of the row is a black disc with a white ring: the greys of the dark ball become black

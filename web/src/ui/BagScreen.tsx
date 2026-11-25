@@ -14,7 +14,8 @@ export const POCKETS = [
  * The Bag on the game's own Bag backgrounds, laid out like the real one: the item's description in a pink box on top, a list of dark rows
  * (the chosen one outlined in white) and the pockets along the bottom.
  */
-export default function BagScreen({ bag, pockets, canUse, onUse, onClose, only, title, describe }: {
+export default function BagScreen({ bag, pockets, canUse, onUse, onClose, only, title, describe, K: K0 }: {
+  K?: number
   bag: Record<string, number>
   pockets?: number[] // which pockets to show (default: all)
   canUse: (d: ItemDef) => boolean
@@ -29,7 +30,7 @@ export default function BagScreen({ bag, pockets, canUse, onUse, onClose, only, 
   const [pocket, setPocket] = useState(shown[shown.length - 1])
   const [sel, setSel] = useState<string | null>(null)
   const [scroll, setScroll] = useState(0)
-  const K = dsK(3)
+  const K = K0 ?? dsK(3)
   const list = ITEM_LIST.filter((i) => (bag[i.id] ?? 0) > 0 && POCKETS[pocket].kinds.includes(i.kind) && (!only || only(i)))
   const cur = list.find((d) => d.id === sel) ?? list[0] ?? null
   const rows = 6, rowH = 15

@@ -9,13 +9,13 @@ const SLOTS: Array<[number, number]> = [[1, 12], [129, 20], [1, 60], [129, 68], 
 // which of the seven panels of the game's picture is used for what (the colours are the game's own; the choice of use is ours)
 const PANEL = { normal: 5, fainted: 3, hover: 0, empty: 6 }
 
-function Slot({ mon, i, K, onPick }: { mon: Mon | null; i: number; K: number; onPick: (i: number) => void }) {
+function Slot({ mon, i, K, onPick, current }: { mon: Mon | null; i: number; K: number; onPick: (i: number) => void; current?: boolean }) {
   const normal = useUiUrl(`screen:party:${PANEL.normal}`)
   const fainted = useUiUrl(`screen:party:${PANEL.fainted}`)
   const hover = useUiUrl(`screen:party:${PANEL.hover}`)
   const empty = useUiUrl(`screen:party:${PANEL.empty}`)
   const [x, y] = SLOTS[i]
-  const url = !mon ? empty : mon.hp <= 0 ? fainted : normal
+  const url = !mon ? empty : mon.hp <= 0 ? fainted : current && hover ? hover : normal
   const max = mon ? maxHp(mon) : 1
   const f = mon ? Math.max(0, Math.min(1, mon.hp / max)) : 0
   const color = f > 0.5 ? '#00e040' : f > 0.2 ? '#ffb000' : '#ff4060'
@@ -45,15 +45,24 @@ function Slot({ mon, i, K, onPick }: { mon: Mon | null; i: number; K: number; on
   )
 }
 
-/** The party screen on the game's own slot panels: two columns of three, the right column a little lower. */
-export default function PartyScreen({ team, onPick, onClose }: { team: Mon[]; onPick: (i: number) => void; onClose: () => void }) {
-  const K = dsK(3)
+/** The party screen on the game's own slot panels: two columns of three, the right column a little lower. `K` = pixels per DS pixel (default: fits the window). */
+export default function PartyScreen({ team, onPick, onClose, K: K0, hint, closeLabel, active }: {
+  team: Mon[]
+  onPick: (i: number) => void
+  onClose?: () => void
+  K?: number
+  hint?: string
+  closeLabel?: string
+  /** the Pokémon that is in the fight (marked in the battle) */
+  active?: number
+}) {
+  const K = K0 ?? dsK(3)
   return (
     <div>
       <DsScreen bg="party:bg" K={K} style={{ background: 'linear-gradient(#173a78, #0c1f4a)' }}>
-        {SLOTS.map((_, i) => <Slot key={i} mon={team[i] ?? null} i={i} K={K} onPick={onPick} />)}
-        <button onClick={onClose} style={{ position: 'absolute', left: 190 * K, top: 168 * K, width: 60 * K, height: 18 * K, border: 'none', borderRadius: 3 * K, cursor: 'pointer', fontWeight: 700, fontSize: 8 * K, background: 'rgba(255,255,255,.88)', color: '#222' }}>Close</button>
-        <DsText x={8} y={172} K={K} size={7}>Pick a Pokémon to see its summary</DsText>
+        {SLOTS.map((_, i) => <Slot key={i} mon={team[i] ?? null} i={i} K={K} onPick={onPick} current={active === i} />)}
+        {onClose && <button onClick={onClose} style={{ position: 'absolute', left: 190 * K, top: 168 * K, width: 60 * K, height: 18 * K, border: 'none', borderRadius: 3 * K, cursor: 'pointer', fontWeight: 700, fontSize: 8 * K, background: 'rgba(255,255,255,.88)', color: '#222' }}>{closeLabel ?? 'Close'}</button>}
+        <DsText x={8} y={172} K={K} size={7}>{hint ?? 'Pick a Pokémon to see its summary'}</DsText>
       </DsScreen>
     </div>
   )

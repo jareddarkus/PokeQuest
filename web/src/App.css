@@ -451,3 +451,25 @@ button.big small { opacity: .7; font-size: .75rem; }
 @keyframes pq-idle-in { from { transform: scale(1); filter: brightness(1); } to { transform: scale(.62); filter: brightness(.32); } }
 .ds-screen.cmd-in { animation: pq-cmd-in .3s ease-out; }
 @keyframes pq-cmd-in { 0% { transform: scale(.62); filter: brightness(.32); } 55% { transform: scale(1.1); filter: brightness(.9); } 100% { transform: none; filter: none; } }
+
+/* the way a Pokémon comes out of its ball (reference video): the Pokémon appears as a small white shape high above the platform inside a golden light with beams, grows, turns
+   into colour and drops onto the platform; small rings of light fly around */
+.so-mon { transform-origin: 50% 100%; animation: pq-so-mon 1.55s linear backwards; }
+@keyframes pq-so-mon {
+  0% { transform: translateY(calc(var(--hv, 100px) * -1)) scale(.08); filter: brightness(12) saturate(0); opacity: 0; }
+  8% { opacity: 1; }
+  30% { transform: translateY(calc(var(--hv, 100px) * -1)) scale(1); filter: brightness(12) saturate(0); }
+  58% { transform: translateY(calc(var(--hv, 100px) * -1)) scale(1); filter: brightness(6) saturate(.2); }
+  72% { transform: translateY(calc(var(--hv, 100px) * -1)) scale(1); filter: none; animation-timing-function: cubic-bezier(.5, 0, .9, .5); }
+  100% { transform: translateY(0) scale(1); filter: none; }
+}
+.so { position: absolute; left: 0; right: 0; bottom: 0; height: 0; pointer-events: none; z-index: 6; }
+.so-glow { position: absolute; left: 50%; bottom: 0; width: calc(var(--hv, 100px) * .8); height: calc(var(--hv, 100px) * .8); margin-left: calc(var(--hv, 100px) * -.4); transform: translateY(calc(var(--hv, 100px) * -1 + var(--hv, 100px) * .35)) scale(.1); border-radius: 50%; opacity: 0;
+  background: radial-gradient(circle, #fffbe0 0%, #ffe27a 35%, rgba(255, 190, 60, .55) 60%, rgba(255, 190, 60, 0) 72%); animation: pq-so-glow 1.2s ease-out forwards; }
+@keyframes pq-so-glow { 0% { opacity: 0; transform: translateY(calc(var(--hv, 100px) * -.65)) scale(.1); } 15% { opacity: 1; transform: translateY(calc(var(--hv, 100px) * -.65)) scale(1); } 60% { opacity: .9; } 100% { opacity: 0; transform: translateY(calc(var(--hv, 100px) * -.65)) scale(.85); } }
+.so-beam { position: absolute; left: 50%; bottom: 0; width: calc(var(--hv, 100px) * .16); height: calc(var(--hv, 100px) * .95); margin-left: calc(var(--hv, 100px) * -.08); transform-origin: 50% 0; opacity: 0;
+  background: linear-gradient(rgba(255, 252, 220, .95), rgba(255, 244, 190, .45) 60%, rgba(255, 240, 170, 0)); clip-path: polygon(30% 0, 70% 0, 100% 100%, 0 100%); animation: pq-so-beam 1.15s ease-out .08s forwards; top: auto; }
+.so-beam.b0 { --rot: 0deg; } .so-beam.b1 { --rot: 20deg; } .so-beam.b2 { --rot: -22deg; }
+@keyframes pq-so-beam { 0% { opacity: 0; transform: translateY(calc(var(--hv, 100px) * -.62)) rotate(var(--rot)) scaleY(.1); } 20% { opacity: 1; transform: translateY(calc(var(--hv, 100px) * -.62)) rotate(var(--rot)) scaleY(1); } 100% { opacity: 0; transform: translateY(calc(var(--hv, 100px) * -.62)) rotate(var(--rot)) scaleY(1); } }
+.so-ring { position: absolute; left: 50%; bottom: 0; width: 7px; height: 7px; margin-left: -3px; border-radius: 50%; border: 2px solid #ffb070; background: rgba(255, 255, 255, .6); opacity: 0; box-sizing: border-box; animation: pq-so-ring .95s ease-out .15s forwards; }
+@keyframes pq-so-ring { 0% { opacity: 0; transform: translate(0, calc(var(--hv, 100px) * -.65)) scale(.4); } 12% { opacity: 1; } 100% { opacity: 0; transform: translate(calc(cos(var(--a)) * var(--d)), calc(var(--hv, 100px) * -.65 + sin(var(--a)) * var(--d))) scale(1); } }

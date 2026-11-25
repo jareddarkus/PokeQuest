@@ -3,7 +3,7 @@ import * as THREE from 'three'
 import { buildModelObject, type ClipUniforms } from './mapModel'
 import { parsePack } from './buildings'
 import { parseTextureAnim, type MatAnim } from './texanim'
-import { readModels, readTexFile, type Model } from './nitro'
+import { decodeTexture, readModels, readTexFile, type Model } from './nitro'
 import type { WorldData } from './worldData'
 
 const T = { Water: 0, Grass: 2, Tall: 3, Tree: 4 }
@@ -17,12 +17,16 @@ export interface BuiltWorld {
   uniforms: ClipUniforms
   /** A real building model (from a building pack) ready to put into the scene, or null. Size in tiles is in `size`. */
   makeBuilding: (pack: number, model: number) => { obj: THREE.Group; w: number; d: number; h: number } | null
+  /** a picture of the map textures by name (e.g. 'grass01ax'), as a three.js texture; `repeat` = it tiles; null when no map piece uses it */
+  textureNamed: (name: string, repeat: boolean, score?: (r: number, g: number, b: number) => number) => THREE.DataTexture | null
+  /** 1 = a path tile of the meadow (set by game/meadow.ts) */
+  pathMask?: Uint8Array
 }
 
 const TALL = new Set([4, 5, 6, 7, 8, 9, 0x21, 0x22])
 
 /** What a tile is, from the game's own tile table (behaviour + flags). */
-function classify(beh: number, fl: number): number {
+export function classify(beh: number, fl: number): number {
   if (beh === 1 && fl & 1) return T.Tree // can't pass
   if (beh === 0xff) return T.Tree
   if ((beh >= 0x3d && beh <= 0x44) || beh === 0x12 || (fl & 2 && beh !== 0x17)) return T.Water // lakes and sea
@@ -94,7 +98,7 @@ function addBuildings(data: WorldData, group: THREE.Group, uniforms: ClipUniform
       try {
         const model = readModels(pk.models[it.model])[0]
         if (!model) continue
-        const obj = buildModelObject(model, pk.tex, uniforms)
+        const obj = buildModelObject(model, pk.tex, uniforms, undefined, true)
         // vending machines and bins (building numbers 19 and 20 of the shared set) stand one tile further south than the table says:
         // the game's tile data puts them on the row in front of the flower bed, not inside it
         const dz = it.model === 19 || it.model === 20 ? 1 : 0
@@ -114,7 +118,7 @@ export function buildChunkWorld(data: WorldData): BuiltWorld {
   const height = new Float32Array(size * size)
   const group = new THREE.Group()
   const uniforms: ClipUniforms = {
-    uCut: { value: 999 }, uCenter: { value: new THREE.Vector2(size / 2, size / 2) }, uTime: { value: 0 }, uWarn: { value: 0 },
+    uCut: { value: 999 }, uCenter: { value: new THREE.Vector2(size / 2, size / 2) }, uTime: { value: 0 }, uWarn: { value: 0 }, uHide: { value: 9999 },
   }
   const texCache = new Map<number, ReturnType<typeof readTexFile>>()
   const animSets = (data.anims ?? []).map((f) => parseTextureAnim(f))
@@ -141,7 +145,7 @@ export function buildChunkWorld(data: WorldData): BuiltWorld {
     const ox = (c.gx - data.window.x0) * 32
     const oz = (c.gy - data.window.y0) * 32
     if (tex) {
-      const obj = buildModelObject(model, tex, uniforms, animFor(model.materials.map((x) => x.name)))
+      const obj = buildModelObject(model, tex, uniforms, animFor(model.materials.map((x) => x.name)), true)
       obj.position.set(ox + 16, 0, oz + 16)
       group.add(obj)
     }
@@ -178,5 +182,35 @@ export function buildChunkWorld(data: WorldData): BuiltWorld {
       return { obj, w: sz.x, d: sz.z, h: sz.y }
     } catch { return null }
   }
-  return { group, size, ground, height, waterY, uniforms, makeBuilding }
+  const named = new Map<string, THREE.DataTexture | null>()
+  // The same picture exists in several map pieces with other colours (grass in autumn, desert sand ...): `score` picks the best-looking colours (average r, g, b of the opaque pixels)
+  const textureNamed = (name: string, repeat: boolean, score?: (r: number, g: number, b: number) => number): THREE.DataTexture | null => {
+    const key = `${name}|${repeat ? 1 : 0}`
+    if (named.has(key)) return named.get(key)!
+    let best: { d: ReturnType<typeof decodeTexture>; sc: number } | null = null
+    for (const raw of Object.values(data.textures)) {
+      const t = readTexFile(raw)
+      const r = t?.texs.find((x) => x.name === name)
+      if (!t || !r) continue
+      const d = decodeTexture(r, t.pals.find((p) => p.name === `${name}_pl`) ?? t.pals.find((p) => p.name === name) ?? t.pals[0])
+      let ar = 0, ag = 0, ab = 0, n = 0
+      for (let i = 0; i < d.rgba.length; i += 4) if (d.rgba[i + 3] > 100) { ar += d.rgba[i]; ag += d.rgba[i + 1]; ab += d.rgba[i + 2]; n++ }
+      const sc = score && n ? score(ar / n, ag / n, ab / n) : 0
+      if (!best || sc > best.sc) best = { d, sc }
+    }
+    let out: THREE.DataTexture | null = null
+    if (best) {
+      const d = best.d
+      const dt = new THREE.DataTexture(new Uint8Array(d.rgba), d.width, d.height, THREE.RGBAFormat)
+      dt.wrapS = dt.wrapT = repeat ? THREE.RepeatWrapping : THREE.ClampToEdgeWrapping
+      dt.magFilter = THREE.NearestFilter; dt.minFilter = THREE.NearestFilter
+      dt.colorSpace = THREE.SRGBColorSpace
+      dt.flipY = false
+      dt.needsUpdate = true
+      out = dt
+    }
+    named.set(key, out)
+    return out
+  }
+  return { group, size, ground, height, waterY, uniforms, makeBuilding, textureNamed }
 }

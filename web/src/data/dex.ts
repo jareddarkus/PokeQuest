@@ -1,4 +1,5 @@
 // Pokémon data (species, moves, natures, abilities) comes from the open-source Pokémon Showdown engine data.
+import { pixelOverride } from '../ui/pixelate'
 import { Dex } from '@pkmn/sim'
 import { mulberry32 } from '../game/rng'
 
@@ -224,6 +225,8 @@ export function spriteId(species: string): string {
  */
 export function spriteUrl(species: string, opts: { back?: boolean; shiny?: boolean } = {}, stage = 0): string {
   const sp = Dex.species.get(species)
+  const ov = pixelOverride(sp.num, !!opts.shiny) // Pokémon with no pixel picture anywhere: our own pixel version of the 3D render
+  if (ov) return ov
   const suffix = `${opts.back ? '-back' : ''}${opts.shiny ? '-shiny' : ''}`
   const dir = stage === 0 ? 'gen5ani' : stage === 1 ? 'gen5' : 'ani'
   return `https://play.pokemonshowdown.com/sprites/${dir}${suffix}/${sp.spriteid}.${stage === 1 ? 'png' : 'gif'}`

@@ -12,6 +12,7 @@ export interface ClipUniforms {
   uCenter: { value: THREE.Vector2 }
   uTime: { value: number }
   uWarn: { value: number } // 1 = tint the band that is about to fall
+  uHide: { value: number } // the real map is not drawn further than this from the centre (the outer ring is a meadow made by us)
 }
 
 /** Textures that move (water, rivers, fountains) with the animation the game file gives them. */
@@ -19,7 +20,25 @@ export const animatedTextures: Array<{ tex: THREE.Texture; anim: MatAnim }> = []
 
 const textureCache = new WeakMap<object, Map<string, THREE.Texture>>()
 
-export function buildModelObject(model: Model, tex: NonNullable<ReturnType<typeof readTexFile>>, clip?: ClipUniforms, anims?: Map<string, MatAnim>): THREE.Group {
+/** Lets a material of ours disappear with the collapsing island and glow red before it falls (same as the map). */
+export function applyClip(mat: THREE.Material, clip: ClipUniforms): void {
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uCut = clip.uCut
+    shader.uniforms.uCenter = clip.uCenter
+    shader.uniforms.uTime = clip.uTime
+    shader.uniforms.uWarn = clip.uWarn
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;')
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;\nuniform float uCut;\nuniform vec2 uCenter;\nuniform float uTime;\nuniform float uWarn;')
+      .replace('#include <clipping_planes_fragment>', '#include <clipping_planes_fragment>\nfloat pqD = length(vWPos.xz - uCenter);\nif (pqD > uCut) discard;')
+      .replace('#include <dithering_fragment>', 'if (uWarn > 0.5 && pqD > uCut - 1.0) gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(1.0, 0.2, 0.2), 0.35 + 0.15 * sin(uTime * 8.0));\n#include <dithering_fragment>')
+  }
+  mat.customProgramCacheKey = () => 'pq-clip-ours'
+}
+
+export function buildModelObject(model: Model, tex: NonNullable<ReturnType<typeof readTexFile>>, clip?: ClipUniforms, anims?: Map<string, MatAnim>, hide = false): THREE.Group {
   const group = new THREE.Group()
   let cache = textureCache.get(tex)
   if (!cache) { cache = new Map(); textureCache.set(tex, cache) }
@@ -76,12 +95,13 @@ export function buildModelObject(model: Model, tex: NonNullable<ReturnType<typeo
         shader.uniforms.uCenter = clip.uCenter
         shader.uniforms.uTime = clip.uTime
         shader.uniforms.uWarn = clip.uWarn
+        shader.uniforms.uHide = hide ? clip.uHide : { value: 9999 }
         shader.vertexShader = shader.vertexShader
           .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;')
           .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWPos = (modelMatrix * vec4(position, 1.0)).xyz;')
         shader.fragmentShader = shader.fragmentShader
-          .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;\nuniform float uCut;\nuniform vec2 uCenter;\nuniform float uTime;\nuniform float uWarn;')
-          .replace('#include <clipping_planes_fragment>', '#include <clipping_planes_fragment>\nfloat pqD = length(vWPos.xz - uCenter);\nif (pqD > uCut) discard;')
+          .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;\nuniform float uCut;\nuniform vec2 uCenter;\nuniform float uTime;\nuniform float uWarn;\nuniform float uHide;')
+          .replace('#include <clipping_planes_fragment>', '#include <clipping_planes_fragment>\nfloat pqD = length(vWPos.xz - uCenter);\nif (pqD > uCut || pqD > uHide) discard;')
           .replace('#include <dithering_fragment>', 'if (uWarn > 0.5 && pqD > uCut - 1.0) gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(1.0, 0.2, 0.2), 0.35 + 0.15 * sin(uTime * 8.0));\n#include <dithering_fragment>')
       }
       mat.customProgramCacheKey = () => 'pq-clip'

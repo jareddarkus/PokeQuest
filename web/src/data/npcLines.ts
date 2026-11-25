@@ -217,6 +217,22 @@ const LEADER: Line[] = [
   ['The peak is a long way up. Let us see if you can climb it!', 'La cima está muy arriba. ¡Veamos si puedes subirla!'],
 ]
 
+/** What a trainer says when you talk to it while it is fighting another player (it is busy). */
+const BUSY: Line[] = [
+  ["Don't you see I am battling? Wait your turn!", '¿No ves que estoy luchando? ¡Espera tu turno!'],
+  ['Not now! I am in the middle of a battle!', '¡Ahora no! ¡Estoy en pleno combate!'],
+  ["Shh! Can't you tell I am busy fighting someone?", '¡Chsss! ¿No ves que estoy ocupado luchando?'],
+  ['One battle at a time, please. Come back when I am done.', 'Un combate a la vez, por favor. Vuelve cuando termine.'],
+  ['I would love to fight you, but I already have an opponent!', '¡Me encantaría luchar contigo, pero ya tengo un rival!'],
+  ['Look at the Poké Ball spinning above us. That means: do not disturb!', 'Mira la Poké Ball girando sobre nosotros. ¡Significa: no molestar!'],
+  ['Hey! Wait in line. The fight is on!', '¡Eh! Haz cola. ¡El combate está en marcha!'],
+  ['I can not talk, I am concentrating on this battle!', 'No puedo hablar, ¡estoy concentrado en este combate!'],
+  ['You are too late, someone got here first. Try again later!', 'Llegas tarde, alguien llegó antes. ¡Inténtalo luego!'],
+  ['Wait, wait, wait! My Pokémon are fighting right now!', '¡Espera, espera, espera! ¡Mis Pokémon están luchando ahora mismo!'],
+  ['Can this wait? The ring is falling and so is my patience... and I am battling!', '¿Puede esperar? El anillo cae, mi paciencia también... ¡y estoy luchando!'],
+  ['Busy, busy, busy! Come back after the battle.', '¡Ocupado, ocupado, ocupado! Vuelve después del combate.'],
+]
+
 /** A tiny stable number from a text, so the same trainer always says the same thing. */
 function pickIndex(key: string, n: number): number {
   let h = 2166136261
@@ -231,4 +247,6 @@ export const preBattleLine = (key: string): string => say(PRE[pickIndex(key, PRE
 export const lossLine = (key: string): string => say(LOSS[pickIndex(key + 'x', LOSS.length)])
 /** What a gym leader says before the fight. */
 export const leaderLine = (key: string): string => say(LEADER[pickIndex(key, LEADER.length)])
-export const NPC_LINE_COUNT = PRE.length + LOSS.length + LEADER.length
+/** What a busy trainer says (differs every time you ask). */
+export const busyLine = (): string => say(BUSY[Math.floor(Math.random() * BUSY.length)])
+export const NPC_LINE_COUNT = PRE.length + LOSS.length + LEADER.length + BUSY.length

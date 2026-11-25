@@ -4,6 +4,7 @@ import { MAX_ROM_DEX } from '../rom/sprites'
 import { romIconUrl, romSpriteUrl } from '../rom/store'
 import AnimSprite from './AnimSprite'
 import pix from '../data/pixelSprites.json'
+import { NO_PIXEL_ART, pixelBoxOverride, warmPixelArt } from './pixelate'
 
 interface Props {
   species: string
@@ -67,8 +68,23 @@ export function MonIcon({ species, shiny, size = 48 }: { species: string; shiny?
   return <div style={box} />
 }
 
+/** makes our pixel version of a 3D-only Pokémon (see pixelate.ts) and redraws when it is ready */
+function usePixelReady(species: string, shiny?: boolean): number {
+  const dex = dexNum(species)
+  const [n, setN] = useState(0)
+  useEffect(() => {
+    if (!NO_PIXEL_ART.has(dex)) return
+    let live = true
+    void warmPixelArt(dex, !!shiny).then(() => live && setN((k) => k + 1))
+    return () => { live = false }
+  }, [dex, shiny])
+  return n
+}
+
 interface PixInfo { s?: number[]; sb?: number[]; a?: number[]; ab?: number[] }
-const PIX = pix as Record<string, PixInfo>
+const PIX0 = pix as Record<string, PixInfo>
+/** the picture info of a Pokémon; the ones we made ourselves (see pixelate.ts) have their own box and no animation */
+const PIX = new Proxy(PIX0, { get: (t, k: string) => { const n = Number(k); if (NO_PIXEL_ART.has(n)) { const b = pixelBoxOverride(n); return { s: b ?? [14, 20, 81, 89], sb: b ?? [14, 20, 81, 89] } } return t[k] } })
 
 /** Starts loading a Pokémon's pixel picture ahead of time (so it shows up at once in a battle). */
 export function preloadPixel(species: string, back: boolean, shiny: boolean) {
@@ -80,6 +96,7 @@ export function preloadPixel(species: string, back: boolean, shiny: boolean) {
 
 /** A Pokémon without a picture in the game file: animated if Showdown has an animated pixel picture, else the still one (with a gentle idle movement). */
 function PixelMon({ species, back, shiny, scale = 2, className }: { species: string; back?: boolean; shiny?: boolean; scale?: number; className?: string }) {
+  usePixelReady(species, shiny)
   const info = PIX[String(dexNum(species))]
   const anim = back ? info?.ab : info?.a
   const [stage, setStage] = useState(anim ? 0 : 1)
@@ -103,6 +120,7 @@ function PixelMon({ species, back, shiny, scale = 2, className }: { species: str
 
 /** A small picture for lists: the still pixel picture, trimmed and fitted into a square. */
 function PixelIcon({ species, shiny, size }: { species: string; shiny?: boolean; size: number }) {
+  usePixelReady(species, shiny)
   const info = PIX[String(dexNum(species))]
   const box = info?.s ?? [0, 0, 95, 95]
   const w = box[2] - box[0] + 1, h = box[3] - box[1] + 1

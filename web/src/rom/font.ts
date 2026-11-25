@@ -99,16 +99,16 @@ export function renderLine(f: NftrFont, text: string, color: string, shadow: str
         const px = x + wd[0] + gx + (outline ? 1 : 0), py = gy + (outline ? 1 : 0)
         if (px < 0 || px >= w || py >= h) continue
         const o = (py * w + px) * 4
-        const body = f.cellH === 8 ? v === 1 : v >= 2 // the 13 x 8 number font draws the letter with value 1 and its shadow with 2; the others the letter with 2/3 and the edge with 1
+        const body = v === 1 // every font of the game draws the letter with value 1 and its shadow (right / below) with 2 (3 = rare extra)
         const rgb = body ? main : edge
-        if (outline) { // a full 1-pixel outline around every pixel of the letter (the look of the HP boxes), the letter itself on top
+        if (outline) { // a full 1-pixel outline around every pixel of the letter (the look of the HP boxes), the letter itself on top (the glyph's own shadow pixels are not used)
+          if (!body) continue
           for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
             const qx = px + dx, qy = py + dy
             if (qx < 0 || qy < 0 || qx >= w || qy >= h) continue
             const oo = (qy * w + qx) * 4
             if (img.data[oo + 3] === 0) { img.data[oo] = edge[0]; img.data[oo + 1] = edge[1]; img.data[oo + 2] = edge[2]; img.data[oo + 3] = 255 }
           }
-          if (!body) continue
         }
         img.data[o] = rgb[0]; img.data[o + 1] = rgb[1]; img.data[o + 2] = rgb[2]; img.data[o + 3] = 255
       }

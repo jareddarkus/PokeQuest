@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { snap } from './pixel'
 import { BattleSession, type BattleEvent, type Request } from '../battle/engine'
 import { allSpecies, dexNum, maxHp, statsOf, type Mon } from '../data/dex'
 import { ITEMS } from '../data/items'
@@ -13,6 +14,7 @@ import type { BattleBackdrop3D } from '../rom/battleScene'
 import type { BattleLayout } from '../rom/battleScene'
 import MonSprite, { preloadPixel } from './MonSprite'
 import { CommandScreen, IdleBall, MoveScreen, dsScale } from './DsMenu'
+import PartyScreen from './PartyScreen'
 import BagScreen from './BagScreen'
 import { Dex } from '@pkmn/sim'
 import { music } from '../audio/music'
@@ -22,7 +24,6 @@ import type { AnimatedSprite } from '../rom/anim'
 import { playerBackClass, trainerClassFor } from '../data/trainerClasses'
 import { MoveFx, FX_NAMES } from './moveFx'
 import { trText, useLang } from '../i18n'
-import ItemIcon from './ItemIcon'
 import FontText from './FontText'
 import { nameOf } from '../i18n'
 
@@ -76,12 +77,14 @@ export function TypedText({ text, ms, skip }: { text: string; ms: number; skip: 
  * flying sparks shines, and the Pokémon appears as a white shape and drops onto the platform (see .so-* in the stylesheet).
  */
 function SendOut({ fromLeft }: { fromLeft: boolean }) {
+  void fromLeft
   return (
     <div className="so" aria-hidden>
-      <span className={`so-ball ${fromLeft ? 'l' : 'r'}`}><ItemIcon name="Poke Ball" size={16} /></span>
       <span className="so-glow" />
-      <span className="so-beam" />
-      {Array.from({ length: 10 }, (_, i) => <span key={i} className="so-spark" style={{ ['--a' as string]: `${i * 36 + (i % 2) * 14}deg`, ['--d' as string]: `${40 + (i % 3) * 22}px` }} />)}
+      <span className="so-beam b0" />
+      <span className="so-beam b1" />
+      <span className="so-beam b2" />
+      {Array.from({ length: 12 }, (_, i) => <span key={i} className="so-ring" style={{ ['--a' as string]: `${i * 30 + (i % 2) * 11}deg`, ['--d' as string]: `${46 + (i % 3) * 26}px`, animationDelay: `${(i % 4) * 0.05}s` }} />)}
     </div>
   )
 }
@@ -150,7 +153,7 @@ export function useDsK(): number {
 }
 function dsK(): number {
   const W = window.innerWidth, H = window.innerWidth >= 1000 ? window.innerHeight : window.innerHeight - 192 * dsScale()
-  return Math.max(1.2, Math.min(W / 256, H / 192))
+  return snap(Math.max(1.2, Math.min(W / 256, H / 192)))
 }
 
 /** one 8 x 8 picture (tile `t` of the glyph sheet: gauge pieces 0-26, ball 27, digits 41-50, "Lv" 52, slash 64 ...) at DS position x, y */
@@ -168,6 +171,29 @@ function Digits({ url, K, x, y, text }: { url: string; K: number; x: number; y: 
   return <>{[...text].map((ch, i) => (ch === ' ' ? null : <Tile key={i} url={url} t={ch === '/' ? SLASH : DIGIT + Number(ch)} x={x + i * 8} y={y} K={K} />))}</>
 }
 
+/** The HP shown drains (or fills) smoothly towards the real value, 30 gauge pixels (of 48) per second like the game's bar. */
+function useDrain(target: number, max: number): number {
+  const [v, setV] = useState(target)
+  const cur = useRef(target)
+  useEffect(() => {
+    let raf = 0
+    let last = performance.now()
+    const tick = (t: number) => {
+      const dt = Math.min(0.1, (t - last) / 1000)
+      last = t
+      if (cur.current !== target) {
+        const step = ((30 * Math.max(1, max)) / 48) * dt
+        cur.current = Math.abs(target - cur.current) <= step ? target : cur.current + Math.sign(target - cur.current) * step
+        setV(cur.current)
+      }
+      if (cur.current !== target) raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [target, max])
+  return v
+}
+
 /**
  * The HP box of Pokémon Black 2 / White 2, built from the game's own pictures like the real one (measured on the reference video, in DS pixels):
  * the name in the game's font (white, black outline), the gender sign, "Lv" and the level in the game's digits, the grey plate with the HP label, the
@@ -178,18 +204,19 @@ export function HpBox({ side, mine, exp, gender, k, nameFont = 2 }: { side: Side
   const sheet = useUiUrl('hp:glyphs')
   const K0 = useDsK()
   const K = k ?? K0
-  const frac = side.maxHp > 0 ? Math.max(0, Math.min(1, side.hp / side.maxHp)) : 0
-  const fillPx = side.hp > 0 ? Math.max(1, Math.min(48, Math.floor(48 * frac))) : 0
+  const shownHp = useDrain(side.hp, side.maxHp)
+  const frac = side.maxHp > 0 ? Math.max(0, Math.min(1, shownHp / side.maxHp)) : 0
+  const fillPx = shownHp > 0 ? Math.max(1, Math.min(48, Math.floor(48 * frac))) : 0
   const gaugeBase = frac > 0.5 ? 0 : frac > 0.2 ? 9 : 18
   const lo = side.level ** 3, hi = (side.level + 1) ** 3
   const expPx = exp === undefined ? 0 : Math.max(0, Math.min(80, Math.floor((80 * (exp - lo)) / Math.max(1, hi - lo))))
   // positions (DS pixels, relative to the box): foe box origin = screen (6, 31), yours = screen (145, 112)
   const G = mine ? { strip: [0, 11], name: [9, 1.4], gender: [63.3, 2.3], lv: [70.2, 2.4], lvl: [79, 3.3], gauge: [46.8, 9.5], hp: [47.5, 16], exp: [23.2, 24.1], w: 124, h: 36 } : { strip: [0, 10.5], name: [13.7, 1.1], gender: [68, 1.8], lv: [76.1, 3.1], lvl: [84.1, 2.1], gauge: [37.3, 10.1], hp: [0, 0], exp: [0, 0], w: 112, h: 24 }
-  const hpText = `${String(Math.max(0, side.hp)).padStart(3, ' ')}/${side.maxHp}`
+  const hpText = `${String(Math.max(0, Math.ceil(shownHp))).padStart(3, ' ')}/${side.maxHp}`
   return (
     <div className={`hp2 ${mine ? 'mine' : 'foe'}`} style={{ width: G.w * K, height: G.h * K, ['--k' as string]: `${K}px` }}>
       {strip && <img src={strip} alt="" draggable={false} style={{ position: 'absolute', left: G.strip[0] * K, top: G.strip[1] * K, width: (mine ? 124 : 112) * K, height: (mine ? 16 : 12) * K, imageRendering: 'pixelated' }} />}
-      <div style={{ position: 'absolute', left: (G.name[0] - 1) * K, top: (G.name[1] - 1) * K }}><FontText text={nameOf(side.species)} font={nameFont} k={K} color="#f8f8f8" shadow="#101010" outline /></div>
+      <div style={{ position: 'absolute', left: G.name[0] * K, top: G.name[1] * K }}><FontText text={nameOf(side.species)} font={nameFont} k={K} color="#f8f8f8" shadow="#101010" /></div>
       {sheet && (
         <>
           {gender && gender !== 'N' && <div style={{ position: 'absolute', left: (G.gender[0] - 1) * K, top: (G.gender[1] - 1) * K }}><FontText text={gender === 'M' ? '♂' : '♀'} font={3} k={K} color={gender === 'M' ? '#38a0f8' : '#e82838'} shadow="#101010" outline /></div>}
@@ -306,12 +333,16 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
             window.setTimeout(() => setTrGone((o) => ({ ...o, foe: true })), 450)
             await sleep(450)
           }
-          if (ballOut) setSend({ side: who, key: ++sendKey })
+          if (ballOut) { // the small Poké Ball spins in the air (the game's own 3D ball), then the Pokémon bursts out of its light
+            void music.playSfx('se:throw')
+            sceneRef.current?.showBall(who, 520)
+            await sleep(520)
+            setSend({ side: who, key: ++sendKey })
+          }
           if (who === 'me') setMe(s); else setFoe(s)
           hpOf.current[ev.uid] = ev.hp
-          if (ballOut) { void music.playSfx('se:throw'); await sleep(1050) }
           void music.cry(dexNum(ev.species))
-          await sleep(ballOut ? 800 : 1100)
+          await sleep(ballOut ? 1700 : 1100)
           setSend(null)
           setHpOn((o) => ({ ...o, [who]: true })) // the HP box pops up once the Pokémon stands there
           break
@@ -321,8 +352,9 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
           if (ev.side === 'p1') setMe(upd); else setFoe(upd)
           if (ev.uid in hpOf.current && ev.hp < hpOf.current[ev.uid]) void music.playSfx('se:hit')
           else if (ev.uid in hpOf.current && ev.hp > hpOf.current[ev.uid]) void music.playSfx('se:heal')
+          const before = hpOf.current[ev.uid] ?? ev.hp
           hpOf.current[ev.uid] = ev.hp
-          await sleep(1000)
+          await sleep(Math.max(700, (Math.abs(ev.hp - before) / Math.max(1, ev.maxHp)) * 48 / 30 * 1000 + 350)) // the gauge drains at the game's speed
           break
         }
         case 'status': {
@@ -522,7 +554,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
   const doSwitch = (uid: string) => act(() => s().chooseSwitch(uid))
 
   const doRun = () => {
-    if (kind !== 'wild') return
+    if (kind !== 'wild') { void say("There's no running from a Trainer battle!", 600).then(() => setText(`What will ${activeMon?.species ?? 'your Pokémon'} do?`)); return }
     const mine = activeMon ? statsOf(activeMon).spe : 10
     const theirs = foeCopies[0] ? statsOf(foeCopies[0]).spe : 10
     const ok = mine >= theirs || Math.random() < 0.55
@@ -601,19 +633,19 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
 
       {layout && foePic && !trGone.foe && (
         <div className="stage-sprite" style={{ left: layout.foe.x, top: layout.foe.y + layout.foe.w * 0.1, width: layout.foe.w }}>
-          <TrainerFigure still={foePic} k={(layout.foe.w * 1.05) / 76.8} side="foe" out={trOut.foe} play={0} sil={introOn ? 1 : 0} />
+          <TrainerFigure still={foePic} k={snap((layout.foe.w * 1.05) / 76.8)} side="foe" out={trOut.foe} play={0} sil={introOn ? 1 : 0} />
         </div>
       )}
       {layout && myPic && !trGone.me && (
         <div className="stage-sprite" style={{ left: layout.me.x, top: layout.me.y + layout.me.w * 0.1, width: layout.me.w }}>
-          <TrainerFigure sprite={myPic} k={(layout.me.w * 0.46) / 76.8} side="me" out={trOut.me} play={throwKey} />
+          <TrainerFigure sprite={myPic} k={snap((layout.me.w * 0.46) / 76.8)} side="me" out={trOut.me} play={throwKey} />
         </div>
       )}
       {layout && foe && (
         <>
           <div className="stage-shadow" style={{ left: layout.foe.x, top: layout.foe.y + layout.foe.w * 0.03, width: layout.foe.w * 0.78 * shadowFor(foe.species) }} />
-          <div className={`stage-sprite ${shake === 'foe' ? 'hit' : ''} ${foe.fainted ? 'fainted' : ''} ${lunge === 'foe' ? 'lunge-foe' : ''}`} style={{ left: layout.foe.x, top: layout.foe.y + layout.foe.w * 0.1, width: layout.foe.w }}>
-            {!ball && <div className={send?.side === 'foe' ? 'so-mon' : undefined} key={send?.side === 'foe' ? send.key : 'foe'}><MonSprite species={foe.species} shiny={foe.shiny} scale={(layout.foe.w * 1.05) / 76.8} platform={layout.foe.w} animated /></div>}
+          <div className={`stage-sprite ${shake === 'foe' ? 'hit' : ''} ${foe.fainted ? 'fainted' : ''} ${lunge === 'foe' ? 'lunge-foe' : ''}`} style={{ left: layout.foe.x, top: layout.foe.y + layout.foe.w * 0.1, width: layout.foe.w, ['--hv' as string]: `${Math.round(layout.foe.w * 0.9)}px` }}>
+            {!ball && <div className={send?.side === 'foe' ? 'so-mon' : undefined} key={send?.side === 'foe' ? send.key : 'foe'}><MonSprite species={foe.species} shiny={foe.shiny} scale={snap((layout.foe.w * 1.05) / 76.8 * 0.8) / 0.8} platform={layout.foe.w} animated /></div>}
             {send?.side === 'foe' && <SendOut fromLeft={false} />}
             {ball && <div className={`ball shake-${ball.shakes}`} />}
             {statFx?.side === 'foe' && <StatArrows key={statFx.key} up={statFx.up} big={statFx.big} />}
@@ -623,8 +655,8 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
       {layout && me && (
         <>
           <div className="stage-shadow" style={{ left: layout.me.x, top: layout.me.y + layout.me.w * 0.03, width: layout.me.w * 0.78 * shadowFor(me.species) }} />
-          <div className={`stage-sprite ${shake === 'me' ? 'hit' : ''} ${me.fainted ? 'fainted' : ''} ${lunge === 'me' ? 'lunge-me' : ''}`} style={{ left: layout.me.x, top: layout.me.y + layout.me.w * 0.1, width: layout.me.w }}>
-            <div className={send?.side === 'me' ? 'so-mon' : undefined} key={send?.side === 'me' ? send.key : 'me'}><MonSprite species={me.species} back shiny={me.shiny} scale={(layout.me.w * 0.92) / 76.8} platform={layout.me.w} animated /></div>
+          <div className={`stage-sprite ${shake === 'me' ? 'hit' : ''} ${me.fainted ? 'fainted' : ''} ${lunge === 'me' ? 'lunge-me' : ''}`} style={{ left: layout.me.x, top: layout.me.y + layout.me.w * 0.1, width: layout.me.w, ['--hv' as string]: `${Math.round(layout.me.w * 0.75)}px` }}>
+            <div className={send?.side === 'me' ? 'so-mon' : undefined} key={send?.side === 'me' ? send.key : 'me'}><MonSprite species={me.species} back shiny={me.shiny} scale={snap((layout.me.w * 0.92) / 76.8 * 0.8) / 0.8} platform={layout.me.w} animated /></div>
             {send?.side === 'me' && <SendOut fromLeft />}
             {statFx?.side === 'me' && <StatArrows key={statFx.key} up={statFx.up} big={statFx.big} />}
           </div>
@@ -651,10 +683,8 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
             party={Array.from({ length: 6 }, (_, i) => { const m = teamRef.current[i]; return m ? (m.hp > 0 ? 'ok' : 'fnt') : 'none' })}
             onFight={() => { fromFight.current = false; setMode('fight') }}
             onBag={() => setMode('bag')}
-            onPokemon={() => setMode('switch')}
+            onPokemon={() => { if (req.trapped) void say(`${activeMon?.species ?? 'Your Pokémon'} can't be switched out!`, 600).then(() => setText(`What will ${activeMon?.species ?? 'your Pokémon'} do?`)); else if (req.bench.filter((b) => !b.fainted && !b.active).length === 0) void say('There are no other Pokémon that can fight!', 600).then(() => setText(`What will ${activeMon?.species ?? 'your Pokémon'} do?`)); else setMode('switch') }}
             onRun={doRun}
-            pokemonOff={req.trapped || req.bench.filter((b) => !b.fainted && !b.active).length === 0}
-            runOff={kind !== 'wild'}
           />
         )}
 
@@ -663,31 +693,33 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
         )}
 
         {mode === 'switch' && req && (
-          <div className="panel battle-menu list">
-            {req.bench.map((b) => (
-              <button key={b.uid} disabled={b.fainted || b.active} onClick={() => doSwitch(b.uid)}>
-                <span>{b.species} Lv{b.level}</span>
-                <small>{b.hp}/{b.maxHp}{b.fainted ? ' · fainted' : b.active ? ' · in battle' : ''}</small>
-              </button>
-            ))}
-            {!req.forceSwitch && <button className="back" onClick={() => setMode('menu')}>Back</button>}
-          </div>
+          <PartyScreen
+            K={S}
+            team={req.bench.map((b) => ({ ...(teamRef.current.find((m) => m.uid === b.uid) as Mon), hp: b.hp }))}
+            active={req.bench.findIndex((b) => b.active)}
+            hint={req.forceSwitch ? 'Choose the next Pokémon.' : 'Choose a Pokémon.'}
+            closeLabel="Cancel"
+            onClose={req.forceSwitch ? undefined : () => setMode('menu')}
+            onPick={(i) => {
+              const b = req.bench[i]
+              if (b.fainted) void say(`${b.species} has no energy left to battle!`, 500).then(() => setText(req.forceSwitch ? 'Choose your next Pokémon.' : 'Choose a Pokémon.'))
+              else if (b.active) void say(`${b.species} is already in battle!`, 500).then(() => setText(req.forceSwitch ? 'Choose your next Pokémon.' : 'Choose a Pokémon.'))
+              else doSwitch(b.uid)
+            }}
+          />
         )}
 
         {mode === 'bag' && req && (
-          <div style={{ position: 'fixed', inset: 0, zIndex: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,.45)' }}>
-            <div style={{ background: '#0c0c10', padding: 8, borderRadius: 10 }}>
-              <BagScreen
-                bag={bag}
-                pockets={kind === 'wild' ? [1, 2] : [1]}
-                only={(d) => (d.kind === 'ball' && kind === 'wild') || d.kind === 'heal'}
-                canUse={(d) => (d.kind === 'ball' && kind === 'wild') || d.kind === 'heal'}
-                onUse={(id) => { setMode('wait'); if (ITEMS[id].kind === 'ball') throwBall(id); else usePotion(id) }}
-                onClose={() => setMode('menu')}
-                describe={(d) => (d.kind === 'ball' && foeCopies[0] && s().foeActive ? `Catch chance about ${Math.round(catchChance({ ...foeCopies[0], hp: s().foeActive!.hp }, d.ballBonus ?? 1, legendaryNames.has(foeCopies[0].species)) * 100)}%.` : null)}
-              />
-            </div>
-          </div>
+          <BagScreen
+            K={S}
+            bag={bag}
+            pockets={kind === 'wild' ? [1, 2] : [1]}
+            only={(d) => (d.kind === 'ball' && kind === 'wild') || d.kind === 'heal'}
+            canUse={(d) => (d.kind === 'ball' && kind === 'wild') || d.kind === 'heal'}
+            onUse={(id) => { setMode('wait'); if (ITEMS[id].kind === 'ball') throwBall(id); else usePotion(id) }}
+            onClose={() => setMode('menu')}
+            describe={(d) => (d.kind === 'ball' && foeCopies[0] && s().foeActive ? `Catch chance about ${Math.round(catchChance({ ...foeCopies[0], hp: s().foeActive!.hp }, d.ballBonus ?? 1, legendaryNames.has(foeCopies[0].species)) * 100)}%.` : null)}
+          />
         )}
       </div>
 

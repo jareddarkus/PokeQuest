@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
+import { snap } from './pixel'
 import { Dex } from '@pkmn/sim'
 import { CATEGORY, nameOf, useLang } from '../i18n'
 import FontText from './FontText'
-import ItemIcon from './ItemIcon'
 import { moveFacts, moveGameText } from '../data/moveText'
 import { TYPE_COLOR, type PType } from '../game/world'
 import { useUiUrl } from './CmdButton'
@@ -13,7 +13,8 @@ const cancel = () => { void music.playSfx('se:cancel') }
 
 /** The size of the "bottom screen" of the DS in screen pixels (the game's pictures are 256 x 192). */
 export function dsScale(): number {
-  return Math.max(1, Math.min(1.5, (window.innerWidth - 16) / 256))
+  // wide windows: the lower screen is twice the DS size; phones: as wide as fits; always whole device pixels per picture pixel
+  return snap(Math.max(1, window.innerWidth >= 1000 ? 2 : (window.innerWidth - 16) / 256))
 }
 
 const recolored = new Map<string, string>()
@@ -169,20 +170,21 @@ function ScreenBar({ S }: { S: number }) {
   )
 }
 
-/** The little balls on the Poké Ball: the trainer's Pokémon (small, top) and yours (big when healthy, small when the place is empty, dark when fainted). */
+/**
+ * The little balls on the Poké Ball of the lower screen (the game's own pictures; positions measured on the reference video, in DS pixels).
+ * Top row (the trainer's Pokémon, small, y 50, x 108 + 8.2 i): the places with a Pokémon are on the RIGHT, empty rings on the left.
+ * Bottom row (yours, y 137, x 87 + 16.4 i): big balls first (left), small rings for the empty places. Fainted = the dark ball.
+ */
 function PartyDots({ S, party, foeCount }: { S: number; party?: Array<'ok' | 'fnt' | 'none'>; foeCount?: number }) {
-  const dot = (x: number, y: number, d: number, key: string, kind: 'ok' | 'fnt' | 'none') => (
-    <span key={key} style={{ position: 'absolute', left: (x - d / 2) * S, top: (y - d / 2) * S, width: d * S, height: d * S, boxSizing: 'border-box', borderRadius: '50%', background: kind === 'fnt' ? '#3a3a44' : kind === 'ok' ? '#fff' : 'transparent', border: `${Math.max(1, S)}px solid ${kind === 'none' ? '#b8b8c4' : '#ffffff'}`, opacity: kind === 'fnt' ? 0.7 : 1 }}>
-      {kind === 'ok' && <span style={{ position: 'absolute', left: 0, right: 0, top: 0, height: '50%', background: '#e83030', borderRadius: '99px 99px 0 0' }} />}
-    </span>
-  )
+  const big = useUiUrl('bt:ball'), bigFnt = useUiUrl('bt:ballfnt'), ring = useUiUrl('bt:sring'), small = useUiUrl('bt:sball')
+  const pic = (src: string | null, x: number, y: number, d: number, key: string, fnt = false) => src ? (
+    <img key={key} src={src} alt="" draggable={false} style={{ position: 'absolute', left: (x - d / 2) * S, top: (y - d / 2) * S, width: d * S, height: d * S, opacity: fnt ? 0.9 : 1, imageRendering: 'pixelated' }} />
+  ) : null
   const list = party ?? []
   return (
     <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 3 }}>
-      {foeCount ? Array.from({ length: 6 }, (_, i) => dot(100 + i * 9, 33, 6, `f${i}`, i < foeCount ? 'ok' : 'none')) : null}
-      {list.length ? list.slice(0, 6).map((st, i) => st === 'none' ? dot(98 + i * 15, 121, 6, `m${i}`, 'none') : (
-        <span key={`m${i}`} style={{ position: 'absolute', left: (91 + i * 15 - 11) * S, top: (121 - 11) * S, opacity: st === 'fnt' ? 0.45 : 1 }}><ItemIcon name="Poke Ball" size={22 * S} /></span>
-      )) : null}
+      {foeCount ? Array.from({ length: 6 }, (_, i) => { const has = i >= 6 - foeCount; return pic(has ? small : ring, 108.2 + 8.2 * i, 50, has ? 8 : 8, `f${i}`) }) : null}
+      {list.length ? list.slice(0, 6).map((st, i) => st === 'none' ? pic(ring, 87 + 16.4 * i, 137, 8, `m${i}`) : st === 'fnt' ? pic(bigFnt, 87 + 16.4 * i, 137, 16, `m${i}`, true) : pic(big, 87 + 16.4 * i, 137, 16, `m${i}`)) : null}
     </div>
   )
 }
@@ -203,8 +205,8 @@ export function IdleBall({ S }: { S: number }) {
 }
 
 /** The battle command screen drawn like the original: Poké Ball backdrop, FIGHT in the middle, BAG / POKÉMON / RUN below. */
-export function CommandScreen({ S, onFight, onBag, onPokemon, onRun, pokemonOff, runOff, closing, party, foeCount }: {
-  S: number; onFight: () => void; onBag: () => void; onPokemon: () => void; onRun: () => void; pokemonOff: boolean; runOff: boolean; closing?: boolean
+export function CommandScreen({ S, onFight, onBag, onPokemon, onRun, closing, party, foeCount }: {
+  S: number; onFight: () => void; onBag: () => void; onPokemon: () => void; onRun: () => void; closing?: boolean
   /** your six places: a healthy Pokémon, a fainted one, or empty */
   party?: Array<'ok' | 'fnt' | 'none'>
   /** how many Pokémon the trainer has (0 = a wild battle: no row) */
@@ -229,9 +231,9 @@ export function CommandScreen({ S, onFight, onBag, onPokemon, onRun, pokemonOff,
       <button className="ds-btn" aria-label="Fight" onClick={() => { decide(); onFight() }} style={{ left: 84 * S, top: 86 * S, width: 89 * S, height: 21 * S }}>
         {fight ? <img className="ds-fight-label" src={fight} alt="Fight" draggable={false} style={{ width: '100%', height: '100%' }} /> : null}
       </button>
-      <Btn img={bag} x={6} y={142} w={93} h={46} label="Bag" onClick={onBag} />
-      <Btn img={run} x={96} y={150} w={64} h={37} label="Run" onClick={onRun} off={runOff} />
-      <Btn img={poke} x={157} y={142} w={93} h={46} label="Pokémon" onClick={onPokemon} off={pokemonOff} />
+      <Btn img={bag} x={0} y={147} w={79} h={46} label="Bag" onClick={onBag} />
+      <Btn img={run} x={96} y={156} w={64} h={37} label="Run" onClick={onRun} />
+      <Btn img={poke} x={177} y={147} w={79} h={46} label="Pokémon" onClick={onPokemon} />
     </div>
  </div>
   )

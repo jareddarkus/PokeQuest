@@ -24,6 +24,7 @@ export default function RomGate({ onReady }: Props) {
 
   async function pick(file: RomSource | undefined) {
     if (!file) return
+    if ('name' in file && typeof (file as File).name === 'string' && !/[.](nds|bin|dsi|srl)$/i.test((file as File).name) && (file as File).size < 50 * 1024 * 1024) { setError('That does not look like a Nintendo DS game (a .nds file of Pokémon Black 2 / White 2).'); return }
     setError(null)
     setBusy(true)
     try {
@@ -44,8 +45,14 @@ export default function RomGate({ onReady }: Props) {
           game reads it on <strong>your computer only</strong> — nothing is uploaded — and keeps the pictures in this browser.
         </p>
         <p className="muted">You only need to do this once per browser.</p>
-        <input ref={input} type="file" accept=".nds,.bin" hidden onChange={(e) => pick(e.target.files?.[0])} />
-        {!busy && <button className="primary" onClick={() => input.current?.click()}>Choose my Pokémon White 2 file</button>}
+        {/* no "accept" filter: phones and Macs do not know ".nds" files and grey them out / hang on the type lookup; the file is checked after it is chosen.
+            The input is a real (invisible) input inside a label, because some browsers ignore clicks on a hidden one. */}
+        {!busy && (
+          <label className="primary file-pick" style={{ position: 'relative', display: 'inline-block', cursor: 'pointer', textAlign: 'center' }}>
+            Choose my Pokémon White 2 file
+            <input ref={input} type="file" onChange={(e) => pick(e.target.files?.[0])} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer', fontSize: 0 }} />
+          </label>
+        )}
         {busy && (
           <>
             <div className="hpbar"><div style={{ width: `${frac * 100}%`, background: '#4cd964' }} /></div>

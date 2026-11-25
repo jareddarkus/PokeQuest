@@ -37,9 +37,15 @@ export class BattleBackdrop3D {
   onFrame: ((l: BattleLayout) => void) | null = null
   private moving = false
 
-  constructor(mount: HTMLElement, files: Uint8Array[], env: BattleEnvironment) {
+  private ball: THREE.Group | null = null
+  private ballUntil = 0
+  private ballFrom = new THREE.Vector3()
+  private ballTo = new THREE.Vector3()
+  private ballT0 = 0
+
+  constructor(mount: HTMLElement, files: Uint8Array[], env: BattleEnvironment, ballRaw?: Uint8Array | null) {
     this.mount = mount
-    this.renderer = new THREE.WebGLRenderer({ antialias: false })
+    this.renderer = new THREE.WebGLRenderer({ antialias: true })
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
     mount.appendChild(this.renderer.domElement)
     this.renderer.domElement.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:block'
@@ -64,16 +70,52 @@ export class BattleBackdrop3D {
       st.scale.setScalar(p.scale)
       this.scene.add(st)
     }
+    if (ballRaw) { // the game's own Poké Ball (a small 3D ball that spins in the air before the Pokémon comes out)
+      const model = readModels(ballRaw)[0], tex = readTexFile(ballRaw)
+      if (model && tex) {
+        const obj = buildModelObject(model, tex)
+        const box = new THREE.Box3().setFromObject(obj)
+        const size = box.getSize(new THREE.Vector3())
+        const centre = box.getCenter(new THREE.Vector3())
+        const pivot = new THREE.Group()
+        obj.position.sub(centre)
+        pivot.add(obj)
+        pivot.scale.setScalar(0.055 / Math.max(size.x, size.y, size.z, 1e-3))
+        pivot.visible = false
+        this.ball = pivot
+        this.scene.add(pivot)
+      }
+    }
     const loop = () => {
       this.raf = requestAnimationFrame(loop)
       const k = Math.max(0, Math.min(1, (performance.now() - this.introAt) / this.introMs))
       const e = 1 - (1 - k) * (1 - k) // fast at first, settling at the end
       this.camera.position.set(INTRO.pos[0] + (CAMERA.pos[0] - INTRO.pos[0]) * e, INTRO.pos[1] + (CAMERA.pos[1] - INTRO.pos[1]) * e, INTRO.pos[2] + (CAMERA.pos[2] - INTRO.pos[2]) * e)
       this.camera.lookAt(INTRO.target[0] + (CAMERA.target[0] - INTRO.target[0]) * e, INTRO.target[1] + (CAMERA.target[1] - INTRO.target[1]) * e, INTRO.target[2] + (CAMERA.target[2] - INTRO.target[2]) * e)
+      if (this.ball) {
+        const now = performance.now()
+        this.ball.visible = now < this.ballUntil
+        if (this.ball.visible) {
+          const k = Math.min(1, (now - this.ballT0) / 260) // flies from the trainer's hand to its place above the platform, then hovers and spins
+          const e = 1 - (1 - k) * (1 - k)
+          this.ball.position.lerpVectors(this.ballFrom, this.ballTo, e)
+          this.ball.position.y += Math.sin(k * Math.PI) * 0.12
+          this.ball.rotation.x = (now - this.ballT0) / 1000 * 14
+        }
+      }
       this.renderer.render(this.scene, this.camera)
       if (this.moving) { this.onFrame?.(this.measure()); if (k >= 1) { this.moving = false; this.onFrame?.(this.layout()) } }
     }
     loop()
+  }
+
+  /** Shows the spinning Poké Ball above a platform for `ms` (it starts at the trainer and flies to its place). */
+  showBall(side: 'foe' | 'me', ms: number) {
+    const p = side === 'foe' ? FOE_PLATFORM : ME_PLATFORM
+    this.ballFrom.set(p.x + (side === 'foe' ? 0.04 : 0.2), side === 'foe' ? 0.22 : 0.3, p.z + (side === 'foe' ? 0 : 0.18))
+    this.ballTo.set(p.x + (side === 'foe' ? 0 : 0.1), side === 'foe' ? 0.4 : 0.36, p.z)
+    this.ballT0 = performance.now()
+    this.ballUntil = this.ballT0 + ms
   }
 
   /** Starts the opening shot now (takes `ms`); until then the camera waits at the first pose. */

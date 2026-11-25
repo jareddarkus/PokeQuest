@@ -13,7 +13,8 @@ import {
   C, COLLAPSE_SECONDS, RADIUS, RING_INNER, SIZE, T, collapseRadius, generateWorld, isWalkable, ringAt, type Dir, type World,
 } from '../game/world'
 import BattleScreen, { CHAR_MS, TypedText, type BattleKind, type BattleOutcome } from './BattleScreen'
-import { leaderLine, lossLine, preBattleLine } from '../data/npcLines'
+import { addExtraGrass, buildMeadowVisuals, prepareMeadow } from '../game/meadow'
+import { busyLine, leaderLine, lossLine, preBattleLine } from '../data/npcLines'
 import { BagPanel, PcPanel, TeamPanel } from './MenuPanels'
 import SettingsPanel from './SettingsPanel'
 import StarterPick from './StarterPick'
@@ -45,9 +46,12 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
   // in a match everybody starts at a different place of the outer ring, as far apart as possible
   const myIndex = royale && username ? Math.max(0, royale.players.indexOf(username)) : 0
   const spawn = royale ? world.spawns[Math.round((myIndex * world.spawns.length) / Math.max(1, royale.players.length)) % world.spawns.length] : world.spawns[0]
-  const t0 = royale ? royale.startsAt + 60_000 : 0 // the match begins one minute after the start (time to pick a starter)
+  // the match begins 30 seconds after the start at the latest (time to pick a starter), or at once when everybody has picked
+  const [t0, setT0] = useState(royale ? royale.startsAt + 30_000 : 0)
   const handleRef = useRef<GameHandle | null>(null)
   const startRef = useRef(royale ? t0 : Date.now())
+  const t0Ref = useRef(t0)
+  t0Ref.current = t0
   const [collapseOn, setCollapseOn] = useState(!!royale)
   const [now, setNow] = useState(Date.now())
   useEffect(() => { if (!royale) return; const id = window.setInterval(() => setNow(Date.now()), 500); return () => window.clearInterval(id) }, [])
@@ -99,7 +103,25 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
 
   const say = (t: string) => setToast(t)
   const chat = useChat(username, panel === 'chat')
-  const players = useMatchPlayers(royale?.id ?? null, username, look, () => handleRef.current?.getPos() ?? null)
+  // trainers that other players are fighting right now (message "busy" every 3 s; forgotten after 9 s)
+  const busyNpcs = useRef(new Map<string, { by: string; until: number }>())
+  const busySender = useRef<{ send: (npcId: string, on: boolean) => void } | null>(null)
+  const players = useMatchPlayers(royale?.id ?? null, username, look, () => handleRef.current?.getPos() ?? null, royale ? {
+    pickedMe: trainer.team.length > 0 || trainer.pc.length > 0,
+    expected: royale.players,
+    started: Date.now() >= t0Ref.current,
+    onAllPicked: () => { const nt = Date.now() + 1500; if (nt < t0Ref.current) { startRef.current = nt; t0Ref.current = nt; setT0(nt) } }, // everybody is ready: start right away
+    onBusy: (npc, by, on) => { if (on) busyNpcs.current.set(npc, { by, until: Date.now() + 9000 }); else busyNpcs.current.delete(npc) },
+  } : undefined, busySender)
+  const busyMapFn = () => { const m = new Map<string, string>(); const now = Date.now(); for (const [k, v] of busyNpcs.current) { if (v.until < now) busyNpcs.current.delete(k); else m.set(k, v.by) } return m }
+  // while I fight a trainer, the others see it as busy (repeated, so that late arrivals know too)
+  useEffect(() => {
+    const id = battle?.npcId
+    if (!id) return
+    busySender.current?.send(id, true)
+    const t = window.setInterval(() => busySender.current?.send(id, true), 3000)
+    return () => { window.clearInterval(t); busySender.current?.send(id, false) }
+  }, [battle?.npcId])
 
   // the real songs of the game: route music by ring, battle music by kind of battle
   const song = battle ? (battle.kind === 'gym' ? 'gymLeader' : battle.kind === 'trainer' ? 'trainer' : 'wild') : ring <= 1 ? 'field1' : ring === 2 ? 'field2' : 'field3'
@@ -207,9 +229,17 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
       },
       onPushed: (_x, _y, r) => say(`The ground crumbled — you were pushed to ring ${r}!`),
       onNpcSpotted: (npcId) => {
-        if (defeatedNpcs.current.has(npcId) || busy.current || talking.current) return
+        if (defeatedNpcs.current.has(npcId) || busy.current || talking.current || busyNpcs.current.has(npcId)) return
         const npc = world.npcs.find((n) => n.id === npcId)
         if (!npc) return
+        speakThen(`Trainer ${npc.name}`, preBattleLine(npc.id), () => void trainerTeam(npc.ring).then((team) => startBattle({ kind: 'trainer', foe: team, name: `Trainer ${npc.name}`, npcId })))
+      },
+      onNpcTalk: (npcId) => {
+        if (busy.current || talking.current) return
+        const npc = world.npcs.find((n) => n.id === npcId)
+        if (!npc) return
+        if (busyNpcs.current.has(npcId)) { speakThen(`Trainer ${npc.name}`, busyLine(), () => {}); return } // somebody else is fighting it
+        if (defeatedNpcs.current.has(npcId)) { speakThen(`Trainer ${npc.name}`, lossLine(npcId), () => {}); return }
         speakThen(`Trainer ${npc.name}`, preBattleLine(npc.id), () => void trainerTeam(npc.ring).then((team) => startBattle({ kind: 'trainer', foe: team, name: `Trainer ${npc.name}`, npcId })))
       },
     }),
@@ -239,7 +269,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
   }
 
   if (trainer.team.length === 0 && trainer.pc.length === 0 && !battle) {
-    return <StarterPick until={royale ? royale.startsAt + 60_000 - 1000 : undefined} onPick={pickStarter} />
+    return <StarterPick until={royale ? royale.startsAt + 30_000 - 1000 : undefined} onPick={pickStarter} />
   }
 
   const alive = trainer.team.filter((m) => m.hp > 0).length
@@ -253,6 +283,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
         startTile={spawn}
         elapsed={() => (collapseRef.current && Date.now() >= (royale ? t0 : 0) ? Date.now() - startRef.current : null)}
         others={players}
+        busy={busyMapFn}
         events={events}
         handleRef={handleRef}
         paused={panel !== null || battle !== null || waiting || speech !== null}
@@ -338,7 +369,12 @@ export default function PlayScreen(props: Props) {
       if (!live) return
       if (!data) { setLoaded('missing'); return }
       const built = buildChunkWorld(data)
-      setLoaded({ built, world: generateWorld(props.royale ? props.royale.seed : Math.floor(Math.random() * 1e9), built.ground) })
+      const seed = props.royale ? props.royale.seed : Math.floor(Math.random() * 1e9)
+      prepareMeadow(built, seed) // ring 1 = a meadow (lots of tall grass, a ring road and paths, a beach)
+      const world = generateWorld(seed, built.ground)
+      const extra = addExtraGrass(world, seed) // and more tall grass in the inner rings
+      built.group.add(buildMeadowVisuals(world, built, extra))
+      setLoaded({ built, world })
     })
     return () => { live = false }
   }, [])
