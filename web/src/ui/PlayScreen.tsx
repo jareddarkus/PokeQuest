@@ -450,7 +450,7 @@ export default function PlayScreen(props: Props) {
       const seed = props.royale ? props.royale.seed : Math.floor(Math.random() * 1e9)
       prepareMeadow(built, seed) // ring 1 = a meadow (lots of tall grass, a ring road and paths, a beach)
       const world = generateWorld(seed, built.ground)
-      const extra = addExtraGrass(world, seed) // and more tall grass in the inner rings
+      const extra = addExtraGrass(world, built, seed) // and more tall grass in the inner rings
       built.group.add(buildMeadowVisuals(world, built, extra))
       setLoaded({ built, world })
     })

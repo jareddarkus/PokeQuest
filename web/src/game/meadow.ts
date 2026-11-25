@@ -19,6 +19,9 @@ export function liftAt(d: number): number {
 const BEACH = 3 // the outermost tiles are sand
 const ROAD_R = 67 // ring distance of the ring road
 
+/** The 2 x 2 tile cells of ring 1 that are forest (top-left tile numbers), made by prepareMeadow. */
+let forestCells: number[] = []
+
 /** The flat height of the meadow (tile units). */
 export const meadowHeight = (built: BuiltWorld): number => built.waterY + 0.35
 
@@ -76,6 +79,20 @@ export function prepareMeadow(built: BuiltWorld, seed: number): void {
     }
   }
   built.pathMask = path
+  // forests: groups of 2 x 2 tile cells (the game's pines are 2 x 2 tiles) away from the paths
+  forestCells = []
+  const near = new Uint8Array(SIZE * SIZE)
+  for (let y = 0; y < SIZE; y++) for (let x = 0; x < SIZE; x++) if (path[y * SIZE + x]) for (let b = -3; b <= 3; b++) for (let a = -3; a <= 3; a++) { const xx = x + a, yy = y + b; if (xx >= 0 && yy >= 0 && xx < SIZE && yy < SIZE) near[yy * SIZE + xx] = 1 }
+  for (let cy = 0; cy < SIZE; cy += 2) {
+    for (let cx = 0; cx < SIZE; cx += 2) {
+      let ok = true
+      for (let b = 0; b < 2 && ok; b++) for (let a = 0; a < 2; a++) { const d = dist(cx + a, cy + b); if (d < RING_INNER[0] + 1 || d > RADIUS - BEACH - 1 || near[(cy + b) * SIZE + cx + a]) { ok = false; break } }
+      if (!ok) continue
+      if (valueNoise(cx, cy, seed + 41, 16) * 0.8 + hash2(cx, cy, seed + 43) * 0.2 <= 0.58) continue
+      forestCells.push(cy * SIZE + cx)
+      for (let b = 0; b < 2; b++) for (let a = 0; a < 2; a++) { built.ground[(cy + b) * SIZE + cx + a] = T.Tree; path[(cy + b) * SIZE + cx + a] = 0 }
+    }
+  }
   built.uniforms.uHide.value = RING_INNER[0] - 0.2 // the real map is not drawn in the meadow
   // the inner rings are higher (terraces): the ground heights and the map's pictures (vertex shader) are lifted the same way
   built.uniforms.uLift.value = RING_LIFT
@@ -83,13 +100,18 @@ export function prepareMeadow(built: BuiltWorld, seed: number): void {
 }
 
 /** More tall grass in the inner rings: scattered patches on the plain grass tiles of the real map (returns the tile numbers that were changed). */
-export function addExtraGrass(world: World, seed: number): number[] {
+export function addExtraGrass(world: World, built: BuiltWorld, seed: number): number[] {
   const changed: number[] = []
   for (let y = 1; y < SIZE - 1; y++) {
     for (let x = 1; x < SIZE - 1; x++) {
       const i = y * SIZE + x
       if (world.tiles[i] !== T.Grass) continue
       if (ringAt(x, y) < 2) continue
+      // never on stairs or slopes: the ground there is not level
+      const h0 = built.height[i]
+      let steep = false
+      for (let b = -2; b <= 2 && !steep; b++) for (let a = -2; a <= 2; a++) { const xx = x + a, yy = y + b; if (xx >= 0 && yy >= 0 && xx < SIZE && yy < SIZE && Math.abs(built.height[yy * SIZE + xx] - h0) > 0.12 * Math.max(Math.abs(a), Math.abs(b))) { steep = true; break } }
+      if (steep) continue
       if (world.gyms.some((g) => Math.abs(g.x - x) < 3 && Math.abs(g.y - y) < 3)) continue
       if (valueNoise(x, y, seed + 29, 4) + (hash2(x, y, seed + 2) - 0.5) * 0.2 > 0.6) { world.tiles[i] = T.Tall; changed.push(i) }
     }
@@ -166,7 +188,7 @@ export function buildMeadowVisuals(world: World, built: BuiltWorld, extra: numbe
   const sand = built.textureNamed('sea_jimen', true, sandy)
   const roadSand = built.textureNamed('michi01b', false, sandy)
   const roadEdge = built.textureNamed('michi01a', false, sandy)
-  const tuft = built.textureNamed('kusa_ec1', false, green)
+  const leaf1 = built.textureNamed('kusa_ec1', true, green), leaf2 = built.textureNamed('kusa_ec2', true, green), leaf3 = built.textureNamed('kusa_ec3', true, green)
   const mesh = (geo: THREE.BufferGeometry, mat: THREE.Material, y = 0) => { const m = new THREE.Mesh(geo, mat); m.position.y = y; m.frustumCulled = false; g.add(m) }
   mesh(squareRing(RING_INNER[0] - 0.2, RADIUS - BEACH, hm), groundMat(grass, 0x59b84a, built))
   mesh(squareRing(RADIUS - BEACH, RADIUS + 1.2, hm + 0.001), groundMat(sand, 0xe8d890, built))
@@ -202,10 +224,47 @@ export function buildMeadowVisuals(world: World, built: BuiltWorld, extra: numbe
     }
   }
   for (const [key, tiles] of roads) flat(tiles, new THREE.MeshBasicMaterial({ map: roadTile(roadSand, roadEdge, key >> 1, key & 1) }), 0.012, () => hm)
-  const alphaMat = (t: THREE.Texture | null) => new THREE.MeshBasicMaterial({ map: t ?? undefined, color: t ? 0xffffff : 0x2a8a3a, alphaTest: 0.4, side: THREE.DoubleSide })
-  flat(tuftsA, alphaMat(tuft), 0.02, () => hm)
+  const alphaMat = (t: THREE.Texture | null) => new THREE.MeshBasicMaterial({ map: t ?? undefined, color: t ? 0xffffff : 0x2a8a3a, alphaTest: 0.4, transparent: true, side: THREE.DoubleSide })
+  // tall grass exactly like the game's map: three flat layers of leaf pictures one above the other (bottom kusa_ec3, middle kusa_ec2, top kusa_ec1), one picture per tile
+  const grassLayers = (tiles: number[], h: (i: number) => number) => {
+    flat(tiles, alphaMat(leaf3), 0.125, h); flat(tiles, alphaMat(leaf2), 0.375, h); flat(tiles, alphaMat(leaf1), 0.5, h)
+  }
+  grassLayers(tuftsA, () => hm)
   const ex = extra.filter((i) => dist(i % SIZE, (i / SIZE) | 0) < RING_INNER[0])
-  flat(ex, alphaMat(tuft), 0.04, (i) => built.height[i])
+  grassLayers(ex, (i) => built.height[i])
+
+  // the pine forests of ring 1, built like the game's own (a pine is 2 x 2 tiles: the side picture on two crossing upright planes, plus three flat layers seen from above: base, crown, tip)
+  if (import.meta.env.DEV) (globalThis as { __pqForest?: number[] }).__pqForest = forestCells
+  if (forestCells.length) {
+    const side = built.textureNamed('ki02ax', false), crown = built.textureNamed('ki02bx', false)
+    const base = built.textureNamed('ki02c', false), tip = built.textureNamed('ki02dx', false)
+    const mk = () => ({ pos: [] as number[], uv: [] as number[], idx: [] as number[] })
+    const quad = (m: ReturnType<typeof mk>, p: number[][], uvs: number[][]) => {
+      const v = m.pos.length / 3
+      for (let k = 0; k < 4; k++) { m.pos.push(...p[k]); m.uv.push(...uvs[k]) }
+      m.idx.push(v, v + 1, v + 2, v, v + 2, v + 3)
+    }
+    const mSide = mk(), mCrown = mk(), mBase = mk(), mTip = mk()
+    const y0 = hm + 0.19, y1 = hm + 3.5
+    for (const i of forestCells) {
+      const x = i % SIZE, z = (i / SIZE) | 0
+      const flat4 = (m: ReturnType<typeof mk>, y: number) => quad(m, [[x, y, z], [x + 2, y, z], [x + 2, y, z + 2], [x, y, z + 2]], [[0, 0], [1, 0], [1, 1], [0, 1]])
+      flat4(mBase, hm + 0.19); flat4(mCrown, hm + 1.38); flat4(mTip, hm + 2.91)
+      quad(mSide, [[x, y0, z + 1], [x + 2, y0, z + 1], [x + 2, y1, z + 1], [x, y1, z + 1]], [[0, 1], [1, 1], [1, 0], [0, 0]])
+      quad(mSide, [[x + 1, y0, z], [x + 1, y0, z + 2], [x + 1, y1, z + 2], [x + 1, y1, z]], [[0, 1], [1, 1], [1, 0], [0, 0]])
+    }
+    const add = (m: ReturnType<typeof mk>, tex: THREE.Texture | null) => {
+      if (!tex || !m.idx.length) return
+      const geo = new THREE.BufferGeometry()
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(m.pos, 3))
+      geo.setAttribute('uv', new THREE.Float32BufferAttribute(m.uv, 2))
+      geo.setIndex(m.idx)
+      const mat = new THREE.MeshBasicMaterial({ map: tex, alphaTest: 0.4, transparent: true, side: THREE.DoubleSide })
+      applyClip(mat, built.uniforms)
+      mesh(geo, mat)
+    }
+    add(mBase, base); add(mCrown, crown); add(mSide, side); add(mTip, tip)
+  }
 
   // the cliffs between the rings: a slanted wall of the game's cliff picture (one picture per tile) from the lower ring up to the higher one, following the ground of both
   const cliff = built.textureNamed('yamagake01', true, (r, gg, b) => r - b - Math.abs(gg - r) * 0.2) // the game's tall mountain cliff face (16 x 32: one tile wide, two tall)
