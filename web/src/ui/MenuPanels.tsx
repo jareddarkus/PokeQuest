@@ -128,8 +128,8 @@ function MovesScreen({ mon, pickFor, onPick }: { mon: Mon; pickFor: number | nul
             </button>
           )
         })}
-        <DsText x={42} y={150} K={K} size={7} color="#181820">{cur.type} · {lang === 'es' ? CATEGORY[cur.category] ?? cur.category : cur.category} · {cur.power ? `Power ${cur.power}` : 'no power'}</DsText>
-        <div style={{ position: 'absolute', left: 42 * K, top: 160 * K, width: 160 * K, color: '#181820', fontSize: 6 * K, lineHeight: 1.25, fontWeight: 600, overflow: 'hidden', height: 30 * K }}>{moveDesc(mon.moves[pickFor ?? 0] ?? mon.moves[0])}</div>
+        <DsText x={44} y={153} K={K} size={6.5} color="#181820">{`${cur.type} · ${lang === 'es' ? CATEGORY[cur.category] ?? cur.category : cur.category} · ${cur.power ? `${lang === 'es' ? 'Potencia' : 'Power'} ${cur.power}` : lang === 'es' ? 'sin potencia' : 'no power'}`}</DsText>
+        <div style={{ position: 'absolute', left: 42 * K, top: 162 * K, width: 156 * K, color: '#181820', fontSize: 5.6 * K, lineHeight: 1.2, fontWeight: 600, overflow: 'hidden', height: 28 * K }}>{moveDesc(mon.moves[pickFor ?? 0] ?? mon.moves[0])}</div>
       </DsScreen>
     </div>
   )
