@@ -14,7 +14,8 @@ import StatBars from './StatBars'
 import TypePlate from './TypePlate'
 import { DsScreen, DsText, dsK } from './DsScreen'
 import PartyScreen from './PartyScreen'
-import { abilityDesc, moveDesc, useLang, CATEGORY } from '../i18n'
+import { abilityDesc, useLang, CATEGORY } from '../i18n'
+import { moveFacts, moveGameText } from '../data/moveText'
 import BagScreen from './BagScreen'
 import { useUiUrl } from './CmdButton'
 
@@ -68,7 +69,7 @@ function TopScreen({ mon }: { mon: Mon }) {
         <span style={{ position: 'absolute', left: 6 * K, top: 38 * K, width: 80 * K, height: 80 * K, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}><MonSprite species={mon.species} shiny={mon.shiny} scale={K * 0.9} animated /></span>
         <DsText x={92} y={12} K={K} size={11}>{mon.species}{mon.shiny ? ' ★' : ''}</DsText>
         <DsText x={92} y={28} K={K} size={8}>Lv{mon.level}  {mon.gender === 'M' ? '♂' : mon.gender === 'F' ? '♀' : ''}</DsText>
-        <span style={{ position: 'absolute', left: 92 * K, top: 42 * K, display: 'flex', gap: 3 * K }}>{speciesTypes(mon.species).map((t) => <TypePlate key={t} type={t} scale={K * 0.7} />)}</span>
+        <span style={{ position: 'absolute', left: 92 * K, top: 42 * K, display: 'flex', gap: 3 * K }}>{speciesTypes(mon.species).map((t) => <TypePlate key={t} type={t} scale={K * 1.15} />)}</span>
         <span style={{ position: 'absolute', left: 92 * K, top: 58 * K }}><HpBar hp={mon.hp} max={mx} scale={K} /></span>
         <DsText x={92} y={70} w={120} K={K} size={7.5} align="right">{mon.hp}/{mx}</DsText>
         <DsText x={92} y={86} K={K} size={7.5} color="#ffd84a">{mon.ability}</DsText>
@@ -124,12 +125,15 @@ function MovesScreen({ mon, pickFor, onPick }: { mon: Mon; pickFor: number | nul
               <DsText x={6} y={4} K={K} size={7.5}>{mv}</DsText>
               <DsText x={124} y={4} K={K} size={7.5} color="#181820">PP {info.pp}</DsText>
               <DsText x={172} y={4} K={K} size={7.5} color="#181820">Pow {info.power || '—'}</DsText>
-              <span style={{ position: 'absolute', left: 212 * K, top: 2 * K }}><TypePlate type={info.type} scale={K * 0.75} /></span>
+              <span style={{ position: 'absolute', left: 212 * K, top: 2 * K }}><TypePlate type={info.type} scale={K * 1.1} /></span>
             </button>
           )
         })}
         <DsText x={44} y={153} K={K} size={6.5} color="#181820">{`${cur.type} · ${lang === 'es' ? CATEGORY[cur.category] ?? cur.category : cur.category} · ${cur.power ? `${lang === 'es' ? 'Potencia' : 'Power'} ${cur.power}` : lang === 'es' ? 'sin potencia' : 'no power'}`}</DsText>
-        <div style={{ position: 'absolute', left: 42 * K, top: 162 * K, width: 156 * K, color: '#181820', fontSize: 5.6 * K, lineHeight: 1.2, fontWeight: 600, overflow: 'hidden', height: 28 * K }}>{moveDesc(mon.moves[pickFor ?? 0] ?? mon.moves[0])}</div>
+        <div style={{ position: 'absolute', left: 42 * K, top: 160 * K, width: 160 * K, color: '#181820', fontSize: 4.9 * K, lineHeight: 1.18, overflowY: 'auto', height: 31 * K }}>
+          <div style={{ fontWeight: 700 }}>{moveFacts(mon.moves[pickFor ?? 0] ?? mon.moves[0], lang)}</div>
+          <div style={{ fontWeight: 500, fontStyle: 'italic', opacity: 0.8, marginTop: 1.5 * K }}>{moveGameText(mon.moves[pickFor ?? 0] ?? mon.moves[0], lang)}</div>
+        </div>
       </DsScreen>
     </div>
   )
@@ -179,7 +183,7 @@ export function Summary({ mon, onChange, onBack }: { mon: Mon; onChange: (m: Mon
                   onClick={() => { onChange({ ...mon, moves: mon.moves.map((x, k) => (k === pickFor ? o : x)) }); setPickFor(null) }}
                   style={{ boxShadow: `inset 4px 0 0 ${TYPE_COLOR[info.type as PType] ?? '#888'}` }}
                 >
-                  <span>{o}</span><small style={{ display: 'flex', alignItems: 'center', gap: 6 }}><TypePlate type={info.type} scale={1.6} />{info.power || '—'}</small>
+                  <span>{o}</span><small style={{ display: 'flex', alignItems: 'center', gap: 6 }}><TypePlate type={info.type} scale={2.2} />{info.power || '—'}</small>
                 </button>
               )
             })}
@@ -245,8 +249,8 @@ export function BagPanel({ trainer, setTrainer, onClose, onMessage }: PanelProps
       if (!r) { onMessage('It would have no effect.'); return }
       upd = r; msg = `${m.species}'s ${STAT_NAMES[def.stat!]} EVs went up!`
     } else if (def.kind === 'pp') {
-      // Elixir: 10 PP back for every move (a move's most is its base PP x 8/5, like with three PP Ups)
-      const most = m.moves.map((mv) => Math.floor((moveInfo(mv).pp * 8) / 5))
+      // Elixir: 10 PP back for every move (a move's most is its own PP, like in the games without PP Ups)
+      const most = m.moves.map((mv) => moveInfo(mv).pp)
       const now = m.moves.map((_, i) => m.pp?.[i] ?? most[i])
       if (now.every((v, i) => v >= most[i])) { onMessage('It would have no effect.'); return }
       upd = { ...m, pp: now.map((v, i) => Math.min(most[i], v + 10)) }; msg = `${m.species}'s moves got their PP back!`

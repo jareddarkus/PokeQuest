@@ -260,3 +260,8 @@ Next ideas if this is picked up again: (1) the "!" emote for trainers spotting t
 - After a run the standing picture is used (the running set was kept by mistake); hover effects no longer move things (they made the party slot jitter at its edge).
 - Trainers and gym leaders talk before the battle, trainers answer after losing: 204 lines in `data/npcLines.ts` (English + Spanish).
 - The follower starts on a free tile beside you.
+
+## Move texts, PP, plates
+- Moves have two descriptions (`data/moveText.ts`): what it really does (English: Showdown's description; Spanish: built from the Showdown move data, with `data/moveFactsEs.ts` for special rules) and what the game says (`data/move_text.json`, built by `scripts/build-move-text.mjs` from PokeAPI; Pokémon Black 2 / White 2 wording when it existed, else the newest game's).
+- Power points: the simulator starts every move at the PP-Up maximum (x8/5); the battle now starts moves at their normal PP (Tackle 35), Elixir tops up to that. The move data is `@pkmn/sim` 0.11.0 (the newest release on npm, from Smogon's Showdown data).
+- Type plates are bigger; the black outline on the battle move squares came from the global slab button style (`.ds-move`, `.ds-screen2 button` now opt out).

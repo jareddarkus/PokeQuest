@@ -86,6 +86,10 @@ export class BattleSession {
     const t2 = Teams.pack(this.team2.map((m) => toSet(m, false)) as never)
     this.battle.setPlayer('p1', { name: 'You', team: t1 })
     this.battle.setPlayer('p2', { name: 'Foe', team: t2 })
+    // power points: the simulator starts every move with the PP-Up maximum (x 8/5, so Tackle would have 56); in the games a move starts with its own PP (Tackle 35)
+    for (const p of [...this.battle.p1.pokemon, ...this.battle.p2.pokemon] as Array<{ moveSlots: Array<{ id: string; pp: number; maxpp: number }> }>) {
+      for (const slot of p.moveSlots) { const base = Dex.moves.get(slot.id).pp; if (base) { slot.maxpp = base; slot.pp = base } }
+    }
     // carry over the damage the Pokémon already have
     this.applyHp(this.battle.p1.pokemon as never, this.team1)
     this.applyHp(this.battle.p2.pokemon as never, this.team2)
@@ -265,8 +269,9 @@ export class BattleSession {
     const moves: MoveOption[] = (req.active?.[0]?.moves ?? [])
       .filter((m) => m.move !== EXTRA)
       .map((m) => {
-        const live = (this.battle.p1.active[0] as { moveSlots?: Array<{ id: string; pp: number }> } | undefined)?.moveSlots?.find((x) => x.id === m.id)?.pp ?? m.pp // (the first request was written before the saved power points were applied)
-        return { name: m.move, id: m.id, pp: live, maxpp: m.maxpp, disabled: !!m.disabled || live <= 0, type: Dex.moves.get(m.id).type }
+        const slot = (this.battle.p1.active[0] as { moveSlots?: Array<{ id: string; pp: number; maxpp: number }> } | undefined)?.moveSlots?.find((x) => x.id === m.id)
+        const live = slot?.pp ?? m.pp // (the first request was written before the saved power points were applied)
+        return { name: m.move, id: m.id, pp: live, maxpp: slot?.maxpp ?? m.maxpp, disabled: !!m.disabled || live <= 0, type: Dex.moves.get(m.id).type }
       })
     const r: Request = { forceSwitch: !!req.forceSwitch?.[0], wait: !!req.wait, moves, bench, trapped: !!req.active?.[0]?.trapped }
     for (const l of this.reqListeners) l(r)
