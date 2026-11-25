@@ -2,10 +2,11 @@ import { useState } from 'react'
 import { ITEMS, ITEM_LIST, type ItemDef } from '../data/items'
 import { DsScreen, DsText, dsK } from './DsScreen'
 import ItemIcon from './ItemIcon'
+import { itemDesc, useLang } from '../i18n'
 
 export const POCKETS = [
   { name: 'Items', bg: 'bag:dark', kinds: ['stone', 'held', 'passive'] },
-  { name: 'Medicine', bg: 'bag:blue', kinds: ['heal', 'revive', 'vitamin', 'candy'] },
+  { name: 'Medicine', bg: 'bag:blue', kinds: ['heal', 'revive', 'vitamin', 'candy', 'pp'] },
   { name: 'Poké Balls', bg: 'bag:red', kinds: ['ball'] },
 ]
 
@@ -23,6 +24,7 @@ export default function BagScreen({ bag, pockets, canUse, onUse, onClose, only, 
   title?: string
   describe?: (d: ItemDef) => string | null // extra line under the description (for example the catch chance)
 }) {
+  useLang()
   const shown = pockets ?? [0, 1, 2]
   const [pocket, setPocket] = useState(shown[shown.length - 1])
   const [sel, setSel] = useState<string | null>(null)
@@ -45,7 +47,7 @@ export default function BagScreen({ bag, pockets, canUse, onUse, onClose, only, 
             <DsText x={6} y={4} K={K} size={8}>{cur.name}</DsText>
             <DsText x={150} y={4} w={56} K={K} size={8} align="right">x{bag[cur.id]}</DsText>
             <span style={{ position: 'absolute', left: 6 * K, top: 14 * K }}><ItemIcon name={cur.id} size={24 * K} /></span>
-            <div style={{ position: 'absolute', left: 34 * K, top: 14 * K, width: 170 * K, color: '#fff', fontWeight: 600, fontSize: 7 * K, lineHeight: 1.3, textShadow: '1px 1px 0 rgba(0,0,0,.55)' }}>{cur.desc}{describe?.(cur) ? ` ${describe(cur)}` : ''}</div>
+            <div style={{ position: 'absolute', left: 34 * K, top: 14 * K, width: 170 * K, color: '#fff', fontWeight: 600, fontSize: 7 * K, lineHeight: 1.3, textShadow: '1px 1px 0 rgba(0,0,0,.55)' }}>{itemDesc(cur.name, cur.desc)}{describe?.(cur) ? ` ${describe(cur)}` : ''}</div>
           </>
         ) : (
           <DsText x={8} y={20} K={K} size={7.5}>{bag && Object.values(bag).some((n) => n > 0) ? 'Nothing in this pocket.' : 'Your bag is empty. Look for Poké Balls on the ground!'}</DsText>

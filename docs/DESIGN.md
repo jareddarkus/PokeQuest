@@ -215,3 +215,12 @@ Next ideas if this is picked up again: (1) the "!" emote for trainers spotting t
 - Bag: shared `ui/BagScreen.tsx` (description box on top, dark list rows, pockets at the bottom), also used inside battles. HP/EXP gauges moved clear of their labels. Follower: animated game-file sprite (canvas) or Showdown pixel picture (page element).
 - Animation parts of other poses are now placed from the table (Oshawott fixed); `?animtest&frames` lists animations whose body pieces split (not fully reviewed).
 - NOT verified: run-animation frame timing (the files hold only textures; the timing is in game code), the follower in the browser, Spanish on every screen, all 649 animations after the pose fix.
+
+### Review round 8 (2026-11-25)
+- "Cannot move": a trainer that spots you while none of your Pokémon can fight kept re-spotting you (the "!" freeze) -> `canBattle` prop: trainers leave you alone then. The frame loop is now rescheduled FIRST in every frame, and a follower error is caught, so one error can no longer freeze the game for good.
+- Running pictures change once per tile (half as often): foot, upright, other foot, upright (`me.cycle`).
+- Crates: 5 DIFFERENT items each; the new PP restorer (Elixir, official Spanish text, icon = picture 58 + colours 61) is in ~70 % of crates (max 1). PP now persists between battles (`Mon.pp`, applied in `BattleSession.start`, saved in `syncBack`). Crates are pushed towards the camera (not buried) except on sand.
+- Battle pacing about 1.8x slower. Hovering (or long-pressing on a phone) a move shows type, kind, power, accuracy and its official description (`ui/DsMenu.tsx` `MoveInfoCard`, texts from PokeAPI in `data/es_desc.json`).
+- Summary: a top screen (summary panel map 69) with the Pokémon, types, HP, ability + description and item; pages Info / Stats / Moves below; the nature shows what it does ("Pícara (+Ataque, −Def. Esp.)"); the IV / EV bars are folded away. Spanish descriptions of moves, abilities and items are the official PokeAPI texts.
+- NOTE: the production preview (`vite preview`) hung the sandbox browser even for older commits, so the production build could not be checked here; the development server works.
+- RomMeta.version 36.

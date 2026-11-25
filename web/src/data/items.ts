@@ -1,6 +1,6 @@
 import type { StatId } from './dex'
 
-export type ItemKind = 'ball' | 'heal' | 'revive' | 'stone' | 'vitamin' | 'held' | 'candy' | 'passive'
+export type ItemKind = 'ball' | 'heal' | 'revive' | 'stone' | 'vitamin' | 'held' | 'candy' | 'passive' | 'pp'
 
 export interface ItemDef {
   id: string
@@ -27,6 +27,7 @@ export const ITEM_LIST: ItemDef[] = [
   { id: 'Max Potion', name: 'Max Potion', kind: 'heal', desc: 'Restores all HP.', heal: 999 },
   { id: 'Revive', name: 'Revive', kind: 'revive', desc: 'Revives a fainted Pokémon with half its HP.', heal: 0.5 },
   { id: 'Max Revive', name: 'Max Revive', kind: 'revive', desc: 'Revives a fainted Pokémon with all its HP.', heal: 1 },
+  { id: 'Elixir', name: 'Elixir', kind: 'pp', desc: 'Restores 10 PP to every move of a Pokémon.' },
   { id: 'Rare Candy', name: 'Rare Candy', kind: 'candy', desc: 'Raises a Pokémon by one level.' },
   { id: 'Exp Share', name: 'Exp. Share', kind: 'passive', desc: 'While in your bag, your whole team earns experience.' },
   { id: 'HP Up', name: 'HP Up', kind: 'vitamin', desc: 'Raises HP EVs by 10 (up to 100).', stat: 'hp' },
@@ -69,19 +70,21 @@ export function itemPool(ring: number): Pool {
   }
 }
 
-/** A Poké Ball on the ground gives 5 random items, chosen for the ring you are in. */
+/**
+ * A crate (the Poké Ball lying on the ground) holds 5 DIFFERENT items, chosen for the ring you are in. The PP restorer (Elixir) is in
+ * about 7 crates out of 10, never more than one per crate.
+ */
 export function rollPickup(ring: number, rng: () => number): Record<string, number> {
-  const pool = itemPool(ring)
-  const total = pool.reduce((a, [, w]) => a + w, 0)
+  const pool = itemPool(ring).filter(([id]) => id !== 'Elixir')
   const out: Record<string, number> = {}
-  for (let i = 0; i < 5; i++) {
+  if (rng() < 0.7) out['Elixir'] = 1
+  while (Object.keys(out).length < 5 && pool.length) {
+    const total = pool.reduce((a, [, w]) => a + w, 0)
     let r = rng() * total
-    let pick = pool[0][0]
-    for (const [id, w] of pool) {
-      r -= w
-      if (r <= 0) { pick = id; break }
-    }
-    out[pick] = (out[pick] ?? 0) + 1
+    let k = 0
+    for (let i = 0; i < pool.length; i++) { r -= pool[i][1]; if (r <= 0) { k = i; break } }
+    out[pool[k][0]] = 1
+    pool.splice(k, 1) // each item only once in a crate
   }
   return out
 }

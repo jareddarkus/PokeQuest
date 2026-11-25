@@ -89,4 +89,4 @@ export async function decodeItemIcons(narcData: Uint8Array, put: (id: number, bl
 }
 
 /** [picture file, colour file] pairs found by comparing with the game's own item pictures: Super Potion, Hyper Potion, Max Potion, Iron, Calcium, Zinc, Carbos */
-export const EXTRA_ICONS: Array<[number, number]> = [[24, 37], [24, 36], [33, 35], [85, 87], [85, 89], [85, 94], [85, 88]]
+export const EXTRA_ICONS: Array<[number, number]> = [[24, 37], [24, 36], [33, 35], [85, 87], [85, 89], [85, 94], [85, 88], [58, 61]]

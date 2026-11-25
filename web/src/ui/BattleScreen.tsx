@@ -127,13 +127,13 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, onEnd }:
         case 'text':
           if (/super effective/i.test(ev.text)) void music.playSfx('se:hitStrong')
           else if (/not very effective/i.test(ev.text)) void music.playSfx('se:hitWeak')
-          setText(ev.text); await sleep(950); break
+          setText(ev.text); await sleep(1800); break
         case 'switch': {
           const s: Side = { uid: ev.uid, species: ev.species, level: ev.level, hp: ev.hp, maxHp: ev.maxHp, shiny: ev.shiny, fainted: false }
           if (ev.side === 'p1') setMe(s); else setFoe(s)
           hpOf.current[ev.uid] = ev.hp
           void music.cry(dexNum(ev.species))
-          await sleep(500)
+          await sleep(1100)
           break
         }
         case 'hp': {
@@ -142,7 +142,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, onEnd }:
           if (ev.uid in hpOf.current && ev.hp < hpOf.current[ev.uid]) void music.playSfx('se:hit')
           else if (ev.uid in hpOf.current && ev.hp > hpOf.current[ev.uid]) void music.playSfx('se:heal')
           hpOf.current[ev.uid] = ev.hp
-          await sleep(550)
+          await sleep(1000)
           break
         }
         case 'status': {
@@ -158,22 +158,22 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, onEnd }:
           const contact = mv.category === 'Physical' && !!mv.flags.contact
           const selfT = mv.target === 'self' || mv.target === 'allySide' || mv.target === 'allies' || mv.target === 'adjacentAllyOrSelf'
           const hitSide = ev.side === 'p1' ? 'foe' : 'me'
-          if (contact) { setLunge(ev.side === 'p1' ? 'me' : 'foe'); await sleep(130) }
+          if (contact) { setLunge(ev.side === 'p1' ? 'me' : 'foe'); await sleep(250) }
           if (fx?.ready && L) {
             const centre = (a: { x: number; y: number; w: number }) => ({ x: a.x, y: a.y + a.w * 0.1 - a.w * 0.38 })
             const from = ev.side === 'p1' ? L.me : L.foe, to = ev.side === 'p1' ? L.foe : L.me
             await fx.play({ type: mv.type, category: mv.category as 'Physical' | 'Special' | 'Status', contact, name: mv.name, selfTarget: selfT }, centre(from), centre(to), to.w * 0.85)
-          } else if (!contact) await sleep(260)
+          } else if (!contact) await sleep(500)
           setLunge(null)
-          if (mv.category !== 'Status') { setShake(hitSide); await sleep(280); setShake(null) } else await sleep(350)
-          await sleep(fx?.ready ? 350 : 0)
+          if (mv.category !== 'Status') { setShake(hitSide); await sleep(450); setShake(null) } else await sleep(600)
+          await sleep(fx?.ready ? 800 : 300)
           break
         }
         case 'faint': {
           const upd = (s: Side | null): Side | null => (s && s.uid === ev.uid ? { ...s, fainted: true, hp: 0 } : s)
           if (ev.side === 'p1') setMe(upd); else setFoe(upd)
           void music.playSfx('se:faint')
-          await sleep(700)
+          await sleep(1400)
           break
         }
         case 'win': endedRef.current = true; await finish(ev.side); break

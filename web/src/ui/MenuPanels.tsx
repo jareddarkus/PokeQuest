@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  NATURES, STAT_IDS, STAT_NAMES, allSpecies, learnableMoves, maxHp, moveInfo, natureMods, speciesTypes, statsOf, type Mon,
+  NATURES, STAT_IDS, STAT_NAMES, allSpecies, dexNum, learnableMoves, maxHp, moveInfo, natureMods, speciesTypes, statsOf, type Mon,
 } from '../data/dex'
 import { ITEMS } from '../data/items'
 import {
@@ -8,11 +8,13 @@ import {
 } from '../game/state'
 import { TYPE_COLOR, type PType } from '../game/world'
 import HpBar from './HpBar'
+import ItemIcon from './ItemIcon'
 import MonSprite, { MonIcon } from './MonSprite'
 import StatBars from './StatBars'
 import TypePlate from './TypePlate'
 import { DsScreen, DsText, dsK } from './DsScreen'
 import PartyScreen from './PartyScreen'
+import { abilityDesc, moveDesc, useLang, CATEGORY } from '../i18n'
 import BagScreen from './BagScreen'
 import { useUiUrl } from './CmdButton'
 
@@ -23,24 +25,6 @@ interface PanelProps {
   onMessage: (text: string) => void
 }
 
-function HpLine({ m }: { m: Mon }) {
-  const mx = maxHp(m)
-  return (
-    <div className="hpline">
-      <HpBar hp={m.hp} max={mx} scale={2} />
-      <span>{m.hp}/{mx}</span>
-    </div>
-  )
-}
-function TypeChips({ species }: { species: string }) {
-  return (
-    <span className="chips">
-      {speciesTypes(species).map((t) => (
-        <TypePlate key={t} type={t} scale={1.5} />
-      ))}
-    </span>
-  )
-}
 /** The stats page drawn on the game's own summary background: labels on the black column (red = the nature raises it, blue = lowers it), numbers on the white panel. */
 function StatsScreen({ mon }: { mon: Mon }) {
   const K = dsK(2)
@@ -57,10 +41,40 @@ function StatsScreen({ mon }: { mon: Mon }) {
             <span style={{ position: 'absolute', left: 140 * K, top: (11 + i * 14.6) * K, width: Math.min(56, (st[id] / 400) * 56 + 4) * K, height: 3 * K, background: id === 'hp' ? '#2fdc5a' : '#4a90e0' }} />
           </div>
         ))}
-        <DsText x={12} y={113} K={K} color="#181820">{mon.nature} nature</DsText>
+        <DsText x={12} y={113} K={K} color="#181820" size={7}>{natureText(mon.nature)}</DsText>
         <DsText x={12} y={125} K={K}>{mon.ability}</DsText>
-        <DsText x={60} y={158} w={100} K={K} color="#fff" size={7}>EXP {mon.exp}  next {Math.max(0, hi - mon.exp)}</DsText>
+        <DsText x={164} y={156} K={K} color="#181820" size={6.5}>Exp {mon.exp}</DsText>
+        <DsText x={164} y={167} K={K} color="#181820" size={6.5}>Next lv. {Math.max(0, hi - mon.exp)}</DsText>
         <span style={{ position: 'absolute', left: 55 * K, top: 168 * K, width: 95 * K * Math.max(0, Math.min(1, (mon.exp - lo) / Math.max(1, hi - lo))), height: 2 * K, background: '#38b6f5' }} />
+      </DsScreen>
+    </div>
+  )
+}
+
+/** "Relaxed (+Defense, −Speed)": what the nature does to the Pokémon. */
+function natureText(nature: string): string {
+  const nm = natureMods(nature)
+  return nm.plus ? `${nature} (+${STAT_NAMES[nm.plus]}, −${STAT_NAMES[nm.minus!]})` : `${nature} (neutral)`
+}
+
+/** The top screen of the summary: the Pokémon, its name, types, HP, ability and item (on the game's dark summary panel). */
+function TopScreen({ mon }: { mon: Mon }) {
+  const K = dsK(2)
+  useLang()
+  const mx = maxHp(mon)
+  return (
+    <div style={{ display: 'flex', justifyContent: 'center' }}>
+      <DsScreen bg="sum:top" K={K}>
+        <span style={{ position: 'absolute', left: 6 * K, top: 38 * K, width: 80 * K, height: 80 * K, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}><MonSprite species={mon.species} shiny={mon.shiny} scale={K * 0.9} animated /></span>
+        <DsText x={92} y={12} K={K} size={11}>{mon.species}{mon.shiny ? ' ★' : ''}</DsText>
+        <DsText x={92} y={28} K={K} size={8}>Lv{mon.level}  {mon.gender === 'M' ? '♂' : mon.gender === 'F' ? '♀' : ''}</DsText>
+        <span style={{ position: 'absolute', left: 92 * K, top: 42 * K, display: 'flex', gap: 3 * K }}>{speciesTypes(mon.species).map((t) => <TypePlate key={t} type={t} scale={K * 0.7} />)}</span>
+        <span style={{ position: 'absolute', left: 92 * K, top: 58 * K }}><HpBar hp={mon.hp} max={mx} scale={K} /></span>
+        <DsText x={92} y={70} w={120} K={K} size={7.5} align="right">{mon.hp}/{mx}</DsText>
+        <DsText x={92} y={86} K={K} size={7.5} color="#ffd84a">{mon.ability}</DsText>
+        <div style={{ position: 'absolute', left: 92 * K, top: 96 * K, width: 156 * K, color: '#fff', fontSize: 6.5 * K, lineHeight: 1.3, fontWeight: 600 }}>{abilityDesc(mon.ability)}</div>
+        <DsText x={92} y={150} K={K} size={7.5}>{mon.item ? mon.item : '—'}</DsText>
+        {mon.item && <span style={{ position: 'absolute', left: 78 * K, top: 146 * K }}><ItemIcon name={mon.item} size={12 * K} /></span>}
       </DsScreen>
     </div>
   )
@@ -69,16 +83,15 @@ function StatsScreen({ mon }: { mon: Mon }) {
 /** The info page on the game's own summary background: a dark band with the name, then a white panel with rows. */
 function InfoScreen({ mon }: { mon: Mon }) {
   const K = dsK(2)
-  const nm = natureMods(mon.nature)
-  const lo = mon.level ** 3, hi = (mon.level + 1) ** 3
+  const hi = (mon.level + 1) ** 3
   const rows: Array<[string, string]> = [
-    ['Nature', nm.plus ? `${mon.nature} (+${STAT_NAMES[nm.plus]}, −${STAT_NAMES[nm.minus!]})` : `${mon.nature} (neutral)`],
+    ['Dex No.', `#${dexNum(mon.species)}`],
+    ['Type', speciesTypes(mon.species).join(' / ')],
+    ['Nature', natureText(mon.nature)],
     ['Ability', mon.ability],
     ['Held item', mon.item || 'none'],
-    ['Type', speciesTypes(mon.species).join(' / ')],
     ['Exp. points', String(mon.exp)],
     ['To next level', String(Math.max(0, hi - mon.exp))],
-    ['Level', `${mon.level} (from ${lo})`],
   ]
   return (
     <div style={{ display: 'flex', justifyContent: 'center', margin: '8px 0' }}>
@@ -98,6 +111,7 @@ function InfoScreen({ mon }: { mon: Mon }) {
 /** The moves page on the game's own summary background (tap a move to replace it). */
 function MovesScreen({ mon, pickFor, onPick }: { mon: Mon; pickFor: number | null; onPick: (i: number) => void }) {
   const K = dsK(2)
+  const lang = useLang()
   const cur = moveInfo(mon.moves[pickFor ?? 0] ?? mon.moves[0])
   return (
     <div style={{ display: 'flex', justifyContent: 'center', margin: '8px 0' }}>
@@ -114,7 +128,8 @@ function MovesScreen({ mon, pickFor, onPick }: { mon: Mon; pickFor: number | nul
             </button>
           )
         })}
-        <DsText x={42} y={162} K={K} size={7} color="#181820">{cur.type} · {cur.category} · {cur.power ? `Power ${cur.power}` : 'no power'}</DsText>
+        <DsText x={42} y={150} K={K} size={7} color="#181820">{cur.type} · {lang === 'es' ? CATEGORY[cur.category] ?? cur.category : cur.category} · {cur.power ? `Power ${cur.power}` : 'no power'}</DsText>
+        <div style={{ position: 'absolute', left: 42 * K, top: 160 * K, width: 160 * K, color: '#181820', fontSize: 6 * K, lineHeight: 1.25, fontWeight: 600, overflow: 'hidden', height: 30 * K }}>{moveDesc(mon.moves[pickFor ?? 0] ?? mon.moves[0])}</div>
       </DsScreen>
     </div>
   )
@@ -132,15 +147,7 @@ export function Summary({ mon, onChange, onBack }: { mon: Mon; onChange: (m: Mon
 
   return (
     <div className="summary">
-      <div className="summary-head">
-        <MonSprite species={mon.species} shiny={mon.shiny} scale={1.6} />
-        <div>
-          <h2>{mon.species}{mon.shiny ? ' ★' : ''}</h2>
-          <div className="muted">Lv {mon.level} · {mon.gender === 'M' ? '♂' : mon.gender === 'F' ? '♀' : '—'} · Exp {mon.exp}</div>
-          <TypeChips species={mon.species} />
-          <HpLine m={mon} />
-        </div>
-      </div>
+      <TopScreen mon={mon} />
 
       <div className="btn-row">
         {(['info', 'stats', 'moves'] as const).map((p) => (
@@ -151,8 +158,11 @@ export function Summary({ mon, onChange, onBack }: { mon: Mon; onChange: (m: Mon
       {page === 'stats' && (
         <>
           <StatsScreen mon={mon} />
-          <StatBars mon={mon} />
-          <div className="muted">Total EVs {evTotal} / 510</div>
+          <details style={{ margin: '6px 0' }}>
+            <summary className="muted" style={{ cursor: 'pointer' }}>IV / EV</summary>
+            <StatBars mon={mon} />
+            <div className="muted">Total EVs {evTotal} / 510</div>
+          </details>
         </>
       )}
       {page === 'moves' && <MovesScreen mon={mon} pickFor={pickFor} onPick={(i) => setPickFor(pickFor === i ? null : i)} />}
@@ -234,6 +244,12 @@ export function BagPanel({ trainer, setTrainer, onClose, onMessage }: PanelProps
       const r = useVitamin(m, def.stat!)
       if (!r) { onMessage('It would have no effect.'); return }
       upd = r; msg = `${m.species}'s ${STAT_NAMES[def.stat!]} EVs went up!`
+    } else if (def.kind === 'pp') {
+      // Elixir: 10 PP back for every move (a move's most is its base PP x 8/5, like with three PP Ups)
+      const most = m.moves.map((mv) => Math.floor((moveInfo(mv).pp * 8) / 5))
+      const now = m.moves.map((_, i) => m.pp?.[i] ?? most[i])
+      if (now.every((v, i) => v >= most[i])) { onMessage('It would have no effect.'); return }
+      upd = { ...m, pp: now.map((v, i) => Math.min(most[i], v + 10)) }; msg = `${m.species}'s moves got their PP back!`
     } else if (def.kind === 'candy') {
       if (m.level >= 100) { onMessage('It would have no effect.'); return }
       upd = rareCandy(m); msg = `${m.species} grew to level ${upd.level}!`
@@ -255,7 +271,7 @@ export function BagPanel({ trainer, setTrainer, onClose, onMessage }: PanelProps
     if (!(trainer.bag[itemId] > 1)) setItemId(null)
   }
 
-  const needsTarget = (id: string) => ['heal', 'revive', 'vitamin', 'candy', 'stone', 'held'].includes(ITEMS[id].kind)
+  const needsTarget = (id: string) => ['heal', 'revive', 'vitamin', 'candy', 'stone', 'held', 'pp'].includes(ITEMS[id].kind)
 
   const K = dsK(3)
   return (

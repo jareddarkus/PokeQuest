@@ -34,7 +34,7 @@ export async function decodeScreens(bagNarc: Uint8Array, sumNarc: Uint8Array, pa
   let n = 0
   const jobs: Array<[string, Uint8Array[], number, number, number]> = []
   const bag = parseNarc(bagNarc), sum = parseNarc(sumNarc)
-  jobs.push(['screen:bag:red', bag, 2, 0, 1], ['screen:bag:blue', bag, 5, 3, 4], ['screen:bag:dark', bag, 7, 6, 8], ['screen:sum:stats', sum, 65, 10, 1], ['screen:sum:info', sum, 66, 12, 3], ['screen:sum:moves', sum, 75, 12, 3])
+  jobs.push(['screen:bag:red', bag, 2, 0, 1], ['screen:bag:blue', bag, 5, 3, 4], ['screen:bag:dark', bag, 7, 6, 8], ['screen:sum:stats', sum, 65, 10, 1], ['screen:sum:info', sum, 66, 12, 3], ['screen:sum:moves', sum, 75, 12, 3], ['screen:sum:top', sum, 69, 12, 3])
   for (const [name, files, scr, chr, pal] of jobs) {
     const colours = paletteOf(files[pal])
     if (!colours) continue

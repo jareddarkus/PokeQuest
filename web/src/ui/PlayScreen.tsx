@@ -227,6 +227,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
         events={events}
         handleRef={handleRef}
         paused={panel !== null || battle !== null || waiting}
+        canBattle={trainer.team.some((m) => m.hp > 0)}
         follower={trainer.team[0] && trainer.team[0].hp > 0 ? { species: trainer.team[0].species, shiny: !!trainer.team[0].shiny } : null}
       />
 

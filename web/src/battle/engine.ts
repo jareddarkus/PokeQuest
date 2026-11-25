@@ -86,6 +86,7 @@ export class BattleSession {
     // carry over the damage the Pokémon already have
     this.applyHp(this.battle.p1.pokemon as never, this.team1)
     this.applyHp(this.battle.p2.pokemon as never, this.team2)
+    this.applyPp(this.battle.p1.pokemon as never)
     this.battle.sendUpdates()
     // the first "switch in" lines were written with full HP: correct the bars
     const fix: BattleEvent[] = []
@@ -97,6 +98,15 @@ export class BattleSession {
   }
 
   private flush() { if (!this.destroyed) this.battle.sendUpdates() }
+
+  /** carry over the power points the Pokémon have left from earlier battles */
+  private applyPp(list: Array<{ name: string; moveSlots: Array<{ pp: number; maxpp: number }> }>) {
+    for (const p of list) {
+      const m = this.team1.find((q) => q.uid === p.name)
+      if (!m?.pp) continue
+      m.moves.forEach((_, j) => { const slot = p.moveSlots[j]; if (slot && m.pp![j] !== undefined) slot.pp = Math.max(0, Math.min(slot.maxpp, m.pp![j])) })
+    }
+  }
 
   private applyHp(list: Array<{ name: string; hp: number; maxhp: number; fainted: boolean }>, team: Mon[]) {
     for (const p of list) {
@@ -243,7 +253,10 @@ export class BattleSession {
     })
     const moves: MoveOption[] = (req.active?.[0]?.moves ?? [])
       .filter((m) => m.move !== EXTRA)
-      .map((m) => ({ name: m.move, id: m.id, pp: m.pp, maxpp: m.maxpp, disabled: !!m.disabled, type: Dex.moves.get(m.id).type }))
+      .map((m) => {
+        const live = (this.battle.p1.active[0] as { moveSlots?: Array<{ id: string; pp: number }> } | undefined)?.moveSlots?.find((x) => x.id === m.id)?.pp ?? m.pp // (the first request was written before the saved power points were applied)
+        return { name: m.move, id: m.id, pp: live, maxpp: m.maxpp, disabled: !!m.disabled || live <= 0, type: Dex.moves.get(m.id).type }
+      })
     const r: Request = { forceSwitch: !!req.forceSwitch?.[0], wait: !!req.wait, moves, bench, trapped: !!req.active?.[0]?.trapped }
     for (const l of this.reqListeners) l(r)
   }
@@ -321,9 +334,9 @@ export class BattleSession {
 
   /** copy the final HP of every Pokémon back to our own records */
   syncBack() {
-    for (const p of this.battle.p1.pokemon as Array<{ name: string; hp: number }>) {
+    for (const p of this.battle.p1.pokemon as Array<{ name: string; hp: number; moveSlots: Array<{ pp: number }> }>) {
       const m = this.team1.find((q) => q.uid === p.name)
-      if (m) m.hp = Math.max(0, p.hp)
+      if (m) { m.hp = Math.max(0, p.hp); m.pp = m.moves.map((_, j) => p.moveSlots[j]?.pp ?? 0) }
     }
   }
 

@@ -3,6 +3,9 @@
 // only the names that differ from English). The sentences are translated by the dictionary and the patterns below; the page's visible
 // text is translated as it appears (a small observer), so every screen is covered without touching each component.
 import es from './data/es.json'
+import esDesc from './data/es_desc.json'
+import { Dex } from '@pkmn/sim'
+import { useSyncExternalStore } from 'react'
 
 export type Lang = 'es' | 'en'
 let lang: Lang = 'es'
@@ -52,6 +55,10 @@ const DICT: Record<string, string> = {
   'Reading the island map…': 'Leyendo el mapa de la isla…', 'Reading the item icons…': 'Leyendo los iconos de objetos…', 'Reading the menu icons…': 'Leyendo los iconos del menú…',
   'Reading the move effects…': 'Leyendo los efectos de movimientos…', 'Reading the music…': 'Leyendo la música…', 'Reading the trainer colours…': 'Leyendo los colores de los entrenadores…',
   'Reading the walking characters…': 'Leyendo los personajes…',
+  'Sp. Atk': 'At. Esp.', 'Sp. Def': 'Def. Esp.', 'Speed': 'Velocidad', 'Attack': 'Ataque', 'Defense': 'Defensa', 'Next lv.': 'Sig. nv.',
+  'Dex No.': 'Nº Pokédex', 'IV / EV': 'IV / EV', 'Any Pokémon from any generation. It starts at level 5.': 'Cualquier Pokémon de cualquier generación. Empieza en el nivel 5.',
+  'Pick a Pokémon': 'Elige un Pokémon', 'Restores 10 PP to every move of a Pokémon.': 'Restaura 10 PP de todos los movimientos de un Pokémon.',
+  'Heal': 'Curar', 'Yes': 'Sí', 'No': 'No', 'OK': 'Aceptar',
   // menus
   'Menu': 'Menú', 'Team': 'Equipo', 'Bag': 'Mochila', 'PC': 'PC', 'Chat': 'Chat', 'Exit': 'Salir', 'Close': 'Cerrar', 'Back': 'Atrás', 'Use': 'Usar', 'Send': 'Enviar',
   'Items': 'Objetos', 'Medicine': 'Medicinas', 'Poké Balls': 'Poké Balls', 'Your team': 'Tu equipo', 'Pick a Pokémon to see its summary': 'Elige un Pokémon para ver su resumen',
@@ -110,11 +117,11 @@ const PATTERNS: Array<[RegExp, string | ((...m: string[]) => string)]> = [
   [/^(.+) wants to learn (.+)$/, '$1 quiere aprender $2'], [/^Forget (.+)$/, 'Olvidar $1'], [/^Don't learn (.+)$/, 'No aprender $1'], [/^Replace (.+) with…$/, 'Reemplazar $1 por…'],
   [/^(.+) was healed\.$/, '$1 ha sido curado.'], [/^(.+) was revived!$/, '¡$1 ha revivido!'], [/^(.+) is now holding (.+)\.$/, '$1 lleva ahora $2.'],
   [/^(.+)'s (.+) EVs went up!$/, '¡Los EV de $2 de $1 han subido!'],
-  [/^Converting Pokémon (\d+) of (\d+)…$/, 'Convirtiendo Pokémon $1 de $2…'], [/^Ring (\d+)$/, 'Anillo $1'], [/^Next band falls in (\d+)s · island radius (\d+)$/, 'La siguiente franja cae en $1 s · radio de la isla $2'],
+  [/^(.+)'s moves got their PP back!$/, '¡Los movimientos de $1 han recuperado PP!'], [/^(\d+)s left!$/, '¡Quedan $1 s!'], [/^Converting Pokémon (\d+) of (\d+)…$/, 'Convirtiendo Pokémon $1 de $2…'], [/^Ring (\d+)$/, 'Anillo $1'], [/^Next band falls in (\d+)s · island radius (\d+)$/, 'La siguiente franja cae en $1 s · radio de la isla $2'],
   [/^Team (\d+)\/(\d+) fit · (\d+) Poké Balls?$/, 'Equipo $1/$2 en forma · $3 Poké Balls'], [/^The match begins in (\d+) seconds\. Everybody is picking a starter…$/, 'La partida empieza en $1 segundos. Todos están eligiendo un inicial…'],
   [/^Gym Leader (.+)$/, 'Líder de gimnasio $1'], [/^Trainer (.+)$/, 'Entrenador $1'], [/^(.+) nods: you already beat this gym\.$/, '$1 asiente: ya has vencido este gimnasio.'],
   [/^You beat (.+)! You were taken to ring (\d+)\.$/, '¡Has vencido a $1! Has sido llevado al anillo $2.'], [/^Choose (.+)$/, 'Elegir a $1'], [/^Use (.+) on…$/, 'Usar $1 en…'],
-  [/^Catch chance about (\d+)%\.$/, 'Probabilidad de captura: aprox. $1%.'], [/^(\d+) players?$/, '$1 jugadores'], [/^Lv ?(\d+)$/, 'Nv$1'], [/^Lv\. ?(\d+)$/, 'Nv. $1'], [/^Lv (\d+) · /, 'Nv $1 · '], [/^Exp (\d+)  next (\d+)$/, 'Exp $1  siguiente $2'], [/^EXP (\d+)  next (\d+)$/, 'EXP $1  siguiente $2'],
+  [/^Catch chance about (\d+)%\.$/, 'Probabilidad de captura: aprox. $1%.'], [/^(\d+) players?$/, '$1 jugadores'], [/^Exp (\d+)$/, 'Exp. $1'], [/^Next lv\. (\d+)$/, 'Sig. nv. $1'], [/^Lv ?(\d+)$/, 'Nv$1'], [/^Lv\. ?(\d+)$/, 'Nv. $1'], [/^Lv (\d+) · /, 'Nv $1 · '], [/^Exp (\d+)  next (\d+)$/, 'Exp $1  siguiente $2'], [/^EXP (\d+)  next (\d+)$/, 'EXP $1  siguiente $2'],
   [/^(.+) nature$/, 'Naturaleza $1'], [/^Power (\d+)$/, 'Potencia $1'], [/^Pow (\d+|—)$/, 'Pot. $1'], [/^no power$/, 'sin potencia'],
   [/^Trainer (\S+)$/, 'Entrenador $1'], [/^Team \((\d+)\/6\)$/, 'Equipo ($1/6)'], [/^Your team \((\d+)\/6\)$/, 'Tu equipo ($1/6)'], [/^BOX (\d+)$/, 'CAJA $1'],
 ]
@@ -133,6 +140,7 @@ const trSentence = (raw: string): string => {
     out = parts.length > 1 ? parts.map((x) => (DICT[x] ?? (PATTERNS.find(([re]) => re.test(x)) ? x.replace(PATTERNS.find(([re]) => re.test(x))![0], PATTERNS.find(([re]) => re.test(x))![1] as string) : x))).join(' ') : s
   }
   out = out.replace(/The wild ([A-Z][\w'.\-]*)/g, 'El $1 salvaje').replace(/The foe's ([A-Z][\w'.\-]*)/g, 'El $1 rival').replace(/^the foe's /, 'el rival ')
+  out = out.replace(/\(neutral\)/g, '(neutra)')
   return lead + translateNames(out) + trail
 }
 
@@ -222,3 +230,14 @@ export function startTranslator() {
     }
   }).observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ATTRS })
 }
+
+/** Re-renders a component when the language changes. */
+export function useLang(): Lang {
+  return useSyncExternalStore((f) => { listeners.add(f); return () => { listeners.delete(f) } }, () => lang)
+}
+const D = esDesc as { moves: Record<string, string>; items: Record<string, string>; abilities: Record<string, string> }
+/** What a move does: the official Spanish text, or the short English description. */
+export const moveDesc = (move: string): string => (lang === 'es' ? D.moves[move] : undefined) ?? Dex.moves.get(move).shortDesc ?? ''
+export const itemDesc = (item: string, fallback: string): string => (lang === 'es' ? D.items[item] : undefined) ?? fallback
+export const abilityDesc = (ability: string): string => (lang === 'es' ? D.abilities[ability] : undefined) ?? Dex.abilities.get(ability).shortDesc ?? ''
+export const CATEGORY: Record<string, string> = { Physical: 'Físico', Special: 'Especial', Status: 'Estado' }

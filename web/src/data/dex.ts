@@ -22,6 +22,8 @@ export interface Mon {
   hp: number
   item: string
   friendship: number
+  /** power points left of each move (same order as `moves`); missing = all full */
+  pp?: number[]
 }
 
 export const blankStats = (v = 0): Stats => ({ hp: v, atk: v, def: v, spa: v, spd: v, spe: v })

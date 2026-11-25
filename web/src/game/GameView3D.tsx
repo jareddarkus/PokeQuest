@@ -32,6 +32,8 @@ interface Props {
   paused: boolean
   /** the first Pokémon of your team walks behind you */
   follower?: { species: string; shiny: boolean } | null
+  /** false when all your Pokémon have fainted: trainers do not challenge you then, so you can still walk (to find a Revive) */
+  canBattle?: boolean
 }
 
 const WALK_SECONDS = 16 / 60 // one tile = 16 pictures at 60 a second when walking (like the DS games)
@@ -282,12 +284,13 @@ export default function GameView3D(props: Props) {
       s.renderOrder = 3
       s.position.set(pk.x + 0.5, heightAt(pk.x + 0.5, pk.y + 0.5) + 0.05, pk.y + 0.5)
       scene.add(s)
+      s.userData = { tx: pk.x, ty: pk.y, bs, sand: world.tiles[pk.y * SIZE + pk.x] === T.Sand }
       pickupSprites.set(pk.id, s)
     }
 
     const me = {
       x: propsRef.current.startTile.x, y: propsRef.current.startTile.y, fromX: 0, fromY: 0, t: 1, dir: 0 as Dir, step: 0,
-      stepSec: WALK_SECONDS, run: false, idle: 1, turn: 0,
+      stepSec: WALK_SECONDS, run: false, idle: 1, turn: 0, cycle: 0,
     }
     me.fromX = me.x
     me.fromY = me.y
@@ -472,12 +475,14 @@ export default function GameView3D(props: Props) {
       me.run = me.stepSec === RUN_SECONDS
       me.idle = 0
       me.step ^= 1
+      me.cycle = (me.cycle + 1) % 4
       propsRef.current.events.onMoveStart?.(nx, ny, d)
     }
 
     let raf = 0
     let last = performance.now()
     const tick = (now: number) => {
+      raf = requestAnimationFrame(tick) // first of all, so that one error in a frame can never stop the game for good
       const dt = Math.min(0.05, (now - last) / 1000)
       last = now
       const p = propsRef.current
@@ -560,7 +565,7 @@ export default function GameView3D(props: Props) {
               const sx = n.x + DX[n.dir] * k
               const sy = n.y + DY[n.dir] * k
               if (!isWalkable(world, sx, sy) && tileAt(world, sx, sy) !== T.GymDoor) break
-              if (sx === me.x && sy === me.y && me.t >= 1 && !alert) {
+              if (sx === me.x && sy === me.y && me.t >= 1 && !alert && p.canBattle !== false) { // (trainers leave you alone when none of your Pokémon can fight)
                 const em = owEmote(15) // the game's own "!" bubble
                 if (em && bubble) { alert = { n, t: 0.9 }; bubble.visible = true; break }
                 p.events.onNpcSpotted?.(n.spec.id)
@@ -580,12 +585,23 @@ export default function GameView3D(props: Props) {
       camera.position.set(px + 0.5, ph + Math.sin(CAM_PITCH) * dst, py + 0.5 + Math.cos(CAM_PITCH) * dst)
       camera.lookAt(px + 0.5, ph + 0.6, py + 0.5)
       // walking: the foot picture for the first half of a tile, standing for the second half; the foot changes with every tile
-      mySprite.material = charMaterial(p.look, me.dir, me.t < 1 && me.t < 0.5 ? 1 + me.step : 0, me.run)
+      // walking: the foot picture for the first half of a tile, standing for the second half. Running changes its picture only once per
+      // tile (half as often as before): foot, upright, other foot, upright ...
+      const myFrame = me.t >= 1 ? 0 : me.run ? [1, 0, 2, 0][me.cycle] : me.t < 0.5 ? 1 + me.step : 0
+      mySprite.material = charMaterial(p.look, me.dir, myFrame, me.run)
       fit(mySprite)
       place(mySprite, camera, px + 0.5, ph + lift(mySprite), py + 0.5)
       myShadow.position.set(px + 0.5, ph + 0.03, py + 0.5)
-      // the follower
+      // the crates: on sand they sit a little in the sand; everywhere else they are pushed towards the camera (like the characters) so the ground does not cut them
+      for (const sp of pickupSprites.values()) {
+        const u = sp.userData as { tx: number; ty: number; bs: number; sand: boolean }
+        if (!sp.visible || u.sand || Math.abs(u.tx - me.x) > 16 || Math.abs(u.ty - me.y) > 16) continue
+        sp.scale.set(u.bs, u.bs, 1)
+        place(sp, camera, u.tx + 0.5, heightAt(u.tx + 0.5, u.ty + 0.5) + 0.12, u.ty + 0.5)
+      }
+      // the follower (an error here must never stop the game: the follower is simply dropped)
       const fs = p.follower
+      try {
       if (fs && `${fs.species}|${fs.shiny}` !== fol.key) loadFollower(fs.species, fs.shiny)
       if (!fs && fol.key) { clearFollower(); fol.key = '' }
       fol.stepSec = me.stepSec
@@ -616,6 +632,7 @@ export default function GameView3D(props: Props) {
           fol.dom.wrap.style.transform = `translate(${sx - fol.dom.w / 2}px, ${sy - fol.dom.h}px) scale(${k})`
         }
       }
+      } catch { clearFollower(); fol.key = fs ? `${fs.species}|${fs.shiny}` : ''; fol.mode = 'none' }
       const fr = Math.floor(now / (1000 / 30)) // water pictures: 30 a second (a calm pace; the exact speed of the original is not known)
       for (const a of animatedTextures) a.tex.offset.set(valueAt(a.anim.moveS, fr), valueAt(a.anim.moveT, fr)) // moving water
       for (const n of npcs) {
@@ -661,7 +678,6 @@ export default function GameView3D(props: Props) {
       u.uWarn.value = elapsed !== null && elapsedSec % 15 > 8 ? 1 : 0
 
       renderer.render(scene, camera)
-      raf = requestAnimationFrame(tick)
     }
     raf = requestAnimationFrame(tick)
 
