@@ -109,31 +109,71 @@ function useTypedFrame(type: string): string | null {
 
 export interface MoveView { id: string; name: string; type: string; pp: number; maxpp: number; disabled?: boolean }
 
-function MoveButton({ mv, x, y, S, onClick, onInfo }: { mv: MoveView; x: number; y: number; S: number; onClick: () => void; onInfo: (m: MoveView | null) => void }) {
+/**
+ * The red corner marks around the move that is selected (measured on a picture of the real game: they sit on the four corners of a 129 x 50 frame
+ * around the button; each is a 3 pixel line, pale outline with a crimson middle, with a diagonal corner). 14 x 13 pixels.
+ */
+const CORNER = [
+  '.....WWWWWWWWW',
+  '....WRRRRRRRRW',
+  '...WRWWWWWWWWW',
+  '..WRW.........',
+  '.WRW..........',
+  'WRW...........',
+  'WRW...........',
+  'WRW...........',
+  'WRW...........',
+  'WRW...........',
+  'WRW...........',
+  'WRW...........',
+  'WWW...........',
+]
+function Corner({ S, flipX, flipY, style }: { S: number; flipX?: boolean; flipY?: boolean; style: React.CSSProperties }) {
+  return (
+    <svg width={14 * S} height={13 * S} viewBox="0 0 14 13" shapeRendering="crispEdges" style={{ position: 'absolute', pointerEvents: 'none', transform: `scale(${flipX ? -1 : 1}, ${flipY ? -1 : 1})`, ...style }}>
+      {CORNER.flatMap((row, y) => Array.from(row).map((ch, x) => ch === '.' ? null : <rect key={`${x},${y}`} x={x} y={y} width={1} height={1} fill={ch === 'R' ? '#b02a48' : '#f8e4ec'} />))}
+    </svg>
+  )
+}
+
+function MoveButton({ mv, x, y, S, selected, onSelect, onClick, onInfo }: { mv: MoveView; x: number; y: number; S: number; selected: boolean; onSelect: () => void; onClick: () => void; onInfo: (m: MoveView | null) => void }) {
   const timer = useRef<number | null>(null)
   const longPressed = useRef(false)
   const frame = useTypedFrame(mv.type)
   const off = mv.disabled || mv.pp === 0
+  const pp = `${mv.pp}/${mv.maxpp}`
   return (
+    <>
     <button
       className="ds-move"
       disabled={off}
       onClick={() => { if (longPressed.current) { longPressed.current = false; return } decide(); onClick() }}
-      onMouseEnter={() => onInfo(mv)}
+      onMouseEnter={() => { onSelect(); onInfo(mv) }}
       onMouseLeave={() => onInfo(null)}
       // on a phone: press and hold to read what the move does
-      onPointerDown={(e) => { if (e.pointerType === 'touch') { longPressed.current = false; timer.current = window.setTimeout(() => { longPressed.current = true; onInfo(mv) }, 350) } }}
+      onPointerDown={(e) => { onSelect(); if (e.pointerType === 'touch') { longPressed.current = false; timer.current = window.setTimeout(() => { longPressed.current = true; onInfo(mv) }, 350) } }}
       onPointerUp={(e) => { if (e.pointerType === 'touch') { if (timer.current) window.clearTimeout(timer.current); if (longPressed.current) window.setTimeout(() => onInfo(null), 2500) } }}
       onPointerCancel={() => { if (timer.current) window.clearTimeout(timer.current) }}
       onContextMenu={(e) => e.preventDefault()}
-      style={{ left: x * S, top: y * S, width: 127 * S, height: 46 * S, background: frame ? `url(${frame}) center / 100% 100% no-repeat` : '#222', opacity: off ? 0.45 : 1 }}
+      style={{ left: x * S, top: y * S, width: 127 * S, height: 44 * S, padding: 0, display: 'block', background: frame ? `url(${frame}) center / 100% 100% no-repeat` : '#222', opacity: off ? 0.45 : 1 }}
     >
-      <span className="ds-move-name"><FontText text={nameOf(mv.name)} font={1} k={S} color="#ffffff" shadow="#202028" /></span>
-      <span className="ds-move-meta">
-        <TypePlate type={mv.type} scale={S * 1.0} />
-        <FontText text={`PP ${mv.pp}/${mv.maxpp}`} font={1} k={S} color="#ffffff" shadow="#202028" />
+      {/* the name in the middle (main font), below it: the type label, "PP" and the numbers on the right (positions measured on the real game) */}
+      <span style={{ position: 'absolute', left: 0, right: 0, top: 5 * S, display: 'flex', justifyContent: 'center' }}>
+        <FontText text={nameOf(mv.name)} font={0} k={S} color="#ffffff" shadow="#202028" align="center" />
       </span>
+      <span style={{ position: 'absolute', left: 17 * S, top: 20 * S, lineHeight: 0 }}><TypePlate type={mv.type} scale={S} /></span>
+      <span style={{ position: 'absolute', left: 51 * S, top: 22 * S }}><FontText text="PP" font={2} k={S} color="#ffffff" shadow="#202028" /></span>
+      <span style={{ position: 'absolute', right: 22 * S, top: 20 * S }}><FontText text={pp} font={0} k={S} color="#ffffff" shadow="#202028" align="right" /></span>
     </button>
+    {selected && !off && (
+      <>
+        <Corner S={S} style={{ left: x * S, top: (y - 4) * S }} />
+        <Corner S={S} flipX style={{ left: (x + 129 - 14) * S, top: (y - 4) * S }} />
+        <Corner S={S} flipY style={{ left: x * S, top: (y + 46 - 13) * S }} />
+        <Corner S={S} flipX flipY style={{ left: (x + 129 - 14) * S, top: (y + 46 - 13) * S }} />
+      </>
+    )}
+    </>
   )
 }
 
@@ -237,19 +277,22 @@ export function CommandScreen({ S, onFight, onBag, onPokemon, onRun, closing, pa
   )
 }
 
-/** The move screen: four coloured move buttons and the back arrow. */
-export function MoveScreen({ S, moves, onMove, onBack }: { S: number; moves: MoveView[]; onMove: (i: number) => void; onBack: () => void }) {
+/** The move screen: four coloured move buttons with the red corners on the chosen one, the row of party balls and the back button (bottom right). */
+let lastMoveSlot = 0
+export function MoveScreen({ S, moves, party, onMove, onBack }: { S: number; moves: MoveView[]; party?: Array<'ok' | 'fnt' | 'none'>; onMove: (i: number) => void; onBack: () => void }) {
   const bg = useUiUrl('moves:bg')
   const back = useUiUrl('cmd:back')
-  const pos: Array<[number, number]> = [[0, 26], [129, 26], [0, 76], [129, 76]]
+  const pos: Array<[number, number]> = [[0, 34], [129, 34], [0, 82], [129, 82]]
   const [info, setInfo] = useState<MoveView | null>(null)
+  const [sel, setSel] = useState(Math.min(lastMoveSlot, Math.max(0, moves.length - 1)))
   return (
     <div style={{ position: 'relative' }}>
       <Lower S={S}>
         <div className="ds-screen" style={{ width: 256 * S, height: 192 * S, backgroundImage: bg ? `url(${bg})` : undefined }}>
           <BallHalves S={S} open />
-          {moves.slice(0, 4).map((mv, i) => <MoveButton key={mv.id} mv={mv} x={pos[i][0]} y={pos[i][1]} S={S} onClick={() => onMove(i)} onInfo={setInfo} />)}
-          <button className="ds-btn" aria-label="Back" onClick={() => { cancel(); onBack() }} style={{ left: 88 * S, top: 136 * S, width: 80 * S, height: 44 * S }}>
+          <PartyDots S={S} party={party} />
+          {moves.slice(0, 4).map((mv, i) => <MoveButton key={mv.id} mv={mv} x={pos[i][0]} y={pos[i][1]} S={S} selected={sel === i} onSelect={() => { lastMoveSlot = i; setSel(i) }} onClick={() => onMove(i)} onInfo={setInfo} />)}
+          <button className="ds-btn" aria-label="Back" onClick={() => { cancel(); onBack() }} style={{ left: 176 * S, top: 146 * S, width: 80 * S, height: 44 * S }}>
             {back ? <img src={back} alt="Back" draggable={false} style={{ width: '100%', height: '100%' }} /> : 'Back'}
           </button>
         </div>

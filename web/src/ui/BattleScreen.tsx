@@ -833,7 +833,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
         )}
 
         {mode === 'fight' && req && (
-          <MoveScreen S={S} moves={req.moves} onMove={doMove} onBack={() => { fromFight.current = true; setMode('menu') }} />
+          <MoveScreen S={S} moves={req.moves} party={Array.from({ length: 6 }, (_, i) => { const m = teamRef.current[i]; return m ? (m.hp > 0 ? 'ok' : 'fnt') : 'none' })} onMove={doMove} onBack={() => { fromFight.current = true; setMode('menu') }} />
         )}
 
         {mode === 'switch' && req && (

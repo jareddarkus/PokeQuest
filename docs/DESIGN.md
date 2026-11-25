@@ -356,3 +356,9 @@ Seen in the recording but NOT done: the trainers' battle sprites (the foe traine
 - The battle backdrop now uses the game's own camera positions (from the decompiled battle code): default view, "my side" view, "foe side" view and the wide view. Move scripts that move the camera (attacker/defender views, wide view) now do it, and it goes back to the normal view afterwards.
 - Models are scaled so a platform is 3.8 units in radius; FOV 36. The picture is a 4:3 frame centred on the screen; the lower screen is drawn over the scene.
 - Not done: confusion/infatuation effects, freeze effect mapping is a guess.
+
+## Round 10 — the move screen matches the real game
+- Move buttons drawn at their real size (127 x 44, no stretching), rows at y 34 / 82; name centred in the main font, type label + "PP" + numbers (right-aligned) below.
+- Red corner marks (14 x 13 px each) on the chosen move (the last used one at first; mouse hover / touch moves it).
+- Row of party balls shown on the move screen; the back button is at the bottom right.
+- The corner marks are drawn from a measurement of a picture of the real game, not read from the game file (the sprite was not found in the command archive).
