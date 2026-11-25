@@ -80,6 +80,9 @@ class MusicManager {
   /** The healing sound of the game: one sound, then the next one right after it. */
   heal() { return this.playSfx('be:9', () => { void this.playSfx('be:14') }) }
 
+  /** A sound by its number in the sound archive (the move / effect scripts use these numbers). */
+  playSeq(id: number, then?: () => void) { return this.playSfx(`seq:${id}`, then) }
+
   cry(dex: number) { return this.playSfx(`cry:${dex}`) }
 
   setVolume(v: number) {

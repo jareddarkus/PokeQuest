@@ -57,6 +57,11 @@ export class SplFx {
 
   attach(canvas: HTMLCanvasElement | null) { this.canvas = canvas }
 
+  moveScript(move: number): Uint8Array | null { return this.ready ? this.moveScripts?.[move] ?? null : null }
+  effectScript(index: number): Uint8Array | null { return this.ready ? this.effectScripts?.[index] ?? null : null }
+  /** Makes sure an effect file is parsed (the scripts load them before use). */
+  preload(id: number) { if (this.ready) this.file(id) }
+
   moveEffects(move: number): number[] { return this.ready && this.moveScripts?.[move] ? particleIds(this.moveScripts[move], this.effects!) : [] }
   effectEffects(index: number): number[] { return this.ready && this.effectScripts?.[index] ? particleIds(this.effectScripts[index], this.effects!) : [] }
 
@@ -86,6 +91,29 @@ export class SplFx {
         sys.spawnAll([(start.x - origin.x) / k, -(start.y - origin.y) / k, 0], opts.tint)
         this.sessions.push({ sys, origin, k, track, frame: 0, done: finish, maxFrames: opts.maxFrames ?? 150 })
       }
+      this.run()
+    })
+  }
+
+  /**
+   * Starts ONE effect of a file (`emitter` = which emitter of the file, or all of them) at a place (canvas pixels), optionally flying to another place.
+   * `size` / `radius` / `life` are the script's scale factors. Resolves when the effect has faded out.
+   */
+  emit(id: number, emitter: number | null, from: Pt, to: Pt | null, k: number, opts: { size?: number; radius?: number; life?: number; frames?: number; height?: number } = {}): Promise<void> {
+    if (!this.ready || !this.canvas) return Promise.resolve()
+    const f = this.file(id)
+    if (!f) return Promise.resolve()
+    return new Promise((resolve) => {
+      const sys = new SplSystem(f)
+      const origin = to ?? from
+      const flight = to ? Math.max(1, opts.frames ?? 22) : 0
+      const h = (opts.height ?? 0) * k
+      const track = to ? (frame: number): Pt => { const t = Math.min(1, frame / flight); return { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t - Math.sin(t * Math.PI) * h } } : null
+      const start = track ? track(0) : from
+      const at: [number, number, number] = [(start.x - origin.x) / k, -(start.y - origin.y) / k, 0]
+      const o = { size: opts.size, radius: opts.radius, life: opts.life }
+      if (emitter === null) sys.spawnAll(at, undefined, o); else sys.spawn(emitter, at, undefined, o)
+      this.sessions.push({ sys, origin, k, track, frame: 0, done: resolve, maxFrames: 240 })
       this.run()
     })
   }

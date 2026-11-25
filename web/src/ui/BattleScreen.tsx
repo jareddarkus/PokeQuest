@@ -1,4 +1,5 @@
 import { SplFx } from '../rom/splFx'
+import { runEffScript, FIRST_EFFECT, type EffHost, type Side as MonSide } from '../rom/effVm'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { snap } from './pixel'
 import { BattleSession, type BattleEvent, type Request } from '../battle/engine'
@@ -303,6 +304,8 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
   const fxRef = useRef<MoveFx | null>(null)
   const splRef = useRef<SplFx | null>(null) // the game's own particle effects
   const splCanvas = useRef<HTMLCanvasElement>(null)
+  const dimRef = useRef<HTMLDivElement>(null)
+  const species = useRef<{ me: string; foe: string }>({ me: '', foe: '' })
   const environment = 'grass'
   const [ball, setBall] = useState<null | { shakes: number }>(null)
   const legendaryNames = useMemo(() => new Set(allSpecies().filter((s) => s.legendary).map((s) => s.name)), [])
@@ -337,6 +340,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
           await say(ev.text, 750); break
         case 'switch': {
           const who = ev.side === 'p1' ? 'me' : 'foe'
+          species.current[ev.side === 'p1' ? 'me' : 'foe'] = ev.species
           const s: Side = { uid: ev.uid, species: ev.species, level: ev.level, hp: ev.hp, maxHp: ev.maxHp, shiny: ev.shiny, fainted: false }
           const ballOut = who === 'me' || kind !== 'wild' // trainers' Pokémon (and yours) come out of a Poké Ball; a wild Pokémon just appears
           setHpOn((o) => ({ ...o, [who]: false }))
@@ -372,9 +376,8 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
           if (ev.side === 'p1') setMe(upd); else setFoe(upd)
           if (ev.uid in hpOf.current && ev.hp < hpOf.current[ev.uid]) { void music.playSfx(pendingHit.current ?? 'se:hit'); pendingHit.current = null }
           else if (ev.uid in hpOf.current && ev.hp > hpOf.current[ev.uid]) {
-            void music.heal()
-            const sd = ev.side === 'p1' ? 'me' : 'foe'
-            void playSpl(splRef.current?.effectEffects(45) ?? [], sd, sd).then(() => playSpl(splRef.current?.effectEffects(50) ?? [], sd, sd))
+            const sd: 'me' | 'foe' = ev.side === 'p1' ? 'me' : 'foe'
+            void (async () => { if (!(await runScript('effect', 45, sd, sd))) { void music.heal(); return } await runScript('effect', 50, sd, sd) })() // the game's own healing scripts (sound + effect)
           }
           const before = hpOf.current[ev.uid] ?? ev.hp
           hpOf.current[ev.uid] = ev.hp
@@ -384,10 +387,22 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
         case 'status': {
           const upd = (s: Side | null): Side | null => (s && s.uid === ev.uid ? { ...s, status: ev.status } : s)
           if (ev.side === 'p1') setMe(upd); else setFoe(upd)
+          { // the game's own animation of a status condition (scripts 37 - 44 of the effect archive: found by what their effect files show)
+            const idx: Record<string, number> = { slp: 37, psn: 38, tox: 38, brn: 39, frz: 40, par: 41 }
+            const e = ev.status ? idx[ev.status] : undefined
+            const sd: 'me' | 'foe' = ev.side === 'p1' ? 'me' : 'foe'
+            if (e !== undefined) await runScript('effect', e, sd, sd)
+          }
           break
         }
         case 'move': {
           const num = Dex.moves.get(ev.move).num
+          { // the game's own animation script of this move (camera pauses, effects, sounds with their delays, the hit reaction of the Pokémon)
+            const m0 = Dex.moves.get(ev.move)
+            const self0 = m0.target === 'self' || m0.target === 'allySide' || m0.target === 'allies' || m0.target === 'adjacentAllyOrSelf'
+            const user0: 'me' | 'foe' = ev.side === 'p1' ? 'me' : 'foe'
+            if (num && layoutRef.current && (await runScript('move', num, user0, self0 ? user0 : user0 === 'me' ? 'foe' : 'me'))) { await sleep(250); break }
+          }
           if (num) void music.playSfx(`mv:${num}`)
           const mv = Dex.moves.get(ev.move)
           const L = layoutRef.current, fx = fxRef.current
@@ -411,9 +426,8 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
         }
         case 'stat': {
           // the game's own sounds (the picture of the stat-change effect is not decoded yet, nothing is invented here)
-          void music.playSfx(ev.amount > 0 ? 'be:12' : 'be:13')
-          if (splRef.current?.ready) await playSpl([ev.amount > 0 ? 155 : 156], ev.side === 'p1' ? 'me' : 'foe', ev.side === 'p1' ? 'me' : 'foe', false, 90) // the game's own effect (orbs rising / falling)
-          else await sleep(700)
+          const sd: 'me' | 'foe' = ev.side === 'p1' ? 'me' : 'foe'
+          if (!(await runScript('effect', ev.amount > 0 ? 48 : 49, sd, sd))) { void music.playSfx(ev.amount > 0 ? 'be:12' : 'be:13'); await sleep(700) } // (the script plays its own sound)
           break
         }
         case 'faint': {
@@ -465,6 +479,65 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
     await spl.play(ids, centre(a, from === 'me'), centre(b, to === 'me'), 16, { travel, maxFrames }) // (one unit of the effects = 16 picture pixels of the game's screen)
   }
 
+  /** The player of the game's own animation scripts (moves, stat changes, healing): what a script may do on this screen. */
+  const runScript = async (kind: 'move' | 'effect', index: number, attacker: MonSide, defender: MonSide): Promise<boolean> => {
+    const spl = splRef.current, L = layoutRef.current
+    if (!spl?.ready || !L) return false
+    const data = kind === 'move' ? spl.moveScript(index) : spl.effectScript(index)
+    if (!data) return false
+    const feet = (s: MonSide) => { const a = s === 'me' ? L.me : L.foe; return { x: a.x / splScale, y: (a.y + a.w * 0.1) / splScale } }
+    const el = (s: MonSide) => document.querySelector<HTMLElement>(`.stage-sprite[data-mon="${s}"]`)
+    const pxUnit = 16 * splScale // screen pixels of one unit of the effects
+    const host: EffHost = {
+      sideOf: (c) => (c === 9 || c === 10 || c === 14 || c === 15 ? attacker : c === 11 || c === 12 || c === 16 || c === 17 ? defender : c === 18 ? 'all' : c === 19 ? 'me' : c === 20 ? 'foe' : c >= 0 && c <= 13 ? ((c & 1) === 1 ? 'foe' : 'me') : defender),
+      load: (id) => spl.preload(id),
+      emitter: (id, em, from, to, offX, offY, o) => {
+        const f = feet(from), t = to ? feet(to) : null
+        const dir = from === 'me' ? 1 : -1
+        const at = { x: f.x + offX * 16 * dir, y: f.y - offY * 16 }
+        return spl.emit(id, em, at, t ? { x: t.x, y: t.y - offY * 16 } : null, 16, o)
+      },
+      sound: (seq, delay, _v) => { window.setTimeout(() => void music.playSeq(seq), (delay * 1000) / 60) },
+      sprite: (side, kind, a, b, frames, times) => {
+        const targets = side === 'all' ? [el('me'), el('foe')] : [el(side)]
+        const ms = Math.max(50, (frames * 1000) / 60)
+        const jobs = targets.map((e, i) => {
+          if (!e) return Promise.resolve()
+          const sd: MonSide = side === 'all' ? (i === 0 ? 'me' : 'foe') : side
+          e.style.transformOrigin = '50% 100%'
+          const dir = sd === 'me' ? 1 : -1
+          let frames2: Keyframe[]
+          if (kind === 'scale') frames2 = [{ transform: 'scale(1,1)' }, { transform: `scale(${Math.max(0.05, 1 + a)},${Math.max(0.05, 1 + b)})` }]
+          else if (kind === 'move') frames2 = [{ transform: 'translate(0,0)' }, { transform: `translate(${a * pxUnit * dir}px,${-b * pxUnit}px)` }]
+          else if (kind === 'shake') frames2 = [{ transform: `translate(${-a * pxUnit}px,0)` }, { transform: `translate(${a * pxUnit}px,0)` }]
+          else if (kind === 'rotate') frames2 = [{ transform: 'rotate(0deg)' }, { transform: `rotate(${a}deg)` }]
+          else if (kind === 'alpha') frames2 = [{ opacity: 1 }, { opacity: a }]
+          else frames2 = [{ opacity: 1 }, { opacity: 0.15 }]
+          const anim = e.animate(frames2, { duration: ms, iterations: Math.max(2, times * 2), direction: 'alternate', easing: 'linear', composite: kind === 'alpha' || kind === 'blink' ? 'replace' : 'add' })
+          return anim.finished.then(() => { e.style.transformOrigin = '' }, () => { e.style.transformOrigin = '' })
+        })
+        return Promise.all(jobs).then(() => undefined)
+      },
+      dim: (from, to, frames) => {
+        const d = dimRef.current
+        if (!d) return Promise.resolve()
+        const anim = d.animate([{ opacity: from }, { opacity: to }], { duration: (frames * 1000) / 60, fill: 'forwards' })
+        return anim.finished.then(() => { d.style.opacity = String(to); anim.cancel() }, () => undefined)
+      },
+      cry: (s) => { if (s !== 'all' && species.current[s]) void music.cry(dexNum(species.current[s])) },
+      shakeCamera: (amp, frames, count) => {
+        const c = document.querySelector<HTMLElement>('.stage-cam')
+        if (!c) return Promise.resolve()
+        const anim = c.animate([{ transform: 'translate(0,0)' }, { transform: `translate(${amp * pxUnit}px,${amp * pxUnit * 0.6}px)` }], { duration: Math.max(30, (frames * 1000) / 60), iterations: Math.max(2, count * 2), direction: 'alternate', composite: 'add' })
+        return anim.finished.then(() => undefined, () => undefined)
+      },
+      call: (effect) => (effect >= FIRST_EFFECT ? spl.effectScript(effect - FIRST_EFFECT) : spl.moveScript(effect)),
+    }
+    try { await runEffScript(data, host) } finally { if (dimRef.current) { dimRef.current.getAnimations().forEach((x) => x.cancel()); dimRef.current.style.opacity = '0' } }
+    return true
+  }
+
+  if (import.meta.env.DEV) (window as unknown as { __run?: unknown }).__run = runScript
   if (import.meta.env.DEV) (window as unknown as { __splTest?: unknown }).__splTest = (ids: number[], a: 'me' | 'foe', b: 'me' | 'foe', travel = false) => playSpl(ids, a, b, travel) // developer hook
 
   // ---------------------------------------------------------------- start the battle
@@ -693,6 +766,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
       <BattleBackdrop env={environment} onLayout={setLayout} sceneRef={sceneRef} />
       <canvas ref={fxCanvas} className="fx-canvas" />
       <canvas ref={splCanvas} className="spl-layer" />
+      <div ref={dimRef} className="eff-dim" />
 
 
       {layout && foePic && !trGone.foe && (
@@ -708,7 +782,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
       {layout && foe && (
         <>
           <div className="stage-shadow" style={{ left: layout.foe.x, top: layout.foe.y + layout.foe.w * 0.03, width: layout.foe.w * 0.78 * shadowFor(foe.species) }} />
-          <div className={`stage-sprite ${shake === 'foe' ? 'hit' : ''} ${foe.fainted ? 'fainted' : ''} ${lunge === 'foe' ? 'lunge-foe' : ''}`} style={{ left: layout.foe.x, top: layout.foe.y + layout.foe.w * 0.1, width: layout.foe.w, ['--hv' as string]: `${Math.round(layout.foe.w * 0.9)}px` }}>
+          <div data-mon="foe" className={`stage-sprite ${shake === 'foe' ? 'hit' : ''} ${foe.fainted ? 'fainted' : ''} ${lunge === 'foe' ? 'lunge-foe' : ''}`} style={{ left: layout.foe.x, top: layout.foe.y + layout.foe.w * 0.1, width: layout.foe.w, ['--hv' as string]: `${Math.round(layout.foe.w * 0.9)}px` }}>
             {!ball && <div className={send?.side === 'foe' ? 'so-mon' : undefined} key={send?.side === 'foe' ? send.key : 'foe'}><MonSprite species={foe.species} shiny={foe.shiny} scale={snap((layout.foe.w * 1.05) / 76.8 * 0.8) / 0.8} platform={layout.foe.w} animated /></div>}
             {send?.side === 'foe' && <SendOut fromLeft={false} />}
             {ball && <div className={`ball shake-${ball.shakes}`} />}
@@ -718,7 +792,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
       {layout && me && (
         <>
           <div className="stage-shadow" style={{ left: layout.me.x, top: layout.me.y + layout.me.w * 0.03, width: layout.me.w * 0.78 * shadowFor(me.species) }} />
-          <div className={`stage-sprite ${shake === 'me' ? 'hit' : ''} ${me.fainted ? 'fainted' : ''} ${lunge === 'me' ? 'lunge-me' : ''}`} style={{ left: layout.me.x, top: layout.me.y + layout.me.w * 0.1, width: layout.me.w, ['--hv' as string]: `${Math.round(layout.me.w * 0.75)}px` }}>
+          <div data-mon="me" className={`stage-sprite ${shake === 'me' ? 'hit' : ''} ${me.fainted ? 'fainted' : ''} ${lunge === 'me' ? 'lunge-me' : ''}`} style={{ left: layout.me.x, top: layout.me.y + layout.me.w * 0.1, width: layout.me.w, ['--hv' as string]: `${Math.round(layout.me.w * 0.75)}px` }}>
             <div className={send?.side === 'me' ? 'so-mon' : undefined} key={send?.side === 'me' ? send.key : 'me'}><MonSprite species={me.species} back shiny={me.shiny} scale={snap((layout.me.w * 0.92) / 76.8 * 0.8) / 0.8} platform={layout.me.w} animated /></div>
             {send?.side === 'me' && <SendOut fromLeft />}
           </div>

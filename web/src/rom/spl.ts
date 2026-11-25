@@ -168,7 +168,7 @@ export interface SplEmitter {
   axis: V3; crossA: V3; crossB: V3; collisionY: number | null
   /** tint: multiplies the particle colour (default 31,31,31 = unchanged) */
   tint: V3
-  scaleMul: number
+  radiusMul: number; lifeMul: number; sizeMul: number
   vel: V3
 }
 
@@ -185,18 +185,18 @@ export class SplSystem {
   constructor(file: SplFile) { this.file = file }
 
   /** Starts one emitter of the file at a place (world units). `tint` is a colour (0..31 per channel) the particles are multiplied with. */
-  spawn(resIndex: number, pos: V3, tint: V3 = [31, 31, 31], scaleMul = 1): SplEmitter | null {
+  spawn(resIndex: number, pos: V3, tint: V3 = [31, 31, 31], opts: { radius?: number; life?: number; size?: number } = {}): SplEmitter | null {
     const res = this.file.resources[resIndex]
     if (!res) return null
     const e: SplEmitter = {
-      res, pos: add(pos, mul(res.basePos, scaleMul)), age: 0, started: false, frac: 0, terminate: false, paused: false, particles: [], children: [],
-      axis: res.axis, crossA: [1, 0, 0], crossB: [0, 1, 0], collisionY: null, tint, scaleMul, vel: [0, 0, 0],
+      res, pos: add(pos, res.basePos), age: 0, started: false, frac: 0, terminate: false, paused: false, particles: [], children: [],
+      axis: res.axis, crossA: [1, 0, 0], crossB: [0, 1, 0], collisionY: null, tint, radiusMul: opts.radius ?? 1, lifeMul: opts.life ?? 1, sizeMul: opts.size ?? 1, vel: [0, 0, 0],
     }
     this.emitters.push(e)
     return e
   }
   /** Spawns every emitter resource of the file. */
-  spawnAll(pos: V3, tint?: V3, scaleMul = 1) { for (let i = 0; i < this.file.resources.length; i++) this.spawn(i, pos, tint, scaleMul) }
+  spawnAll(pos: V3, tint?: V3, opts: { radius?: number; life?: number; size?: number } = {}) { for (let i = 0; i < this.file.resources.length; i++) this.spawn(i, pos, tint, opts) }
 
   get busy(): boolean { return this.emitters.length > 0 }
 
@@ -212,11 +212,11 @@ export class SplSystem {
   }
 
   private emit(e: SplEmitter, count: number, indexOffset: number, total: number) {
-    const r = e.res, rng = this.rng, k = e.scaleMul
+    const r = e.res, rng = this.rng
     this.axes(e)
     const tilt = (p: V3): V3 => { const n = norm(cross(e.crossA, e.crossB)); return add(add(mul(e.crossA, p[0]), mul(e.crossB, p[1])), mul(n, p[2])) }
     void count
-    const radius = r.radius * k, length = r.length * k
+    const radius = r.radius * e.radiusMul, length = r.length * e.radiusMul
     let pos: V3 = [0, 0, 0], velDir: V3 | null = null
     switch (r.emissionType) {
       case 0: break
@@ -237,10 +237,10 @@ export class SplSystem {
         velDir = tilt([u[0], u[1], 0]); pos = tilt(raw); break
       }
     }
-    const magPos = rng.doubleScaled(r.initVelPos, r.attInitVel) * k, magAxis = rng.doubleScaled(r.initVelAxis, r.attInitVel) * k
+    const magPos = rng.doubleScaled(r.initVelPos, r.attInitVel), magAxis = rng.doubleScaled(r.initVelAxis, r.attInitVel)
     const posNorm = velDir ? norm(velDir) : (len(pos) < 1e-9 ? rng.vec3() : norm(pos))
     const vel = add(mul(posNorm, magPos), mul(norm(e.axis), magAxis))
-    const life = Math.floor(rng.scaled(r.particleLife, r.attLife)) + 1
+    const life = Math.floor(rng.scaled(r.particleLife, r.attLife) * e.lifeMul) + 1
     let tex = r.textureIndex
     if (r.hasTex && r.tex) tex = r.tex.randomizeInit ? r.tex.textures[rng.u(12) % Math.max(1, r.tex.frameCount)] : r.tex.textures[0]
     let color: V3 = r.color
@@ -249,7 +249,7 @@ export class SplSystem {
       pos, vel, emitterPos: e.pos, rot: r.randomInitAngle ? rng.u(16) / 65536 * TAU : (r.initAngle / 65536) * TAU,
       angVel: r.hasRotation ? ((r.minRot + (r.maxRot - r.minRot) * rng.unit()) / 65536) * TAU : 0,
       life, age: 0, loopFactor: 255 / Math.max(1, r.loopFrames), lifeFactor: 255 / life, tex, rateOffset: r.randomizeLoop ? rng.u(8) : 0,
-      baseAlpha: Math.min(31, r.baseAlpha), animAlpha: 31, baseScale: rng.doubleScaled(r.baseScale, r.attBaseScale) * k, animScale: 1, color,
+      baseAlpha: Math.min(31, r.baseAlpha), animAlpha: 31, baseScale: rng.doubleScaled(r.baseScale, r.attBaseScale) * e.sizeMul, animScale: 1, color,
     }
     e.particles.unshift(p)
   }

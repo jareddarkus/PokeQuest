@@ -99,7 +99,7 @@ export async function loadOverworldSprites(): Promise<void> {
   } catch { /* the game falls back to the drawn characters */ }
 }
 
-const VERSION = 47 // 47 = ... + the particle effects and the move / effect scripts;  46 = ... + field / battle sound effects;  45 = ... + BAG / POKÉMON buttons as in the game (no mirrored ends);  44 = ... + the Poké Ball model;  43 = 43 = ... + the game's own HP-box digits / gender signs / gauge pieces and team balls;  42 = ... + trainer pictures;  41 = ... + the game's fonts;  40 = ... + walking Pokémon (followers);  39 = ... + no X pictures / one-direction objects among the characters;  38 = ... + no X inside characters;  37 = ... + title dragon;  36 = ... + Elixir icon;  35 = ... + no placeholder characters;  34 = ... + message frames;  33 = ... + PC wallpapers;  32 = ... + party panels, summary pages;  31 = ... + Bag and Summary backgrounds;  30 = ... + HP boxes;  29 = ... + potion/vitamin colours;  28 = ... + move-effect shapes;  27 = ... + all item icons by file;  26 = ... + item ball;  25 = ... + running pictures;  24 = ... + water animation data;  23 = ... + sound effects and cries;  22 = ... + menu backdrops;  21 = ... + music;  20 = gym buildings;  19 = buildings fixed;  18 = ... + buildings;  17 = ... + emote bubbles;  16 = ... + start menu art;  15 = battle buttons rebuilt;  14 = ... + battle command buttons;  13 = ... + menu icons;  12 = ... + walking characters;  11 = ... + the game's own trainer colours
+const VERSION = 48 // 48 = ... + every move sound part by number;  47 = ... + the particle effects and the move / effect scripts;  46 = ... + field / battle sound effects;  45 = ... + BAG / POKÉMON buttons as in the game (no mirrored ends);  44 = ... + the Poké Ball model;  43 = 43 = ... + the game's own HP-box digits / gender signs / gauge pieces and team balls;  42 = ... + trainer pictures;  41 = ... + the game's fonts;  40 = ... + walking Pokémon (followers);  39 = ... + no X pictures / one-direction objects among the characters;  38 = ... + no X inside characters;  37 = ... + title dragon;  36 = ... + Elixir icon;  35 = ... + no placeholder characters;  34 = ... + message frames;  33 = ... + PC wallpapers;  32 = ... + party panels, summary pages;  31 = ... + Bag and Summary backgrounds;  30 = ... + HP boxes;  29 = ... + potion/vitamin colours;  28 = ... + move-effect shapes;  27 = ... + all item icons by file;  26 = ... + item ball;  25 = ... + running pictures;  24 = ... + water animation data;  23 = ... + sound effects and cries;  22 = ... + menu backdrops;  21 = ... + music;  20 = gym buildings;  19 = buildings fixed;  18 = ... + buildings;  17 = ... + emote bubbles;  16 = ... + start menu art;  15 = battle buttons rebuilt;  14 = ... + battle command buttons;  13 = ... + menu icons;  12 = ... + walking characters;  11 = ... + the game's own trainer colours
 
 let colorsApplied = false
 /** Makes the colour choices of the character maker use the colours the game really uses (snaps each to the nearest real one). */
@@ -136,7 +136,7 @@ export async function getRomMeta(): Promise<RomMeta | null> {
 }
 
 /** How many files each step of the import stores (measured on a real import; only used to show "done / total", a step that stores more just shows its own count). */
-const EXPECTED_FILES: Record<string, number> = { open: 1, sprites: 2596, scenery: 1, icons: 465, menus: 100, menuIcons: 649, colors: 1, walkers: 274, followers: 479, fonts: 4, effects: 30, sounds: 2411, map: 1 }
+const EXPECTED_FILES: Record<string, number> = { open: 1, sprites: 2596, scenery: 1, icons: 465, menus: 100, menuIcons: 649, colors: 1, walkers: 274, followers: 479, fonts: 4, effects: 31, sounds: 3200, map: 1 }
 
 /** Reads the player's game file and stores the pictures. Returns what was found. */
 export async function importRom(file: RomSource, onProgress: (p: Progress) => void): Promise<RomMeta> {
@@ -215,6 +215,7 @@ export async function importRom(file: RomSource, onProgress: (p: Progress) => vo
     await st.put('spl:effects', new Blob([new Uint8Array(await nds.get('a/0/0/6'))]))
     await st.put('script:move', new Blob([new Uint8Array(await nds.get('a/0/6/5'))]))
     await st.put('script:effect', new Blob([new Uint8Array(await nds.get('a/0/6/6'))]))
+    await st.put('field:effects', new Blob([new Uint8Array(await nds.get('a/0/7/4'))])) // the overworld effects (the grass tuft)
   } catch { /* moves keep the simple effects */ }
   try { // the 3D dragon of the title screen (two small files: the model and its skeleton animation)
     const t = titleFiles(code)

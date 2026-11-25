@@ -19,6 +19,7 @@ import { pixelDom } from '../ui/MonSprite'
 import type { AnimatedSprite } from '../rom/anim'
 import type { Settings } from './settings'
 import { makeGrassCoverTexture } from './meadow'
+import { loadGrassTuft } from '../rom/grassFx'
 import {
   DX, DY, SIZE, T, TYPE_COLOR, collapseRadius, dist, inBounds, isWalkable, tileAt, type Dir, type NpcSpec, type World,
 } from './world'
@@ -304,14 +305,26 @@ export default function GameView3D(props: Props) {
     }
     /** Characters are drawn south (nearer the camera) over north, always: the order follows the ground position. */
     const order = (sp: THREE.Sprite, z: number) => { sp.renderOrder = 3 + z * 0.001 }
-    const cover = (sp: THREE.Sprite, on: boolean, x: number, ground: number, z: number, wide = 1.0) => {
+    // the game's own grass tuft (overworld effect "kusaeff", four pictures: leaves fly up, then the tuft settles); until it is loaded the stacked leaves are used
+    let tuftTex: THREE.CanvasTexture[] | null = null
+    void loadGrassTuft().then((frames) => {
+      if (!frames) return
+      tuftTex = frames.map((c) => { const t = new THREE.CanvasTexture(c); t.magFilter = THREE.NearestFilter; t.minFilter = THREE.NearestFilter; t.colorSpace = THREE.SRGBColorSpace; return t })
+    })
+    const cover = (sp: THREE.Sprite, on: boolean, x: number, ground: number, z: number, wide = 1.0, frame = 3) => {
       sp.visible = on
       if (!on) return
       sp.renderOrder = 3 + z * 0.001 + 0.0005 // right above its character, below the characters further south
-      sp.scale.set(wide, 0.78 * wide, 1)
+      if (tuftTex) {
+        const m = sp.material as THREE.SpriteMaterial
+        const t = tuftTex[Math.max(0, Math.min(3, frame))]
+        if (m.map !== t) { m.map = t; m.color.set(0xffffff); m.needsUpdate = true }
+        sp.scale.set(2 * wide, 2 * wide, 1) // 32 picture pixels = 2 tiles
+      } else sp.scale.set(wide, 0.78 * wide, 1)
       place(sp, camera, x, ground, z, PUSH + 0.04)
     }
     const myCover = makeCover(), folCover = makeCover()
+    let prevT = 1, puffAt = 0
     const npcCovers = new Map<NpcRuntime, THREE.Sprite>()
     const otherCovers = new Map<string, THREE.Sprite>()
     const tallAt = (tx: number, ty: number) => tileAt(world, Math.round(tx), Math.round(ty)) === T.Tall
@@ -690,7 +703,9 @@ export default function GameView3D(props: Props) {
       fit(mySprite)
       place(mySprite, camera, px + 0.5, ph + lift(mySprite), py + 0.5)
       order(mySprite, py + 0.5)
-      cover(myCover, me.t < 1 ? tallAt(me.t < 0.5 ? me.fromX : me.x, me.t < 0.5 ? me.fromY : me.y) : tallAt(me.x, me.y), px + 0.5, ph, py + 0.5) // in tall grass the leaves cover the lower body, like in the game
+      if (me.t >= 1 && prevT < 1 && tallAt(me.x, me.y)) puffAt = now // stepped into tall grass: the leaves fly up
+      prevT = me.t
+      cover(myCover, me.t < 1 ? tallAt(me.t < 0.5 ? me.fromX : me.x, me.t < 0.5 ? me.fromY : me.y) : tallAt(me.x, me.y), px + 0.5, ph, py + 0.5, 1.0, puffAt ? Math.min(3, Math.floor((now - puffAt) / 90)) : 3) // in tall grass the leaves cover the lower body, like in the game
       myShadow.position.set(px + 0.5, ph + 0.03, py + 0.5)
       // the crates: on sand they sit a little in the sand; everywhere else they are pushed towards the camera (like the characters) so the ground does not cut them
       for (const sp of pickupSprites.values()) {

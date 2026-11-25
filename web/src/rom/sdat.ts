@@ -103,6 +103,10 @@ export async function extractMusic(nds: NdsFile, put: (id: number, data: Uint8Ar
     const b = /^SEQ_SE_BE_SE_(\d+)$/.exec(name)
     if (b) await addSeq(`be:${Number(b[1])}`, sid)
   }
+  // every move sound part and battle sound by its sequence number: the move / effect scripts play them by number (`PlaySE`, with a delay)
+  for (const [name, sid] of byName) {
+    if (/^SEQ_SE_W\d{3}_\d\d$/.test(name) || /^SEQ_SE_BE_SE_/.test(name) || /^SEQ_SE_KOUKA_[HML]$/.test(name)) await addSeq(`seq:${sid}`, sid)
+  }
   // Pokémon cries: every Pokémon has its own instrument bank (BANK_PV001... / BANK_PMWB_494...) played by the one song SEQ_PV
   const bankNames = u32(tables, symb + 8 + 2 * 4)
   const bcount = u32(tables, symb + bankNames)
