@@ -282,3 +282,10 @@ Studied frame by frame (frames cut with ffmpeg from the user's two .mov files; k
 - Command screen: top bar with time and IR / ONLINE / WIRELESS, rows of party balls (trainer's small dots above, yours below).
 - Send-out: a small ball hangs high above the platform, opens, golden burst with a beam and sparks, the Pokémon appears as a white shape and drops onto the platform (about 1 second).
 Seen in the recording but NOT done: the trainers' battle sprites (the foe trainer fades out, yours throws the ball), the trainer's row of 6 balls on the top screen, the camera pan / zoom at the start of a trainer battle, the HP boxes sliding in, the intro screen transition, the "Go! X!" / "sent out X!" timing, the move animations (only the very start of Earthquake was filmed).
+
+## Trainer battle intro (copied from the recording)
+- Entering a battle: a flash and black bars sweep away (`BattleWipe`), the camera glides from a high pose to the battle pose (`INTRO` in `rom/battleScene.ts`).
+- Trainer battles: message "You are challenged by X!" (Spanish "¡X te desafía!") while the foe's row of 6 balls shows on the top screen (`TeamBalls`); on your first "Go!" your own row shows; HP boxes slide in; the foe's send-out text carries the trainer's name ("¡X sacó a Y!").
+- `DsText` (menus drawn on the DS screens) now uses the game's font too.
+- Dev shortcut: `?play&starter=Oshawott&testbattle=trainer` starts a trainer battle (plain `testbattle` = wild).
+- Still NOT done: trainers' battle sprites (the archive was not found in the game file), move animations (only the start of Earthquake was filmed; real ones live in archives a/0/6/6, a/0/6/7, a/0/0/6 and need decoding or per-move footage), Gen 5+ follower walking sprites, login / main menu still use the page font. No game-file re-import needed for this round (`VERSION` stays 41).

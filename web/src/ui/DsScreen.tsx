@@ -1,5 +1,7 @@
 import type { CSSProperties, ReactNode } from 'react'
 import { useUiUrl } from './CmdButton'
+import FontText from './FontText'
+import { trText, useLang } from '../i18n'
 
 /** How many screen pixels one DS pixel gets in a menu (whole numbers keep the pixel art sharp). */
 export function dsK(max = 3): number {
@@ -18,11 +20,19 @@ export function DsScreen({ bg, K, children, style }: { bg: string; K: number; ch
   )
 }
 
-/** A text label placed at DS pixel coordinates. */
+/** A text label placed at DS pixel coordinates, in the game's own font (page text until the game file is imported). */
 export function DsText({ x, y, w, K, size = 8, align = 'left', color = '#fff', bold = true, children, style }: {
   x: number; y: number; w?: number; K: number; size?: number; align?: 'left' | 'right' | 'center'; color?: string; bold?: boolean; children: ReactNode; style?: CSSProperties
 }) {
+  useLang()
+  const raw = typeof children === 'string' || typeof children === 'number' ? String(children) : Array.isArray(children) ? children.map((c) => (typeof c === 'string' || typeof c === 'number' ? String(c) : '')).join('') : ''
+  if (!raw && children) {
+    // something that is not plain text: leave it as it was
+    return <span style={{ position: 'absolute', left: x * K, top: y * K, width: w !== undefined ? w * K : undefined, textAlign: align, fontSize: size * K, lineHeight: 1, fontWeight: bold ? 700 : 400, color, whiteSpace: 'nowrap', ...style }}>{children}</span>
+  }
   return (
-    <span style={{ position: 'absolute', left: x * K, top: y * K, width: w !== undefined ? w * K : undefined, textAlign: align, fontSize: size * K, lineHeight: 1, fontWeight: bold ? 700 : 400, color, whiteSpace: 'nowrap', textShadow: color === '#fff' ? '1px 1px 0 rgba(0,0,0,.6)' : 'none', ...style }}>{children}</span>
+    <div style={{ position: 'absolute', left: x * K, top: (y - 1) * K, width: w !== undefined ? w * K : undefined, display: 'flex', justifyContent: align === 'right' ? 'flex-end' : align === 'center' ? 'center' : 'flex-start', whiteSpace: 'nowrap', ...style }}>
+      <FontText text={trText(raw)} font={1} k={K} color={color} shadow={color === '#fff' ? '#40404c' : null} align={align} />
+    </div>
   )
 }

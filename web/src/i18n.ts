@@ -107,7 +107,7 @@ const DICT: Record<string, string> = {
 }
 const PATTERNS: Array<[RegExp, string | ((...m: string[]) => string)]> = [
   [/^Go! (.+)!$/, '¡Adelante, $1!'], [/^The foe sent out (.+)!$/, '¡El rival envió a $1!'], [/^A wild (.+) appeared!$/, '¡Ha aparecido un $1 salvaje!'],
-  [/^(.+) used (.+)!$/, '¡$1 usó $2!'], [/^(.+) fainted!$/, '¡$1 se ha debilitado!'], [/^(.+)'s attack missed!$/, '¡$1 ha fallado el ataque!'],
+  [/^(.+) used (.+)!$/, '¡$1 usó $2!'], [/^(.+) sent out (.+)!$/, '¡$1 sacó a $2!'], [/^You are challenged by (.+)!$/, '¡$1 te desafía!'], [/^(.+) fainted!$/, '¡$1 se ha debilitado!'], [/^(.+)'s attack missed!$/, '¡$1 ha fallado el ataque!'],
   [/^It doesn't affect (.+)\.\.\.$/, 'No afecta a $1...'], [/^(.+) can't move!$/, '¡$1 no se puede mover!'],
   [/^(.+) was burned!$/, '¡$1 se ha quemado!'], [/^(.+) is paralyzed!$/, '¡$1 está paralizado!'], [/^(.+) fell asleep!$/, '¡$1 se ha dormido!'],
   [/^(.+) was poisoned!$/, '¡$1 ha sido envenenado!'], [/^(.+) was badly poisoned!$/, '¡$1 ha sido gravemente envenenado!'], [/^(.+) was frozen solid!$/, '¡$1 ha sido congelado!'],

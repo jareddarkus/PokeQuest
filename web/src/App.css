@@ -385,3 +385,23 @@ button.big small { opacity: .7; font-size: .75rem; }
 
 /* the message of the top screen: a see-through dark band (no frame), like the real game */
 .battle-band { box-sizing: border-box; width: min(100%, 640px); min-height: 56px; padding: 8px 18px; display: flex; align-items: center; background: linear-gradient(rgba(28, 32, 40, .72), rgba(18, 20, 28, .82)); border-top: 1px solid rgba(255,255,255,.12); }
+
+/* the way into a battle, the trainer's balls, the HP boxes sliding in */
+.bt-wipe { position: absolute; inset: 0; z-index: 30; pointer-events: none; animation: pq-flash-out .5s ease-out forwards; background: #fff; display: flex; flex-direction: column; }
+.bt-wipe span { flex: 1; background: #000; animation: pq-bar-l .7s ease-in forwards; }
+.bt-wipe span.r { animation-name: pq-bar-r; }
+@keyframes pq-flash-out { 0% { background: #fff; } 35% { background: rgba(255,255,255,0); } 100% { background: rgba(255,255,255,0); } }
+@keyframes pq-bar-l { 0% { transform: translateX(0); opacity: 1; } 100% { transform: translateX(-102%); opacity: 1; } }
+@keyframes pq-bar-r { 0% { transform: translateX(0); opacity: 1; } 100% { transform: translateX(102%); opacity: 1; } }
+.team-balls { position: absolute; right: 3%; top: 50%; z-index: 5; display: flex; align-items: center; gap: calc(var(--k) * 3); padding-left: 40px; pointer-events: none; animation: pq-balls-in .35s ease-out backwards; }
+.team-balls-line { position: absolute; right: -4px; left: -60vw; bottom: calc(var(--k) * -6); height: 2px; background: #000; }
+.tb { position: relative; width: calc(var(--k) * 9); height: calc(var(--k) * 9); border-radius: 50%; border: 2px solid #111; background: #fff; box-sizing: border-box; overflow: hidden; }
+.tb .tb-top { position: absolute; left: 0; right: 0; top: 0; height: 50%; background: #e83030; }
+.tb.fnt { background: #6a6a74; }
+.tb.fnt .tb-top { background: #3a3a44; }
+.tb.none { background: #2a2a30; border-color: #000; }
+@keyframes pq-balls-in { from { transform: translateX(120px); opacity: 0; } to { transform: none; opacity: 1; } }
+.hp2.foe { animation: pq-hp-in-l .4s cubic-bezier(.2, .8, .3, 1) .5s backwards; }
+.hp2.mine { animation: pq-hp-in-r .4s cubic-bezier(.2, .8, .3, 1) .5s backwards; }
+@keyframes pq-hp-in-l { from { transform: translateX(-130%); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes pq-hp-in-r { from { transform: translateX(130%); opacity: 0; } to { transform: none; opacity: 1; } }

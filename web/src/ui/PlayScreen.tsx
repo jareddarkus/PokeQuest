@@ -226,7 +226,10 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
   useEffect(() => {
     if (!import.meta.env.DEV || !new URLSearchParams(location.search).has('testbattle')) return
     if (trainer.team.length === 0 || battleRef.current) return
-    const id = setTimeout(() => void wildEncounter(1).then((mon) => startBattle({ kind: 'wild', foe: [mon] })), 800)
+    const asTrainer = new URLSearchParams(location.search).get('testbattle') === 'trainer'
+    const id = setTimeout(() => void (asTrainer
+      ? trainerTeam(1).then((team) => startBattle({ kind: 'trainer', foe: team, name: 'Trainer Test' }))
+      : wildEncounter(1).then((mon) => startBattle({ kind: 'wild', foe: [mon] }))), 800)
     return () => clearTimeout(id)
   }, [trainer.team.length])
 

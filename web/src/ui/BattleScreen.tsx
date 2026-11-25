@@ -76,6 +76,30 @@ function SendOut({ fromLeft }: { fromLeft: boolean }) {
   )
 }
 
+/** The row of six small balls shown on the top screen while a trainer is introduced (filled = a Pokémon, empty = no Pokémon in that place). */
+function TeamBalls({ count, alive, k }: { count: number; alive: boolean[]; k: number }) {
+  return (
+    <div className="team-balls" style={{ ['--k' as string]: `${k}px` }}>
+      <span className="team-balls-line" />
+      {Array.from({ length: 6 }, (_, i) => (
+        <span key={i} className={`tb ${i < count ? (alive[i] ? 'ok' : 'fnt') : 'none'}`}>{i < count && <span className="tb-top" />}</span>
+      ))}
+    </div>
+  )
+}
+
+/** The way into a battle: a flash, then black bars sweep away from the picture. */
+function BattleWipe() {
+  const [gone, setGone] = useState(false)
+  useEffect(() => { const id = window.setTimeout(() => setGone(true), 1300); return () => window.clearTimeout(id) }, [])
+  if (gone) return null
+  return (
+    <div className="bt-wipe" aria-hidden>
+      {Array.from({ length: 10 }, (_, i) => <span key={i} className={i % 2 ? 'r' : 'l'} style={{ animationDelay: `${0.18 + (i % 5) * 0.04}s` }} />)}
+    </div>
+  )
+}
+
 /** A rising / falling stat: three arrows float over the Pokémon (blue and up when raised, red and down when lowered). */
 function StatArrows({ up, big }: { up: boolean; big: boolean }) {
   return (
@@ -134,6 +158,8 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, textSpee
   const [foe, setFoe] = useState<Side | null>(null)
   const [text, setText] = useState('')
   const [skip, setSkip] = useState(0)
+  const [rows, setRows] = useState<null | 'foe' | 'me'>(null) // the row of six balls shown while a trainer is introduced
+  const rowsShown = useRef(false)
   const fromFight = useRef(false) // coming back from the move screen: the Poké Ball closes
   const [send, setSend] = useState<null | { side: 'me' | 'foe'; key: number }>(null) // a Pokémon being sent out of its ball
   const wake = useRef<(() => void) | null>(null)
@@ -199,6 +225,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, textSpee
           const s: Side = { uid: ev.uid, species: ev.species, level: ev.level, hp: ev.hp, maxHp: ev.maxHp, shiny: ev.shiny, fainted: false }
           const ballOut = ev.side === 'p1' || kind !== 'wild' // trainers' Pokémon (and yours) come out of a Poké Ball; a wild Pokémon just appears
           if (ballOut) setSend({ side: ev.side === 'p1' ? 'me' : 'foe', key: ++sendKey })
+          if (ev.side === 'p1' && kind !== 'wild' && !rowsShown.current) { rowsShown.current = true; setRows('me'); window.setTimeout(() => setRows(null), 1500) }
           if (ev.side === 'p1') setMe(s); else setFoe(s)
           hpOf.current[ev.uid] = ev.hp
           if (ballOut) { void music.playSfx('se:throw'); await sleep(1050) }
@@ -297,11 +324,13 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, textSpee
       for (const m of foeCopies.slice(1)) { const d = dexNum(m.species); if (d > 649) preloadPixel(m.species, false, !!m.shiny) }
       await Promise.race([Promise.all(jobs), sleep(3000)])
     }
-    if (kind !== 'wild') setText(`${foeName ?? 'A trainer'} wants to battle!`)
-    void prepare().then(() => {
+    if (kind !== 'wild') { setText(`You are challenged by ${foeName ?? 'a trainer'}!`); setRows('foe') }
+    void prepare().then(() => sleep(kind !== 'wild' ? 2600 : 900)).then(() => {
       if (cancelled) return
+      setRows(null)
       s = new BattleSession(playerTeam, foeCopies)
       s.isTrainerBattle = kind !== 'wild'
+      s.foeName = foeName ?? ''
       sessionRef.current = s
       s.onEvents((evs) => { queue.current.push(...evs); void pump() })
       s.onRequest((r) => {
@@ -489,6 +518,8 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, textSpee
         </>
       )}
       </div>
+      <BattleWipe />
+      {rows && <TeamBalls count={rows === 'foe' ? foeTeam.length : playerTeam.length} alive={rows === 'foe' ? foeTeam.map((m) => m.hp > 0) : playerTeam.map((m) => m.hp > 0)} k={Math.max(1, S * 1.4)} />}
       <div className="foe-zone">
         {foe && <HpBox side={foe} mine={false} gender={foeCopies.find((m) => m.uid === foe.uid)?.gender} />}
       </div>

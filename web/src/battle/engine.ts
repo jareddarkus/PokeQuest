@@ -146,6 +146,8 @@ export class BattleSession {
   }
 
   isTrainerBattle = false
+  /** the trainer's name for the messages ("Ace Trainer Sable sent out Golduck!") */
+  foeName = ''
 
   private parseHp(s: string): { hp: number; max: number; status?: string } {
     const m = /^(\d+)\/(\d+)(?: (\w+))?/.exec(s) ?? /^(0) fnt/.exec(s)
@@ -188,7 +190,7 @@ export class BattleSession {
             this.participants = new Set([this.currentP1])
           }
           ev.push({ kind: 'switch', side, uid, species: det ? det[1] : mon?.species ?? '?', level: det ? Number(det[2]) : mon?.level ?? 1, hp: hp.hp, maxHp: hp.max, shiny: !!mon?.shiny })
-          ev.push({ kind: 'text', text: side === 'p1' ? `Go! ${mon?.species ?? ''}!` : this.isTrainerBattle ? `The foe sent out ${mon?.species ?? ''}!` : `A wild ${mon?.species ?? ''} appeared!` })
+          ev.push({ kind: 'text', text: side === 'p1' ? `Go! ${mon?.species ?? ''}!` : this.isTrainerBattle ? `${this.foeName || 'The foe'} sent out ${mon?.species ?? ''}!` : `A wild ${mon?.species ?? ''} appeared!` })
           break
         }
         case 'move': {
