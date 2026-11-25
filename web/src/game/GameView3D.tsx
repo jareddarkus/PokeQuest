@@ -46,7 +46,7 @@ const WALK_SECONDS = 16 / 60 // one tile = 16 pictures at 60 a second when walki
 const RUN_SECONDS = 8 / 60 // ... and 8 when running (hold B = the down arrow, or Shift)
 const TURN_SECONDS = 0.1 // turning on the spot before the first step
 // The camera of the overworld: it looks at the player from the south, tilted down (tuned by eye to match White 2).
-const CAM_PITCH = 52 * (Math.PI / 180)
+const CAM_PITCH = 60 * (Math.PI / 180) // measured on screenshots of the real game (tiles look about 0.87 as tall as wide)
 const CAM_FOV = 28
 const CAM_DISTANCE = 17
 
@@ -100,11 +100,11 @@ const lift = (sp: THREE.Sprite) => (sp.material.userData.real ? 0.2 : 0)
  */
 const PUSH = 1.4
 const _v = new THREE.Vector3()
-function place(sp: THREE.Sprite, camera: THREE.Camera, x: number, y: number, z: number) {
+function place(sp: THREE.Sprite, camera: THREE.Camera, x: number, y: number, z: number, push = PUSH) {
   _v.set(x, y, z)
   const toCam = camera.position.clone().sub(_v)
   const dist = toCam.length()
-  const d = Math.min(PUSH, dist * 0.4)
+  const d = Math.min(push, dist * 0.4)
   sp.position.copy(_v.addScaledVector(toCam.normalize(), d))
   sp.scale.multiplyScalar((dist - d) / dist)
 }
@@ -665,7 +665,7 @@ export default function GameView3D(props: Props) {
       const myFrame = me.t >= 1 ? 0 : me.run ? [1, 0, 2, 0][me.cycle] : me.t < 0.5 ? 1 + me.step : 0
       mySprite.material = charMaterial(p.look, me.dir, myFrame, me.run && me.t < 1) // (standing still after a run: the normal standing picture)
       fit(mySprite)
-      place(mySprite, camera, px + 0.5, ph + lift(mySprite), py + 0.5)
+      { const grass = tileAt(world, Math.round(px), Math.round(py)) === T.Tall; place(mySprite, camera, px + 0.5, ph + lift(mySprite) - (grass ? 0.2 : 0), py + 0.5, grass ? 0 : PUSH) } // in tall grass the leaves cover the lower body, like in the game
       myShadow.position.set(px + 0.5, ph + 0.03, py + 0.5)
       // the crates: on sand they sit a little in the sand; everywhere else they are pushed towards the camera (like the characters) so the ground does not cut them
       for (const sp of pickupSprites.values()) {
@@ -727,7 +727,7 @@ export default function GameView3D(props: Props) {
         n.sprite.material = charMaterial(n.look, n.dir, frame, n.spec.behavior === 'run' && n.moving > 0)
         fit(n.sprite)
         const nh = n.spec.swim ? Math.max(heightAt(n.fx + 0.5, n.fy + 0.5), built.waterY - 0.02) : heightAt(n.fx + 0.5, n.fy + 0.5) // swimmers float on the water
-        place(n.sprite, camera, n.fx + 0.5, nh + lift(n.sprite), n.fy + 0.5)
+        { const grass = tileAt(world, Math.round(n.fx), Math.round(n.fy)) === T.Tall; place(n.sprite, camera, n.fx + 0.5, nh + lift(n.sprite) - (grass ? 0.2 : 0), n.fy + 0.5, grass ? 0 : PUSH) }
         let sh = npcShadows.get(n)
         if (!sh) { sh = makeShadow(scene); npcShadows.set(n, sh) }
         sh.visible = !n.spec.swim

@@ -96,6 +96,13 @@ export async function extractMusic(nds: NdsFile, put: (id: number, data: Uint8Ar
     if (!cur || name < cur[0]) moveSeq.set(n, [name, sid])
   }
   for (const [n, [, sid]] of moveSeq) await addSeq(`mv:${n}`, sid)
+  // the game's field sound effects (SEQ_SE_FLD_nn: walking in grass, bumping into a wall ...) and battle sounds (SEQ_SE_BE_SE_nn)
+  for (const [name, sid] of byName) {
+    const f = /^SEQ_SE_FLD_(\d+)$/.exec(name) ?? /^SEQ_SE_(KAIDAN|WALL_HIT|DANSA)$/.exec(name)
+    if (f) await addSeq(`fld:${f[1]}`, sid)
+    const b = /^SEQ_SE_BE_SE_(\d+)$/.exec(name)
+    if (b) await addSeq(`be:${Number(b[1])}`, sid)
+  }
   // Pokémon cries: every Pokémon has its own instrument bank (BANK_PV001... / BANK_PMWB_494...) played by the one song SEQ_PV
   const bankNames = u32(tables, symb + 8 + 2 * 4)
   const bcount = u32(tables, symb + bankNames)

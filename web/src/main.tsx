@@ -15,7 +15,9 @@ const FontView = import.meta.env.DEV ? lazy(() => import('./dev/FontView')) : nu
 const HpView = import.meta.env.DEV ? lazy(() => import('./dev/HpView')) : null
 const TransView = import.meta.env.DEV ? lazy(() => import('./dev/TransView')) : null
 const TrView = import.meta.env.DEV ? lazy(() => import('./dev/TrView')) : null
+const SfxTest = lazy(() => import('./dev/SfxTest'))
 const q = new URLSearchParams(location.search)
+const showSfx = q.has('sfxtest')
 const showBld = import.meta.env.DEV && q.has('bldview')
 const showOw = import.meta.env.DEV && q.has('owview')
 const showFol = import.meta.env.DEV && q.has('folmap')
@@ -30,7 +32,11 @@ const showAnim = import.meta.env.DEV && q.has('animtest')
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    {showTv && TransView ? (
+    {showSfx ? (
+      <Suspense fallback={null}>
+        <SfxTest />
+      </Suspense>
+    ) : showTv && TransView ? (
       <Suspense fallback={null}>
         <TransView />
       </Suspense>

@@ -19,6 +19,7 @@ export function liftAt(d: number): number {
 const BEACH = 3 // the outermost tiles are sand
 const ROAD_R = 67 // ring distance of the ring road
 
+const SHOW_SIDE = new URLSearchParams(location.search).has('side')
 /** The 2 x 2 tile cells of ring 1 that are forest (top-left tile numbers), made by prepareMeadow. */
 let forestCells: number[] = []
 
@@ -263,7 +264,7 @@ export function buildMeadowVisuals(world: World, built: BuiltWorld, extra: numbe
       applyClip(mat, built.uniforms)
       mesh(geo, mat)
     }
-    add(mBase, base); add(mCrown, crown); add(mSide, side); add(mTip, tip)
+    add(mBase, base); add(mCrown, crown); add(mTip, tip); if (SHOW_SIDE) add(mSide, side)
   }
 
   // the cliffs between the rings: a slanted wall of the game's cliff picture (one picture per tile) from the lower ring up to the higher one, following the ground of both
