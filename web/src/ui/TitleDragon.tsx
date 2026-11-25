@@ -43,12 +43,12 @@ export default function TitleDragon() {
         renderer!.setSize(w, h, false)
         camera.aspect = w / h
         const dim = Math.max(size.x, size.y, size.z)
-        const dist = (dim / (2 * Math.tan((camera.fov * Math.PI) / 360))) * (w > h ? 1.45 : 3.5)
+        const dist = (dim / (2 * Math.tan((camera.fov * Math.PI) / 360))) * (w > h ? 1.05 : 2.0)
         camera.position.set(0, size.y * 0.25, dist)
         camera.lookAt(0, 0, 0)
         // wide screens: the dragon sits to the right of the menu card; tall screens: in the upper part
-        if (w > h) camera.setViewOffset(w, h, -w * 0.2, 0, w, h)
-        else camera.setViewOffset(w, h, 0, h * 0.37, w, h)
+        if (w > h) camera.setViewOffset(w, h, -w * 0.15, 0, w, h)
+        else camera.setViewOffset(w, h, 0, h * 0.2, w, h)
         camera.updateProjectionMatrix()
       }
       fit()

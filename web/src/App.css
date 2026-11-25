@@ -292,3 +292,22 @@ button.big small { opacity: .7; font-size: .75rem; }
 /* a Pokémon with only a still pixel picture breathes gently so it does not look frozen */
 .mon-sprite.pix.still { animation: pixidle 1.6s ease-in-out infinite; }
 @keyframes pixidle { 0%, 100% { transform: scale(1, 1); } 50% { transform: scale(1.015, 0.97); } }
+
+/* Title layout (from game title-screen references): the hero art is the focal point, the logo sits at the top, the short option list is docked at one edge so it never covers the art,
+   one option is clearly highlighted with a pointer. Phones: art on top, menu docked at the bottom. Wide screens: menu column on the left, art on the right. */
+.title-screen { display: flex; flex-direction: column; justify-content: flex-end; align-items: center; padding: 16px 16px 22px; box-sizing: border-box; overflow-y: auto; z-index: 1; }
+.title-side { width: min(400px, 100%); display: flex; flex-direction: column; gap: 12px; position: relative; z-index: 1; }
+.title-logo { position: fixed; top: 4vh; left: 0; right: 0; font-size: clamp(2.1rem, 10vw, 3.6rem); line-height: 1; letter-spacing: 1px; text-align: center; text-shadow: 0 3px 0 #000, 0 0 22px rgba(130, 200, 255, 0.55); }
+.title-side .panel.card, .title-side .panel.menu { width: 100%; box-sizing: border-box; padding: 16px; gap: 10px; }
+.title-side .panel.menu { background: none; border: 0; box-shadow: none; padding: 0; }
+.title-side .sub { text-align: center; margin: 0; text-shadow: 0 2px 0 #000; }
+.title-side button.big { position: relative; transition: transform .12s; }
+.title-side button.big:hover:not(:disabled), .title-side button.big:focus-visible { transform: translateX(8px); border-color: #fff; }
+.title-side button.big:hover:not(:disabled)::before, .title-side button.big:focus-visible::before { content: 'B6'; position: absolute; left: -22px; top: 50%; transform: translateY(-50%); color: #fff; text-shadow: 0 0 6px #000; font-size: .9rem; }
+@media (max-height: 640px) and (max-aspect-ratio: 1/1) { .title-logo { font-size: 1.8rem; } }
+@media (min-aspect-ratio: 1/1) {
+  .title-screen { flex-direction: row; justify-content: flex-start; align-items: center; padding: 24px 6vw; }
+  .title-side { width: 380px; }
+  .title-logo { position: static; text-align: left; font-size: clamp(2.4rem, 5.5vw, 4.2rem); }
+  .title-side .sub { text-align: left; }
+}

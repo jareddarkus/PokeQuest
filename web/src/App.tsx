@@ -39,9 +39,10 @@ function Login({ onGuest }: { onGuest: () => void }) {
   }
 
   return (
-    <div className="fullscreen center menu-bg">
+    <div className="fullscreen title-screen">
+      <div className="title-side">
+      <h1 className="title-logo">PokeQuest</h1>
       <form className="panel card" onSubmit={submit}>
-        <h1>PokeQuest</h1>
         <p className="sub">{mode === 'login' ? 'Log in to your trainer' : 'Create your trainer'}</p>
         <input placeholder="Username" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" required />
         {mode === 'signup' && <input placeholder="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" required />}
@@ -60,6 +61,7 @@ function Login({ onGuest }: { onGuest: () => void }) {
         </button>
         <button type="button" className="link" onClick={onGuest}>Play the practice island without an account</button>
       </form>
+      </div>
     </div>
   )
 }

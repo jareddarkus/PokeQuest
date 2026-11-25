@@ -9,9 +9,10 @@ interface Props {
 
 export default function MainMenu({ username, onBattleRoyale, onPractice, onCustomize, onSettings, onLogout }: Props) {
   return (
-    <div className="fullscreen center menu-bg">
+    <div className="fullscreen title-screen">
+      <div className="title-side">
+      <h1 className="title-logo">PokeQuest</h1>
       <div className="panel menu">
-        <h1>PokeQuest</h1>
         <p className="sub">{username ? `Trainer ${username}` : 'Playing without an account'}</p>
         <button className="big" disabled title="Coming later">
           <span>Pokémon White 2 Together</span>
@@ -34,6 +35,7 @@ export default function MainMenu({ username, onBattleRoyale, onPractice, onCusto
           <button onClick={onSettings}>Settings</button>
           <button onClick={onLogout}>{username ? 'Log out' : 'Back'}</button>
         </div>
+      </div>
       </div>
     </div>
   )
