@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { snap } from './pixel'
 import { BattleSession, type BattleEvent, type Request } from '../battle/engine'
+import { PvpGuestSession } from '../battle/pvp'
 import { allSpecies, dexNum, maxHp, statsOf, type Mon } from '../data/dex'
 import { ITEMS } from '../data/items'
 import {
@@ -28,6 +29,14 @@ import FontText from './FontText'
 import { nameOf } from '../i18n'
 
 export type BattleKind = 'wild' | 'trainer' | 'gym'
+/** An online duel (two players at the peak): who runs the battle, and how messages go to / come from the other player. */
+export interface PvpLink {
+  role: 'host' | 'guest'
+  hostName: string
+  guestName: string
+  send: (type: string, data: unknown) => void
+  listen: (cb: (type: string, data: unknown) => void) => () => void
+}
 export type BattleOutcome = 'win' | 'lose' | 'caught' | 'ran'
 
 interface Props {
@@ -37,6 +46,8 @@ interface Props {
   foeName?: string
   /** identifies the trainer (its picture is chosen from it) */
   foeSeed?: string
+  /** set for a duel against another player */
+  pvp?: PvpLink
   /** the player's character is the girl */
   playerGirl?: boolean
   /** how fast the message text is typed */
@@ -47,7 +58,6 @@ interface Props {
 export interface Side { uid: string; species: string; level: number; hp: number; maxHp: number; shiny: boolean; fainted: boolean; status?: string }
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
-let statKey = 0
 let sendKey = 0
 
 /** Milliseconds per typed letter (a tap on the message box finishes the sentence at once). */
@@ -137,15 +147,6 @@ function TeamBalls({ side, count, alive, K }: { side: 'foe' | 'me'; count: numbe
   )
 }
 
-/** A rising / falling stat: three arrows float over the Pokémon (blue and up when raised, red and down when lowered). */
-function StatArrows({ up, big }: { up: boolean; big: boolean }) {
-  return (
-    <div className={`stat-arrows ${up ? 'up' : 'down'} ${big ? 'big' : ''}`} aria-hidden>
-      {[0, 1, 2].map((i) => <span key={i} style={{ animationDelay: `${i * 0.18}s`, left: `${18 + i * 30}%` }} />)}
-    </div>
-  )
-}
-
 /** Screen pixels per DS pixel for the battle UI: the 256 x 192 top screen fits into the picture area (so the boxes and the text are as big as in the game). */
 export function useDsK(): number {
   const [k, setK] = useState(() => dsK())
@@ -153,9 +154,12 @@ export function useDsK(): number {
   return k
 }
 function dsK(): number {
-  const W = window.innerWidth, H = window.innerWidth >= 1000 ? window.innerHeight : window.innerHeight - 236 * dsScale()
+  // the top screen is the picture above the log box and the lower screen
+  const W = window.innerWidth, H = window.innerHeight - bottomHeight()
   return snap(Math.max(1.2, Math.min(W / 256, H / 192)))
 }
+/** The height of the log box + the lower screen (screen pixels). */
+export function bottomHeight(): number { return 220 * dsScale() + 6 }
 
 /** one 8 x 8 picture (tile `t` of the glyph sheet: gauge pieces 0-26, ball 27, digits 41-50, "Lv" 52, slash 64 ...) at DS position x, y */
 function Tile({ url, t, x, y, K }: { url: string; t: number; x: number; y: number; K: number }) {
@@ -224,15 +228,20 @@ export function HpBox({ side, mine, exp, gender, k, nameFont = 2 }: { side: Side
           <Tile url={sheet} t={52} x={G.lv[0]} y={G.lv[1]} K={K} />
           <div style={{ position: 'absolute', left: (G.lvl[0] - 1) * K, top: (G.lvl[1] - 1) * K }}><FontText text={String(side.level)} font={3} k={K} color="#f8f8f8" shadow="#101010" outline /></div>
           <Gauge url={sheet} K={K} x={G.gauge[0]} y={G.gauge[1]} n={6} px={fillPx} base={gaugeBase} />
+          {/* the black end pieces of the gauges (a pixel at the start and at the end, like the game) */}
+          <div style={{ position: 'absolute', left: (G.gauge[0] - 1) * K, top: (G.gauge[1] + 2) * K, width: K, height: 5 * K, background: '#101010' }} />
+          <div style={{ position: 'absolute', left: (G.gauge[0] + 48) * K, top: (G.gauge[1] + 2) * K, width: K, height: 5 * K, background: '#101010' }} />
           {mine && <Digits url={sheet} K={K} x={G.hp[0]} y={G.hp[1]} text={hpText} />}
           {mine && <Gauge url={sheet} K={K} x={G.exp[0]} y={G.exp[1]} n={10} px={expPx} base={32} />}
+          {mine && <div style={{ position: 'absolute', left: (G.exp[0] - 1) * K, top: (G.exp[1] + 1) * K, width: K, height: 4 * K, background: '#101010' }} />}
+          {mine && <div style={{ position: 'absolute', left: (G.exp[0] + 80) * K, top: (G.exp[1] + 1) * K, width: K, height: 4 * K, background: '#101010' }} />}
         </>
       )}
       <div style={{ position: 'absolute', left: (mine ? 112 : 100) * K, top: (mine ? 14 : 12) * K }}><StatusIcon status={side.fainted ? 'fnt' : side.status} scale={K / 1.5} /></div>
     </div>
   )
 }
-export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed, playerGirl, textSpeed = 'normal', onEnd }: Props) {
+export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed, pvp, playerGirl, textSpeed = 'normal', onEnd }: Props) {
   const playerTeam = useMemo(() => trainer.team.filter((m) => m.hp > 0).map((m) => ({ ...m, evs: { ...m.evs }, ivs: { ...m.ivs }, moves: [...m.moves] })), [])
   const foeCopies = useMemo(() => foeTeam.map((m) => ({ ...m, evs: { ...m.evs }, ivs: { ...m.ivs }, moves: [...m.moves] })), [])
   const [me, setMe] = useState<Side | null>(null)
@@ -255,9 +264,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
   const introResolve = useRef<() => void>(() => {})
   const [send, setSend] = useState<null | { side: 'me' | 'foe'; key: number }>(null) // a Pokémon being sent out of its ball
   const wake = useRef<(() => void) | null>(null)
-  const [statFx, setStatFx] = useState<null | { side: 'me' | 'foe'; up: boolean; big: boolean; key: number }>(null)
   const msPer = CHAR_MS[textSpeed] ?? 30
-  if (import.meta.env.DEV) (window as unknown as { __statFx?: (side: 'me' | 'foe', up: boolean, big: boolean) => void }).__statFx = (side, up, big) => setStatFx({ side, up, big, key: ++statKey }) // developer hook
   /** how long a sentence takes to type, in milliseconds */
   const typeMs = (t: string) => trText(t).length * msPer
   /** waits, but a tap on the message box ends the wait early */
@@ -383,10 +390,8 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
           break
         }
         case 'stat': {
-          void music.playSfx(ev.amount > 0 ? 'se:heal' : 'se:hitWeak')
-          setStatFx({ side: ev.side === 'p1' ? 'me' : 'foe', up: ev.amount > 0, big: Math.abs(ev.amount) >= 2, key: ++statKey })
-          await sleep(1100)
-          setStatFx(null)
+          // (the game's own stat-change effect is not decoded yet: nothing is invented here, the message says what happened)
+          await sleep(350)
           break
         }
         case 'faint': {
@@ -441,6 +446,16 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
       if (kind !== 'wild') jobs.push(trainerFrontPic(trainerClassFor(kind === 'gym' ? 'gym' : 'trainer', foeSeed ?? foeName ?? 'trainer'), [2, 3, 4, 5]).then((r) => setFoePic(r?.canvas ?? null)))
       await Promise.race([Promise.all(jobs), sleep(3000)])
     }
+    // online duel: the other player's messages (the host waits until the guest is ready; the guest hands what it hears to its session)
+    const guestSession = pvp?.role === 'guest' ? new PvpGuestSession(playerTeam, pvp.send) : null
+    let guestReady: () => void = () => {}
+    const guestIsReady = new Promise<void>((res) => { guestReady = res })
+    let hostSession: BattleSession | null = null
+    const unlisten = pvp ? pvp.listen((type, data) => {
+      if (guestSession) guestSession.receive(type, data)
+      else if (type === 'ready') guestReady()
+      else if (type === 'choice') hostSession?.remoteChoice(data as { k: 'move'; i: number } | { k: 'switch'; uid: string })
+    }) : null
     const introReady = new Promise<void>((res) => { introResolve.current = res })
     void prepare().then(() => introReady).then(async () => {
       if (cancelled) return
@@ -451,10 +466,12 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
         if (cancelled) return
         setRows(null)
       }
-      s = new BattleSession(playerTeam, foeCopies)
+      if (pvp?.role === 'guest') s = guestSession as unknown as BattleSession
+      else s = new BattleSession(playerTeam, foeCopies, pvp ? { send: pvp.send, hostName: pvp.hostName, guestName: pvp.guestName } : undefined)
       s.isTrainerBattle = kind !== 'wild'
       s.foeName = foeName ?? ''
       sessionRef.current = s
+      hostSession = pvp?.role === 'host' ? s : null
       let opening = kind !== 'wild' // in a trainer battle the foe trainer sends out first, like in the game
       s.onEvents((evs0) => {
         // the sentence ("Go! X!", "Y sent out X!") is read first, then the Pokémon comes out
@@ -473,9 +490,10 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
         reqRef.current = r
         if (!pumping.current && queue.current.length === 0) showMenuIfReady()
       })
-      s.start()
+      if (pvp?.role === 'host') void Promise.race([guestIsReady, sleep(20000)]).then(() => { if (!cancelled) s?.start() })
+      else s.start()
     })
-    return () => { cancelled = true; endedRef.current = true; s?.destroy() }
+    return () => { cancelled = true; endedRef.current = true; s?.destroy(); unlisten?.() }
   }, [])
 
   // ---------------------------------------------------------------- after the battle
@@ -626,7 +644,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
   }
 
   return (
-    <div className={`fullscreen battle ${showScene ? '' : 'pre'}`} style={{ ["--menu-h" as string]: `${236 * S}px`, ["--k" as string]: `${Kd}px`, ["--s" as string]: `${S}px` }}>
+    <div className={`fullscreen battle ${showScene ? '' : 'pre'}`} style={{ ["--menu-h" as string]: `${236 * S}px`, ["--bottom-h" as string]: `${bottomHeight()}px`, ["--k" as string]: `${Kd}px`, ["--s" as string]: `${S}px` }}>
       <div className={`stage-cam ${mode === 'fight' ? 'zoom' : ''}`}>
       <BattleBackdrop env={environment} onLayout={setLayout} sceneRef={sceneRef} />
       <canvas ref={fxCanvas} className="fx-canvas" />
@@ -638,7 +656,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
         </div>
       )}
       {layout && myPic && !trGone.me && (
-        <div className="stage-sprite" style={{ left: layout.me.x, top: layout.me.y + layout.me.w * 0.1, width: layout.me.w }}>
+        <div className="stage-sprite trainer-me" style={{ left: layout.me.x, width: layout.me.w }}>
           <TrainerFigure sprite={myPic} k={snap((layout.me.w * 0.46) / 76.8)} side="me" out={trOut.me} play={throwKey} />
         </div>
       )}
@@ -649,7 +667,6 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
             {!ball && <div className={send?.side === 'foe' ? 'so-mon' : undefined} key={send?.side === 'foe' ? send.key : 'foe'}><MonSprite species={foe.species} shiny={foe.shiny} scale={snap((layout.foe.w * 1.05) / 76.8 * 0.8) / 0.8} platform={layout.foe.w} animated /></div>}
             {send?.side === 'foe' && <SendOut fromLeft={false} />}
             {ball && <div className={`ball shake-${ball.shakes}`} />}
-            {statFx?.side === 'foe' && <StatArrows key={statFx.key} up={statFx.up} big={statFx.big} />}
           </div>
         </>
       )}
@@ -659,7 +676,6 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
           <div className={`stage-sprite ${shake === 'me' ? 'hit' : ''} ${me.fainted ? 'fainted' : ''} ${lunge === 'me' ? 'lunge-me' : ''}`} style={{ left: layout.me.x, top: layout.me.y + layout.me.w * 0.1, width: layout.me.w, ['--hv' as string]: `${Math.round(layout.me.w * 0.75)}px` }}>
             <div className={send?.side === 'me' ? 'so-mon' : undefined} key={send?.side === 'me' ? send.key : 'me'}><MonSprite species={me.species} back shiny={me.shiny} scale={snap((layout.me.w * 0.92) / 76.8 * 0.8) / 0.8} platform={layout.me.w} animated /></div>
             {send?.side === 'me' && <SendOut fromLeft />}
-            {statFx?.side === 'me' && <StatArrows key={statFx.key} up={statFx.up} big={statFx.big} />}
           </div>
         </>
       )}
@@ -715,7 +731,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
             K={S}
             bag={bag}
             pockets={kind === 'wild' ? [1, 2] : [1]}
-            only={(d) => (d.kind === 'ball' && kind === 'wild') || d.kind === 'heal'}
+            only={(d) => !pvp && ((d.kind === 'ball' && kind === 'wild') || d.kind === 'heal')}
             canUse={(d) => (d.kind === 'ball' && kind === 'wild') || d.kind === 'heal'}
             onUse={(id) => { setMode('wait'); if (ITEMS[id].kind === 'ball') throwBall(id); else usePotion(id) }}
             onClose={() => setMode('menu')}

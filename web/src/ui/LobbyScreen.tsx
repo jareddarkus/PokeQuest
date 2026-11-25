@@ -58,7 +58,8 @@ export default function LobbyScreen({ username, look, onStart, onBack }: { usern
           {players.length === 0 && <span className="muted">Nobody here yet…</span>}
         </div>
         <div className="btn-row">
-          <button className="primary" disabled={lobby.status !== 'on' || !!lobby.match} onClick={() => lobby.setReady(!ready)}>{ready ? 'Cancel' : 'Ready'}</button>
+          {lobby.arenaBusy && <p className="sub">A match is being played right now. You can join the next one when it is over.</p>}
+          <button className="primary" disabled={lobby.status !== 'on' || !!lobby.match || lobby.arenaBusy} onClick={() => lobby.setReady(!ready)}>{ready ? 'Cancel' : 'Ready'}</button>
           <button disabled={!!lobby.match} onClick={onBack}>Leave</button>
         </div>
         <h3>Chat</h3>

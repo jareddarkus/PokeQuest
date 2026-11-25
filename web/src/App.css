@@ -476,3 +476,11 @@ button.big small { opacity: .7; font-size: .75rem; }
 /* the lower screen sits at the very bottom, the log box right above it, both the same width (256 DS pixels x S) */
 .battle-bottom { align-items: center; flex-direction: column !important; }
 .battle-band { width: calc(256 * var(--s)) !important; height: calc(44 * var(--s)) !important; padding: calc(9 * var(--s)) calc(8 * var(--s)) !important; }
+
+/* the picture of the top screen ends where the log box begins; your trainer's feet touch that border */
+.fullscreen.battle .stage-cam, .fullscreen.battle .foe-zone, .fullscreen.battle .me-zone, .fullscreen.battle .team-balls, .fullscreen.battle .tbs { bottom: var(--bottom-h, 0px) !important; inset: 0 0 var(--bottom-h, 0px) 0 !important; height: auto !important; overflow: hidden; }
+.me-zone .hp2 { bottom: calc(50 * var(--k)) !important; }
+.stage-sprite.trainer-me { top: auto !important; bottom: 0; transform: translateX(-50%); }
+
+/* the area around the lower screen is plain black (nothing of the map shows through) */
+.fullscreen.battle { background: #000; }

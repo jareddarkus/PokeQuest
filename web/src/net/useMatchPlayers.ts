@@ -21,9 +21,11 @@ export interface MatchSync {
   started: boolean
   /** called when a message arrives that a player is fighting a trainer / stopped fighting (the trainer is busy meanwhile) */
   onBusy?: (npcId: string, by: string, on: boolean) => void
+  /** a message of an online duel (or an elimination notice) from another player */
+  onDuel?: (msg: { to?: string; from: string; type: string; data?: unknown }) => void
 }
 
-export function useMatchPlayers(matchId: string | null, me: string | null, look: Look, getPos: () => { x: number; y: number; dir: Dir } | null, sync?: MatchSync, chanRef?: { current: { send: (npcId: string, on: boolean) => void } | null }) {
+export function useMatchPlayers(matchId: string | null, me: string | null, look: Look, getPos: () => { x: number; y: number; dir: Dir } | null, sync?: MatchSync, chanRef?: { current: { send: (npcId: string, on: boolean) => void; duel: (msg: { to?: string; type: string; data?: unknown }) => void } | null }) {
   const others = useRef(new Map<string, Remote>())
   const lookRef = useRef(look)
   lookRef.current = look
@@ -57,7 +59,11 @@ export function useMatchPlayers(matchId: string | null, me: string | null, look:
       const p = payload as { npc?: string; by?: string; on?: boolean } | null
       if (p && typeof p.npc === 'string' && typeof p.by === 'string' && p.by !== me) syncRef.current?.onBusy?.(p.npc, p.by, !!p.on)
     })
-    if (chanRef) chanRef.current = { send: (npcId, on) => { void ch.send({ type: 'broadcast', event: 'busy', payload: { npc: npcId, by: me, on } }) } }
+    ch.on('broadcast', { event: 'duel' }, ({ payload }) => {
+      const m = payload as { to?: string; from?: string; type?: string; data?: unknown } | null
+      if (m && typeof m.from === 'string' && m.from !== me && typeof m.type === 'string' && (!m.to || m.to === me)) syncRef.current?.onDuel?.({ to: m.to, from: m.from, type: m.type, data: m.data })
+    })
+    if (chanRef) chanRef.current = { send: (npcId, on) => { void ch.send({ type: 'broadcast', event: 'busy', payload: { npc: npcId, by: me, on } }) }, duel: (msg) => { void ch.send({ type: 'broadcast', event: 'duel', payload: { ...msg, from: me } }) } }
     ch.subscribe()
     let sentLook = 0
     let pickTick = 0

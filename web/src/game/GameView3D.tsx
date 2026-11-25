@@ -19,7 +19,7 @@ import { pixelDom } from '../ui/MonSprite'
 import type { AnimatedSprite } from '../rom/anim'
 import type { Settings } from './settings'
 import {
-  DX, DY, RING_INNER, SIZE, T, TYPE_COLOR, collapseRadius, dist, inBounds, isWalkable, tileAt, type Dir, type NpcSpec, type World,
+  DX, DY, SIZE, T, TYPE_COLOR, collapseRadius, dist, inBounds, isWalkable, tileAt, type Dir, type NpcSpec, type World,
 } from './world'
 
 interface Props {
@@ -217,16 +217,6 @@ export default function GameView3D(props: Props) {
     const sea = new THREE.Mesh(new THREE.PlaneGeometry(600, 600).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: '#3a7fc0' }))
     sea.position.set(SIZE / 2, built.waterY - 0.03, SIZE / 2)
     scene.add(sea)
-
-    // the ring barriers (you can only pass by beating a gym leader)
-    for (const k of [0, 1, 2]) {
-      const r = RING_INNER[k] - 0.5
-      const geo = new THREE.CylinderGeometry(r, r, 4, 96, 1, true)
-      const mat = new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.1, side: THREE.DoubleSide, depthWrite: false })
-      const wall = new THREE.Mesh(geo, mat)
-      wall.position.set(SIZE / 2, 2, SIZE / 2)
-      scene.add(wall)
-    }
 
     const heightAt = (fx: number, fz: number): number => {
       const cx = Math.min(SIZE - 1.001, Math.max(0, fx - 0.5))
@@ -572,6 +562,9 @@ export default function GameView3D(props: Props) {
         p.events.onPushed?.(s.x, s.y, s.ring)
       }
 
+      if (paused || p.paused) { // nothing typed or pressed while a battle / menu is open may move the character afterwards
+        held.clear(); tapRef.current = null; dpadRef.current = null; bRef.current = false; me.turn = 0
+      }
       if (!paused && !p.paused) {
         let spill = 0 // the part of this frame that was left over after the step ended: it counts for the next step, so walking has no tiny hitch at every tile
         if (me.t < 1) {

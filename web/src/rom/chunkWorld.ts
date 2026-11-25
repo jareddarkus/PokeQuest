@@ -212,5 +212,6 @@ export function buildChunkWorld(data: WorldData): BuiltWorld {
     named.set(key, out)
     return out
   }
+  if (import.meta.env.DEV) (globalThis as { __pqTex?: () => string[] }).__pqTex = () => [...new Set(Object.values(data.textures).flatMap((raw) => readTexFile(raw)?.texs.map((x) => x.name) ?? []))]
   return { group, size, ground, height, waterY, uniforms, makeBuilding, textureNamed }
 }

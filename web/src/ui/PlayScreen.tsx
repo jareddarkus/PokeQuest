@@ -10,9 +10,9 @@ import { addItems, emptyTrainer, makeStarter, type Trainer } from '../game/state
 import { ITEMS, STARTING_BAG, rollPickup } from '../data/items'
 import { maxHp, type Mon } from '../data/dex'
 import {
-  C, COLLAPSE_SECONDS, RADIUS, RING_INNER, SIZE, T, collapseRadius, generateWorld, isWalkable, ringAt, type Dir, type World,
+  C, COLLAPSE_SECONDS, squareTile, RADIUS, RING_INNER, SIZE, T, collapseRadius, generateWorld, isWalkable, ringAt, type Dir, type World,
 } from '../game/world'
-import BattleScreen, { CHAR_MS, TypedText, type BattleKind, type BattleOutcome } from './BattleScreen'
+import BattleScreen, { CHAR_MS, TypedText, type BattleKind, type BattleOutcome, type PvpLink } from './BattleScreen'
 import { addExtraGrass, buildMeadowVisuals, prepareMeadow } from '../game/meadow'
 import { busyLine, leaderLine, lossLine, preBattleLine } from '../data/npcLines'
 import { BagPanel, PcPanel, TeamPanel } from './MenuPanels'
@@ -22,6 +22,7 @@ import MenuButton from './MenuButton'
 import PartyBar from './PartyBar'
 import { useFrameStyle } from './DsFrame'
 import ChatPanel from './ChatPanel'
+import { supabase } from '../supabase'
 import { useMatchPlayers } from '../net/useMatchPlayers'
 import { useChat } from './useChat'
 import { music } from '../audio/music'
@@ -39,7 +40,7 @@ interface Props {
   onCustomize: () => void
 }
 
-interface ActiveBattle { id?: number; kind: BattleKind; foe: Mon[]; name?: string; onWin?: () => void; npcId?: string }
+interface ActiveBattle { id?: number; kind: BattleKind; foe: Mon[]; name?: string; onWin?: () => void; npcId?: string; pvp?: PvpLink }
 let battleCounter = 0
 
 function PlayInner({ royale, username, look, settings, onSettings, onExit, onCustomize, world, built }: Props & { world: World; built: BuiltWorld }) {
@@ -105,14 +106,43 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
   const chat = useChat(username, panel === 'chat')
   // trainers that other players are fighting right now (message "busy" every 3 s; forgotten after 9 s)
   const busyNpcs = useRef(new Map<string, { by: string; until: number }>())
-  const busySender = useRef<{ send: (npcId: string, on: boolean) => void } | null>(null)
+  const busySender = useRef<{ send: (npcId: string, on: boolean) => void; duel: (msg: { to?: string; type: string; data?: unknown }) => void } | null>(null)
+  // while the match is played, this player stands on the channel "match:arena" (so that nobody can join a running match)
+  useEffect(() => {
+    if (!royale || !username) return
+    const ch = supabase.channel('match:arena', { config: { private: true, presence: { key: `play-${username}` } } })
+    ch.subscribe(async (st) => { if (st === 'SUBSCRIBED') await ch.track({ playing: true, id: royale.id }) })
+    return () => { void supabase.removeChannel(ch) }
+  }, [royale?.id, username])
+  // online duels at the peak
+  const [eliminated, setEliminated] = useState(false)
+  const eliminatedRef = useRef(false)
+  const outPlayers = useRef(new Set<string>()) // players that are out of the match
+  const duelPending = useRef<string | null>(null)
+  const pvpListeners = useRef(new Set<(type: string, data: unknown) => void>())
+  const startDuelRef = useRef<(role: 'host' | 'guest', opp: string, team: Mon[]) => void>(() => {})
   const players = useMatchPlayers(royale?.id ?? null, username, look, () => handleRef.current?.getPos() ?? null, royale ? {
     pickedMe: trainer.team.length > 0 || trainer.pc.length > 0,
     expected: royale.players,
     started: Date.now() >= t0Ref.current,
     onAllPicked: () => { const nt = Date.now() + 1500; if (nt < t0Ref.current) { startRef.current = nt; t0Ref.current = nt; setT0(nt) } }, // everybody is ready: start right away
     onBusy: (npc, by, on) => { if (on) busyNpcs.current.set(npc, { by, until: Date.now() + 9000 }); else busyNpcs.current.delete(npc) },
+    onDuel: (m) => {
+      if (m.type === 'eliminated') { outPlayers.current.add(m.from); return }
+      if (m.type === 'pvp') { const d = m.data as { t: string; d: unknown }; for (const cb of pvpListeners.current) cb(d.t, d.d); return }
+      if (m.type === 'challenge') { // a player touched me at the peak: the duel starts at once
+        const ring = (() => { const q = handleRef.current?.getPos(); return q ? ringAt(q.x, q.y) : 0 })()
+        const team = trainerRef.current.team.filter((x) => x.hp > 0)
+        if (battleRef.current || busy.current || eliminatedRef.current || ring !== 4 || !team.length || duelPending.current) { busySender.current?.duel({ to: m.from, type: 'decline' }); return }
+        duelPending.current = m.from
+        busySender.current?.duel({ to: m.from, type: 'accept', data: JSON.parse(JSON.stringify(team)) })
+        startDuelRef.current('guest', m.from, m.data as Mon[])
+      } else if (m.type === 'accept') {
+        if (duelPending.current === m.from) startDuelRef.current('host', m.from, m.data as Mon[])
+      } else if (m.type === 'decline') { if (duelPending.current === m.from) duelPending.current = null }
+    },
   } : undefined, busySender)
+  const playersVisible = () => players().filter((o) => !outPlayers.current.has(o.id))
   const busyMapFn = () => { const m = new Map<string, string>(); const now = Date.now(); for (const [k, v] of busyNpcs.current) { if (v.until < now) busyNpcs.current.delete(k); else m.set(k, v.by) } return m }
   // while I fight a trainer, the others see it as busy (repeated, so that late arrivals know too)
   useEffect(() => {
@@ -152,13 +182,11 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
   }, [toast])
 
   const nextRingSpot = (x: number, y: number, fromRing: number) => {
-    const a = Math.atan2(y + 0.5 - C, x + 0.5 - C)
     const base = RING_INNER[fromRing - 1] - 4
     for (let r = base; r > 0; r--) {
       for (const off of [0, 1, -1, 2, -2, 3, -3]) {
         const rr = r + off
-        const px = Math.round(C + Math.cos(a) * rr - 0.5)
-        const py = Math.round(C + Math.sin(a) * rr - 0.5)
+        const { x: px, y: py } = squareTile(x, y, rr)
         if (isWalkable(world, px, py) && world.tiles[py * SIZE + px] !== T.GymDoor) return { x: px, y: py }
       }
     }
@@ -176,6 +204,17 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
     setBattle({ ...b, id: ++battleCounter })
   }
 
+  /** Two players meet at the peak: the one whose name comes first runs the battle (host), the other follows (guest). */
+  const startDuel = (role: 'host' | 'guest', opp: string, team: Mon[]) => {
+    const link: PvpLink = {
+      role, hostName: role === 'host' ? username ?? 'You' : opp, guestName: role === 'host' ? opp : username ?? 'You',
+      send: (type, data) => busySender.current?.duel({ to: opp, type: 'pvp', data: { t: type, d: data } }),
+      listen: (cb) => { pvpListeners.current.add(cb); return () => { pvpListeners.current.delete(cb) } },
+    }
+    startBattle({ kind: 'trainer', foe: team, name: opp, pvp: link })
+  }
+  startDuelRef.current = startDuel
+
   const endBattle = (outcome: BattleOutcome, t: Trainer) => {
     setTrainer(t)
     const b = battleRef.current
@@ -187,8 +226,37 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
       b.onWin?.()
     }
     if (outcome === 'caught') say('Gotcha! The Pokémon joined you (see Team or PC).')
+    if (b?.pvp) { // a duel against another player: the loser is out of the match
+      duelPending.current = null
+      if (outcome === 'lose') { eliminatedRef.current = true; setEliminated(true); busySender.current?.duel({ type: 'eliminated' }) }
+      else if (outcome === 'win') { outPlayers.current.add(b.name ?? ''); say(`You beat ${b.name}! They are out of the match.`) }
+      return
+    }
     if (outcome === 'lose') say('You blacked out of the fight! Heal up with Revives and Potions.')
   }
+
+  // two players that touch each other at the peak fight at once (the one whose name comes first asks)
+  useEffect(() => {
+    if (!royale || !username) return
+    const id = window.setInterval(() => {
+      if (battleRef.current || busy.current || eliminatedRef.current || duelPending.current || Date.now() < t0Ref.current) return
+      const me = handleRef.current?.getPos()
+      if (!me || ringAt(me.x, me.y) !== 4) return
+      const team = trainerRef.current.team.filter((x) => x.hp > 0)
+      if (!team.length) return
+      for (const o of players()) {
+        if (outPlayers.current.has(o.id) || !(username < o.id)) continue
+        if (ringAt(Math.round(o.x), Math.round(o.y)) !== 4) continue
+        if (Math.abs(o.x - me.x) <= 1.2 && Math.abs(o.y - me.y) <= 1.2) {
+          duelPending.current = o.id
+          busySender.current?.duel({ to: o.id, type: 'challenge', data: JSON.parse(JSON.stringify(team)) })
+          window.setTimeout(() => { if (duelPending.current === o.id && !battleRef.current) duelPending.current = null }, 4000)
+          break
+        }
+      }
+    }, 400)
+    return () => window.clearInterval(id)
+  }, [royale, username])
 
   const events: GameEvents = useMemo(
     () => ({
@@ -282,7 +350,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
         settings={settings}
         startTile={spawn}
         elapsed={() => (collapseRef.current && Date.now() >= (royale ? t0 : 0) ? Date.now() - startRef.current : null)}
-        others={players}
+        others={playersVisible}
         busy={busyMapFn}
         events={events}
         handleRef={handleRef}
@@ -342,6 +410,15 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
       {panel === 'bag' && <BagPanel trainer={trainer} setTrainer={setTrainer} onClose={() => setPanel(null)} onMessage={say} />}
       {panel === 'pc' && <PcPanel trainer={trainer} setTrainer={setTrainer} onClose={() => setPanel(null)} onMessage={say} />}
 
+      {eliminated && (
+        <div className="modal-backdrop" style={{ zIndex: 80 }}>
+          <div className="panel modal">
+            <h2>You were eliminated</h2>
+            <p className="sub">You lost a duel at the peak. Thanks for playing!</p>
+            <button className="primary" onClick={onExit}>Back to the menu</button>
+          </div>
+        </div>
+      )}
       {battle && (
         <BattleScreen
           key={battle.id}
@@ -350,6 +427,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
           kind={battle.kind}
           foeName={battle.name}
           foeSeed={battle.npcId ?? battle.name}
+          pvp={battle.pvp}
           playerGirl={look.sprite === 10}
           textSpeed={settings.textSpeed}
           onEnd={endBattle}

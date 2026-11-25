@@ -33,7 +33,7 @@ export function applyClip(mat: THREE.Material, clip: ClipUniforms): void {
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;')
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;\nuniform float uCut;\nuniform vec2 uCenter;\nuniform float uTime;\nuniform float uWarn;')
-      .replace('#include <clipping_planes_fragment>', '#include <clipping_planes_fragment>\nfloat pqD = length(vWPos.xz - uCenter);\nif (pqD > uCut) discard;')
+      .replace('#include <clipping_planes_fragment>', '#include <clipping_planes_fragment>\nfloat pqD = max(abs(vWPos.x - uCenter.x), abs(vWPos.z - uCenter.y));\nif (pqD > uCut) discard;')
       .replace('#include <dithering_fragment>', 'if (uWarn > 0.5 && pqD > uCut - 1.0) gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(1.0, 0.2, 0.2), 0.35 + 0.15 * sin(uTime * 8.0));\n#include <dithering_fragment>')
   }
   mat.customProgramCacheKey = () => 'pq-clip-ours'
@@ -100,10 +100,10 @@ export function buildModelObject(model: Model, tex: NonNullable<ReturnType<typeo
         shader.uniforms.uLift = hide ? clip.uLift : { value: 0 }
         shader.vertexShader = shader.vertexShader
           .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;\nuniform float uLift;\nuniform vec2 uCenter;')
-          .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWPos = (modelMatrix * vec4(position, 1.0)).xyz;\nfloat pqd0 = length(vWPos.xz - uCenter);\ntransformed.y += uLift * ((1.0 - smoothstep(59.0, 60.0, pqd0)) + (1.0 - smoothstep(39.0, 40.0, pqd0)) + (1.0 - smoothstep(19.0, 20.0, pqd0)));')
+          .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWPos = (modelMatrix * vec4(position, 1.0)).xyz;\nfloat pqd0 = max(abs(vWPos.x - uCenter.x), abs(vWPos.z - uCenter.y));\ntransformed.y += uLift * ((1.0 - smoothstep(59.0, 60.0, pqd0)) + (1.0 - smoothstep(39.0, 40.0, pqd0)) + (1.0 - smoothstep(19.0, 20.0, pqd0)));')
         shader.fragmentShader = shader.fragmentShader
           .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;\nuniform float uCut;\nuniform vec2 uCenter;\nuniform float uTime;\nuniform float uWarn;\nuniform float uHide;')
-          .replace('#include <clipping_planes_fragment>', '#include <clipping_planes_fragment>\nfloat pqD = length(vWPos.xz - uCenter);\nif (pqD > uCut || pqD > uHide) discard;')
+          .replace('#include <clipping_planes_fragment>', '#include <clipping_planes_fragment>\nfloat pqD = max(abs(vWPos.x - uCenter.x), abs(vWPos.z - uCenter.y));\nif (pqD > uCut || pqD > uHide) discard;')
           .replace('#include <dithering_fragment>', 'if (uWarn > 0.5 && pqD > uCut - 1.0) gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(1.0, 0.2, 0.2), 0.35 + 0.15 * sin(uTime * 8.0));\n#include <dithering_fragment>')
       }
       mat.customProgramCacheKey = () => 'pq-clip'

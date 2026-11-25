@@ -81,8 +81,25 @@ export interface World {
   lake: Uint8Array
 }
 
+/** Distance from the centre in whole TILES, square rings (the island is a tile-based mountain of squares, not circles). */
 export function dist(x: number, y: number): number {
-  return Math.hypot(x + 0.5 - C, y + 0.5 - C)
+  return Math.max(Math.abs(x + 0.5 - C), Math.abs(y + 0.5 - C))
+}
+
+/** The tile at square-ring distance r from the centre, in the same direction as tile (x, y). */
+export function squareTile(x: number, y: number, r: number): { x: number; y: number } {
+  const dx = x + 0.5 - C, dy = y + 0.5 - C
+  const m = Math.max(Math.abs(dx), Math.abs(dy)) || 1
+  return { x: Math.round(C + (dx / m) * r - 0.5), y: Math.round(C + (dy / m) * r - 0.5) }
+}
+
+/** A tile on the square ring at distance r; u (0..1) goes once round it. */
+export function ringPoint(r: number, u: number): { x: number; y: number } {
+  const side = Math.min(3, Math.floor(u * 4)), t = u * 4 - side
+  const o = (t * 2 - 1) * r
+  const px = side === 0 ? o : side === 1 ? r : side === 2 ? -o : -r
+  const py = side === 0 ? -r : side === 1 ? o : side === 2 ? r : -o
+  return { x: Math.round(C + px - 0.5), y: Math.round(C + py - 0.5) }
 }
 
 /** 1 = outer ring ... 4 = the peak. Returns 0 outside the island. */
@@ -200,22 +217,19 @@ export function generateWorld(seed: number, ground: Uint8Array): World {
 
   const spawns: { x: number; y: number }[] = []
   for (let i = 0; i < 16; i++) {
-    const a = (i / 16) * Math.PI * 2 + 0.2
-    for (let r = RADIUS - 2; r >= RING_INNER[0]; r--) {
-      const x = Math.round(C + Math.cos(a) * r - 0.5)
-      const y = Math.round(C + Math.sin(a) * r - 0.5)
-      if (inBounds(x, y) && walkable(x, y)) { spawns.push({ x, y }); break }
+    const u = (i + 0.35) / 16
+    for (let r = RADIUS - 5; r >= RING_INNER[0]; r--) {
+      const q = ringPoint(r, u)
+      if (inBounds(q.x, q.y) && walkable(q.x, q.y)) { spawns.push(q); break }
     }
   }
 
   const freeTile = (ring: number): { x: number; y: number } => {
     for (let tries = 0; tries < 800; tries++) {
-      const a = rng() * Math.PI * 2
       const lo = ring === 4 ? 2 : RING_INNER[ring - 1] + 2
       const hi = ring === 1 ? RADIUS - 4 : RING_INNER[ring - 2] - 3
       const r = lo + rng() * (hi - lo)
-      const x = Math.round(C + Math.cos(a) * r - 0.5)
-      const y = Math.round(C + Math.sin(a) * r - 0.5)
+      const { x, y } = ringPoint(r, rng())
       if (inBounds(x, y) && walkable(x, y) && !gyms.some((g) => Math.abs(g.x - x) < 3 && Math.abs(g.y - y) < 3)) return { x, y }
     }
     return spawns[0] ?? { x: C, y: C }

@@ -3,7 +3,7 @@ import { drawCharacter, randomLook, shade, type Look } from './character'
 import { hash2 } from './rng'
 import type { Settings } from './settings'
 import {
-  C, DX, DY, RING_INNER, SIZE, T, TYPE_COLOR, collapseRadius, dist, isWalkable, ringAt, tileAt, type Dir, type NpcSpec,
+  C, DX, DY, RING_INNER, SIZE, T, TYPE_COLOR, collapseRadius, dist, isWalkable, ringAt, squareTile, tileAt, type Dir, type NpcSpec,
   type World,
 } from './world'
 
@@ -83,14 +83,12 @@ function walkableFor(world: World, x: number, y: number, elapsed: number | null)
 export function safeTileFor(world: World, x: number, y: number, elapsedSec: number): { x: number; y: number; ring: number } {
   const ring = ringAt(x, y)
   const cutoff = collapseRadius(elapsedSec)
-  const a = Math.atan2(y + 0.5 - C, x + 0.5 - C)
   let targetR = cutoff - 2
   if (ring >= 1 && ring < 4 && targetR < RING_INNER[ring - 1] + 2) targetR = RING_INNER[ring - 1] - 3 // last band of a ring: next ring
   for (let r = Math.max(1, targetR); r >= 1; r--) {
     for (const off of [0, 1, -1, 2, -2]) {
       const rr = r + off
-      const px = Math.round(C + Math.cos(a) * rr - 0.5)
-      const py = Math.round(C + Math.sin(a) * rr - 0.5)
+      const { x: px, y: py } = squareTile(x, y, rr)
       if (isWalkable(world, px, py) && tileAt(world, px, py) !== T.GymDoor) return { x: px, y: py, ring: ringAt(px, py) }
     }
   }

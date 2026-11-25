@@ -71,7 +71,11 @@ export class BattleSession {
   private currentP1 = ''
   private turnCount = 0
 
-  constructor(team1: Mon[], team2: Mon[]) {
+  /** online duel (the host runs the battle, the guest gets the same events seen from its own side and sends its choices back) */
+  pvp?: { send: (type: string, data: unknown) => void; hostName: string; guestName: string }
+
+  constructor(team1: Mon[], team2: Mon[], pvp?: BattleSession['pvp']) {
+    this.pvp = pvp
     this.team1 = team1
     this.team2 = team2
     this.battle = new Battle({
@@ -139,10 +143,11 @@ export class BattleSession {
     return this.team1.find((m) => m.uid === uid) ?? this.team2.find((m) => m.uid === uid)
   }
 
-  private pretty(uid: string): string {
+  private pretty(uid: string, view: Side = 'p1'): string {
     const m = this.monOf(uid)
     if (!m) return uid
-    return this.team2.includes(m) && !this.isTrainerBattle ? `The wild ${m.species}` : this.team2.includes(m) ? `The foe's ${m.species}` : m.species
+    const foes = view === 'p1' ? this.team2 : this.team1 // the viewer's opponents
+    return foes.includes(m) && !this.isTrainerBattle ? `The wild ${m.species}` : foes.includes(m) ? `The foe's ${m.species}` : m.species
   }
 
   isTrainerBattle = false
@@ -174,6 +179,14 @@ export class BattleSession {
   }
 
   private processLines(lines: string[]) {
+    this.emit(this.eventsFor(lines, 'p1', true))
+    if (this.pvp) { const e2 = this.eventsFor(lines, 'p2', false); if (e2.length) this.pvp.send('events', e2) } // the guest sees the same battle from its own side
+  }
+
+  /** the events of some protocol lines, seen from `view` (p2 = the guest of an online duel: sides and names are turned round); `commit` = also update our own records */
+  private eventsFor(lines: string[], view: Side, commit: boolean): BattleEvent[] {
+    const flip = (x: Side): Side => (view === 'p1' ? x : x === 'p1' ? 'p2' : 'p1')
+    const sideOf = (id: string): Side => flip(id.startsWith('p1') ? 'p1' : 'p2')
     const ev: BattleEvent[] = []
     for (const line of lines) {
       if (!line.startsWith('|')) continue
@@ -181,39 +194,37 @@ export class BattleSession {
       const cmd = p[0]
       switch (cmd) {
         case 'switch': case 'drag': {
-          const side = p[1].startsWith('p1') ? 'p1' : 'p2'
+          const side = sideOf(p[1])
           const uid = this.nameOf(p[1])
           const det = /^([^,]+), L(\d+)/.exec(p[2])
           const hp = this.parseHp(p[3])
           const mon = this.monOf(uid)
-          if (side === 'p1') { this.currentP1 = uid; this.participants.add(uid) } else {
-            this.participants = new Set([this.currentP1])
-          }
+          if (commit) { if (p[1].startsWith('p1')) { this.currentP1 = uid; this.participants.add(uid) } else { this.participants = new Set([this.currentP1]) } }
           ev.push({ kind: 'switch', side, uid, species: det ? det[1] : mon?.species ?? '?', level: det ? Number(det[2]) : mon?.level ?? 1, hp: hp.hp, maxHp: hp.max, shiny: !!mon?.shiny })
-          ev.push({ kind: 'text', text: side === 'p1' ? `Go! ${mon?.species ?? ''}!` : this.isTrainerBattle ? `${this.foeName || 'The foe'} sent out ${mon?.species ?? ''}!` : `A wild ${mon?.species ?? ''} appeared!` })
+          ev.push({ kind: 'text', text: side === 'p1' ? `Go! ${mon?.species ?? ''}!` : this.pvp ? `${view === 'p1' ? this.pvp.guestName : this.pvp.hostName} sent out ${mon?.species ?? ''}!` : this.isTrainerBattle ? `${this.foeName || 'The foe'} sent out ${mon?.species ?? ''}!` : `A wild ${mon?.species ?? ''} appeared!` })
           break
         }
         case 'move': {
-          const side = p[1].startsWith('p1') ? 'p1' : 'p2'
+          const side = sideOf(p[1])
           const uid = this.nameOf(p[1])
           if (p[2] === EXTRA) break
-          ev.push({ kind: 'text', text: `${this.pretty(uid)} used ${p[2]}!` }) // the message first, then the move plays
+          ev.push({ kind: 'text', text: `${this.pretty(uid, view)} used ${p[2]}!` }) // the message first, then the move plays
           ev.push({ kind: 'move', side, uid, move: p[2] })
           break
         }
         case '-damage': case '-heal': {
-          const side = p[1].startsWith('p1') ? 'p1' : 'p2'
+          const side = sideOf(p[1])
           const uid = this.nameOf(p[1])
           const h = this.parseHp(p[2])
           ev.push({ kind: 'hp', side, uid, hp: h.hp, maxHp: h.max, status: h.status })
           break
         }
         case 'faint': {
-          const side = p[1].startsWith('p1') ? 'p1' : 'p2'
+          const side = sideOf(p[1])
           const uid = this.nameOf(p[1])
           ev.push({ kind: 'faint', side, uid })
-          ev.push({ kind: 'text', text: `${this.pretty(uid)} fainted!` })
-          if (side === 'p2') {
+          ev.push({ kind: 'text', text: `${this.pretty(uid, view)} fainted!` })
+          if (commit && !this.pvp && p[1].startsWith('p2')) {
             const foe = this.monOf(uid)
             if (foe) this.defeated.push({ foe, by: [...this.participants] })
           }
@@ -222,46 +233,45 @@ export class BattleSession {
         case '-supereffective': ev.push({ kind: 'text', text: "It's super effective!" }); break
         case '-resisted': ev.push({ kind: 'text', text: "It's not very effective..." }); break
         case '-crit': ev.push({ kind: 'text', text: 'A critical hit!' }); break
-        case '-miss': ev.push({ kind: 'text', text: `${this.pretty(this.nameOf(p[1]))}'s attack missed!` }); break
-        case '-immune': ev.push({ kind: 'text', text: `It doesn't affect ${this.pretty(this.nameOf(p[1]))}...` }); break
+        case '-miss': ev.push({ kind: 'text', text: `${this.pretty(this.nameOf(p[1]), view)}'s attack missed!` }); break
+        case '-immune': ev.push({ kind: 'text', text: `It doesn't affect ${this.pretty(this.nameOf(p[1]), view)}...` }); break
         case '-fail': ev.push({ kind: 'text', text: 'But it failed!' }); break
-        case 'cant': ev.push({ kind: 'text', text: `${this.pretty(this.nameOf(p[1]))} can't move!` }); break
+        case 'cant': ev.push({ kind: 'text', text: `${this.pretty(this.nameOf(p[1]), view)} can't move!` }); break
         case '-status': {
           const names: Record<string, string> = { brn: 'was burned', par: 'is paralyzed', slp: 'fell asleep', psn: 'was poisoned', tox: 'was badly poisoned', frz: 'was frozen solid' }
-          ev.push({ kind: 'status', side: p[1].startsWith('p1') ? 'p1' : 'p2', uid: this.nameOf(p[1]), status: p[2] })
-          ev.push({ kind: 'text', text: `${this.pretty(this.nameOf(p[1]))} ${names[p[2]] ?? 'has a status'}!` })
+          ev.push({ kind: 'status', side: sideOf(p[1]), uid: this.nameOf(p[1]), status: p[2] })
+          ev.push({ kind: 'text', text: `${this.pretty(this.nameOf(p[1]), view)} ${names[p[2]] ?? 'has a status'}!` })
           break
         }
-        case '-curestatus': ev.push({ kind: 'status', side: p[1].startsWith('p1') ? 'p1' : 'p2', uid: this.nameOf(p[1]), status: '' }); break
+        case '-curestatus': ev.push({ kind: 'status', side: sideOf(p[1]), uid: this.nameOf(p[1]), status: '' }); break
         case '-boost': case '-unboost': {
           const up = p[0] === '-boost'
           const n = Math.max(1, Math.min(6, Number(p[3]) || 1))
           const stat = STAT_NAMES[p[2]] ?? p[2]
           const how = up ? (n === 1 ? '' : n === 2 ? ' sharply' : ' drastically') : (n === 1 ? '' : n === 2 ? ' harshly' : ' severely')
           const uid = this.nameOf(p[1])
-          ev.push({ kind: 'text', text: `${this.pretty(uid)}'s ${stat} ${up ? 'rose' : 'fell'}${how}!` })
-          ev.push({ kind: 'stat', side: p[1].startsWith('p1') ? 'p1' : 'p2', uid, amount: up ? n : -n })
+          ev.push({ kind: 'text', text: `${this.pretty(uid, view)}'s ${stat} ${up ? 'rose' : 'fell'}${how}!` })
+          ev.push({ kind: 'stat', side: sideOf(p[1]), uid, amount: up ? n : -n })
           break
         }
-        case 'turn': this.turnCount = Number(p[1]); ev.push({ kind: 'turn', n: this.turnCount }); break
+        case 'turn': if (commit) this.turnCount = Number(p[1]); ev.push({ kind: 'turn', n: Number(p[1]) }); break
         case 'win': {
-          this.ended = true
-          this.winner = p[1] === 'You' ? 'p1' : 'p2'
-          ev.push({ kind: 'win', side: this.winner })
+          const w: Side = p[1] === 'You' ? 'p1' : 'p2'
+          if (commit) { this.ended = true; this.winner = w }
+          ev.push({ kind: 'win', side: flip(w) })
           break
         }
-        case 'tie': this.ended = true; this.winner = null; ev.push({ kind: 'win', side: null }); break
+        case 'tie': if (commit) { this.ended = true; this.winner = null } ev.push({ kind: 'win', side: null }); break
       }
     }
-    this.emit(ev)
+    return ev
   }
 
   // ---------------------------------------------------------------- requests
-  private onP1Request(req: {
+  private makeRequest(who: Side, req: {
     wait?: boolean; forceSwitch?: boolean[]; teamPreview?: boolean; active?: Array<{ moves: Array<{ move: string; id: string; pp: number; maxpp: number; disabled?: boolean; type?: string }>; trapped?: boolean }>
     side: { pokemon: Array<{ ident: string; details: string; condition: string; active: boolean }> }
   }) {
-    if (req.teamPreview) { this.battle.choose('p1', 'team 1'); return }
     const bench: BenchOption[] = req.side.pokemon.map((pk) => {
       const uid = this.nameOf(pk.ident)
       const h = this.parseHp(pk.condition)
@@ -271,16 +281,22 @@ export class BattleSession {
     const moves: MoveOption[] = (req.active?.[0]?.moves ?? [])
       .filter((m) => m.move !== EXTRA)
       .map((m) => {
-        const slot = (this.battle.p1.active[0] as { moveSlots?: Array<{ id: string; pp: number; maxpp: number }> } | undefined)?.moveSlots?.find((x) => x.id === m.id)
+        const slot = (this.battle[who].active[0] as { moveSlots?: Array<{ id: string; pp: number; maxpp: number }> } | undefined)?.moveSlots?.find((x) => x.id === m.id)
         const live = slot?.pp ?? m.pp // (the first request was written before the saved power points were applied)
         return { name: m.move, id: m.id, pp: live, maxpp: slot?.maxpp ?? m.maxpp, disabled: !!m.disabled || live <= 0, type: Dex.moves.get(m.id).type }
       })
-    const r: Request = { forceSwitch: !!req.forceSwitch?.[0], wait: !!req.wait, moves, bench, trapped: !!req.active?.[0]?.trapped }
+    return { forceSwitch: !!req.forceSwitch?.[0], wait: !!req.wait, moves, bench, trapped: !!req.active?.[0]?.trapped }
+  }
+
+  private onP1Request(req: Parameters<BattleSession['makeRequest']>[1] & { teamPreview?: boolean }) {
+    if (req.teamPreview) { this.battle.choose('p1', 'team 1'); return }
+    const r = this.makeRequest('p1', req)
     for (const l of this.reqListeners) l(r)
   }
 
   private onP2Request(req: NonNullable<BattleSession['lastP2Request']> & { teamPreview?: boolean; wait?: boolean }) {
     if (req.teamPreview) { this.battle.choose('p2', 'team 1'); return }
+    if (this.pvp) { this.pvp.send('request', this.makeRequest('p2', req as never)); return } // the guest of an online duel chooses for itself
     if (req.wait) return
     this.lastP2Request = req
     this.p2Pending = true
@@ -323,10 +339,17 @@ export class BattleSession {
   // (the turn is committed when the player has chosen too; chooseMove / chooseSwitch / passTurn then flush)
 
   // ---------------------------------------------------------------- the player's choices
-  chooseMove(index1: number) { this.battle.choose('p1', `move ${index1}`); this.p2Decide(); this.flush() }
+  chooseMove(index1: number) { this.battle.choose('p1', `move ${index1}`); if (!this.pvp) this.p2Decide(); this.flush() }
   chooseSwitch(uid: string) {
     const i = (this.battle.p1.pokemon as Array<{ name: string }>).findIndex((p) => p.name === uid)
-    if (i >= 0) { this.battle.choose('p1', `switch ${i + 1}`); this.p2Decide(); this.flush() }
+    if (i >= 0) { this.battle.choose('p1', `switch ${i + 1}`); if (!this.pvp) this.p2Decide(); this.flush() }
+  }
+  /** online duel: what the guest chose */
+  remoteChoice(c: { k: 'move'; i: number } | { k: 'switch'; uid: string }) {
+    if (this.destroyed || this.ended) return
+    if (c.k === 'move') this.battle.choose('p2', `move ${c.i}`)
+    else { const i = (this.battle.p2.pokemon as Array<{ name: string }>).findIndex((p) => p.name === c.uid); if (i >= 0) this.battle.choose('p2', `switch ${i + 1}`) }
+    this.flush()
   }
   /** spend the turn doing nothing (using an item, a failed catch ...): the foe still acts */
   passTurn() {
