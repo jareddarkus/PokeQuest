@@ -8,9 +8,11 @@ import {
 import { useUiUrl } from './CmdButton'
 import StatusIcon from './StatusIcon'
 import BattleBackdrop from './BattleBackdrop'
+import BattleTransition from './BattleTransition'
+import type { BattleBackdrop3D } from '../rom/battleScene'
 import type { BattleLayout } from '../rom/battleScene'
 import MonSprite, { preloadPixel } from './MonSprite'
-import { CommandScreen, MoveScreen, dsScale } from './DsMenu'
+import { CommandScreen, IdleBall, MoveScreen, dsScale } from './DsMenu'
 import BagScreen from './BagScreen'
 import { Dex } from '@pkmn/sim'
 import { music } from '../audio/music'
@@ -41,7 +43,7 @@ interface Props {
   onEnd: (outcome: BattleOutcome, trainer: Trainer) => void
 }
 
-interface Side { uid: string; species: string; level: number; hp: number; maxHp: number; shiny: boolean; fainted: boolean; status?: string }
+export interface Side { uid: string; species: string; level: number; hp: number; maxHp: number; shiny: boolean; fainted: boolean; status?: string }
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
 let statKey = 0
@@ -63,9 +65,10 @@ export function TypedText({ text, ms, skip }: { text: string; ms: number; skip: 
     return () => window.clearInterval(id)
   }, [full, ms])
   useEffect(() => { if (skip) setN(full.length) }, [skip])
-  // the game's own font, as big as the screen allows (whole-number sizes stay crisp)
-  const k = window.innerWidth >= 700 ? 2 : 1
-  return <FontText text={full} reveal={n} k={k} font={0} color="#ffffff" shadow="#6e6e7e" maxWidth={Math.floor(Math.min(window.innerWidth - 70, 500) / k)} style={{ margin: '0 auto', textAlign: 'left' }} />
+  // the game's own font at the size of the real top screen: white letters with a light grey shadow (measured on the reference video)
+  const K = useDsK()
+  const bandW = Math.min(window.innerWidth, 256 * K)
+  return <FontText text={full} reveal={n} k={K} font={0} color="#f8f8f8" shadow="#a4b0b0" maxWidth={Math.floor((bandW - 16 * K) / K)} style={{ textAlign: 'left' }} />
 }
 
 /**
@@ -84,7 +87,7 @@ function SendOut({ fromLeft }: { fromLeft: boolean }) {
 }
 
 /** A trainer standing on a platform: the foe's still picture, or the player's back picture that throws the ball. Slides away when `out`. */
-function TrainerFigure({ still, sprite, k, side, out, play }: { still?: HTMLCanvasElement | null; sprite?: AnimatedSprite | null; k: number; side: 'foe' | 'me'; out: boolean; play: number }) {
+function TrainerFigure({ still, sprite, k, side, out, play, sil }: { still?: HTMLCanvasElement | null; sprite?: AnimatedSprite | null; k: number; side: 'foe' | 'me'; out: boolean; play: number; sil?: 0 | 1 }) {
   const ref = useRef<HTMLCanvasElement>(null)
   const size = still ? 80 : sprite?.size ?? 128
   useEffect(() => {
@@ -106,29 +109,26 @@ function TrainerFigure({ still, sprite, k, side, out, play }: { still?: HTMLCanv
     tick()
     return () => cancelAnimationFrame(raf)
   }, [still, sprite, play, size])
-  return <canvas ref={ref} width={size} height={size} className={`tr-fig ${side} ${out ? 'out' : ''}`} style={{ width: size * k, height: size * k }} />
+  return <canvas ref={ref} width={size} height={size} className={`tr-fig ${side} ${out ? 'out' : sil === undefined ? '' : `sil${sil}`}`} style={{ width: size * k, height: size * k }} />
 }
 
-/** The row of six small balls shown on the top screen while a trainer is introduced (filled = a Pokémon, empty = no Pokémon in that place). */
-function TeamBalls({ count, alive, k }: { count: number; alive: boolean[]; k: number }) {
+/**
+ * The row of six small Poké Balls of a team (measured on the reference video, in DS pixels): a black bar slides in from the screen edge (foe: from the left
+ * at y 49, yours: from the right at y 124), the six balls sit above it 15 pixels apart (foe y 40, yours y 114), the places with a Pokémon nearest the middle
+ * of the screen; the balls pop in one after another (the outermost first, then from the middle outwards), each turning into view.
+ */
+function TeamBalls({ side, count, alive, K }: { side: 'foe' | 'me'; count: number; alive: boolean[]; K: number }) {
+  const ball = useUiUrl('bt:ball'), fnt = useUiUrl('bt:ballfnt'), none = useUiUrl('bt:ballno')
+  const foe = side === 'foe'
+  const order = [1, 2, 3, 4, 5, 0] // pop order of the places counted from the middle (j = 5 outermost first)
   return (
-    <div className="team-balls" style={{ ['--k' as string]: `${k}px` }}>
-      <span className="team-balls-line" />
-      {Array.from({ length: 6 }, (_, i) => (
-        <span key={i} className={`tb ${i < count ? (alive[i] ? 'ok' : 'fnt') : 'none'}`}>{i < count && <span className="tb-top" />}</span>
-      ))}
-    </div>
-  )
-}
-
-/** The way into a battle: a flash, then black bars sweep away from the picture. */
-function BattleWipe() {
-  const [gone, setGone] = useState(false)
-  useEffect(() => { const id = window.setTimeout(() => setGone(true), 1300); return () => window.clearTimeout(id) }, [])
-  if (gone) return null
-  return (
-    <div className="bt-wipe" aria-hidden>
-      {Array.from({ length: 10 }, (_, i) => <span key={i} className={i % 2 ? 'r' : 'l'} style={{ animationDelay: `${0.18 + (i % 5) * 0.04}s` }} />)}
+    <div className="tbs" style={{ ['--k' as string]: `${K}px` }}>
+      <span className={`tbs-bar ${foe ? 'foe' : 'me'}`} style={{ top: (foe ? 48.8 : 122.4) * K, height: 3.6 * K, width: (foe ? 137 : 133.5) * K }} />
+      {Array.from({ length: 6 }, (_, j) => {
+        const x = foe ? 15.2 + 15 * (5 - j) : 256 - (15.2 + 15 * (5 - j))
+        const src = j < count ? (alive[j] ? ball : fnt) : none
+        return src ? <img key={j} className="tbs-ball" src={src} alt="" draggable={false} style={{ left: foe ? (x - 8) * K : undefined, right: foe ? undefined : (256 - x - 8) * K, top: ((foe ? 40 : 114.2) - 8) * K, width: 16 * K, height: 16 * K, animationDelay: `${0.12 + order[j] * 0.1}s` }} /> : null
+      })}
     </div>
   )
 }
@@ -142,48 +142,68 @@ function StatArrows({ up, big }: { up: boolean; big: boolean }) {
   )
 }
 
+/** Screen pixels per DS pixel for the battle UI: the 256 x 192 top screen fits into the picture area (so the boxes and the text are as big as in the game). */
+export function useDsK(): number {
+  const [k, setK] = useState(() => dsK())
+  useEffect(() => { const f = () => setK(dsK()); window.addEventListener('resize', f); return () => window.removeEventListener('resize', f) }, [])
+  return k
+}
+function dsK(): number {
+  const W = window.innerWidth, H = window.innerWidth >= 1000 ? window.innerHeight : window.innerHeight - 192 * dsScale()
+  return Math.max(1.2, Math.min(W / 256, H / 192))
+}
+
+/** one 8 x 8 picture (tile `t` of the glyph sheet: gauge pieces 0-26, ball 27, digits 41-50, "Lv" 52, slash 64 ...) at DS position x, y */
+function Tile({ url, t, x, y, K }: { url: string; t: number; x: number; y: number; K: number }) {
+  return <div style={{ position: 'absolute', left: x * K, top: y * K, width: 8 * K, height: 8 * K, backgroundImage: `url(${url})`, backgroundSize: `${128 * K}px ${40 * K}px`, backgroundPosition: `${-(t & 15) * 8 * K}px ${-(t >> 4) * 8 * K}px`, imageRendering: 'pixelated' }} />
+}
+/** a row of gauge tiles: `n` tiles of 8 pixels, `px` pixels filled; `base` = first tile of the colour (0 green, 9 yellow, 18 red; +0 empty ... +8 full) or the EXP set (32, blue) */
+function Gauge({ url, K, x, y, n, px, base }: { url: string; K: number; x: number; y: number; n: number; px: number; base: number }) {
+  return <>{Array.from({ length: n }, (_, i) => <Tile key={i} url={url} t={base + Math.max(0, Math.min(8, px - i * 8))} x={x + i * 8} y={y} K={K} />)}</>
+}
+const DIGIT = 41 // tile of the digit 0 in the sheet
+const SLASH = 64
+/** a number written with the game's digit pictures (8 pixels per digit), starting at x */
+function Digits({ url, K, x, y, text }: { url: string; K: number; x: number; y: number; text: string }) {
+  return <>{[...text].map((ch, i) => (ch === ' ' ? null : <Tile key={i} url={url} t={ch === '/' ? SLASH : DIGIT + Number(ch)} x={x + i * 8} y={y} K={K} />))}</>
+}
+
 /**
- * The HP box of Pokémon Black 2 / White 2, like the real one: the name (white with a dark outline, in the game's font), the gender sign and "Lv" + level
- * sit on the background; below them is the grey checkered plate with the HP label and gauge (yours also shows the HP numbers and an EXP gauge).
+ * The HP box of Pokémon Black 2 / White 2, built from the game's own pictures like the real one (measured on the reference video, in DS pixels):
+ * the name in the game's font (white, black outline), the gender sign, "Lv" and the level in the game's digits, the grey plate with the HP label, the
+ * 48-pixel HP gauge (yours also shows the HP numbers and the 80-pixel EXP gauge).
  */
-function HpBox({ side, mine, exp, gender }: { side: Side; mine: boolean; exp?: number; gender?: 'M' | 'F' | 'N' }) {
+export function HpBox({ side, mine, exp, gender, k, nameFont = 2 }: { side: Side; mine: boolean; exp?: number; gender?: 'M' | 'F' | 'N'; k?: number; nameFont?: 0 | 1 | 2 }) {
   const strip = useUiUrl(mine ? 'hp:stripme' : 'hp:stripfoe')
-  // DS pixels -> screen pixels: the box must fit beside the command screen on wide windows, above it on narrow ones
-  const room = window.innerWidth >= 1000 ? (window.innerWidth - 400) / 2 : window.innerWidth
-  const K = Math.max(1.6, Math.min(3, Math.floor((room - 16) / 136)))
-  const kf = Math.max(1, Math.round(K)) // font pixels: whole numbers keep the game's font crisp
+  const sheet = useUiUrl('hp:glyphs')
+  const K0 = useDsK()
+  const K = k ?? K0
   const frac = side.maxHp > 0 ? Math.max(0, Math.min(1, side.hp / side.maxHp)) : 0
-  const fill = frac > 0.5 ? ['#00ff4a', '#00bd21'] : frac > 0.2 ? ['#ffad00', '#a58429'] : ['#ff4273', '#a54a5a']
+  const fillPx = side.hp > 0 ? Math.max(1, Math.min(48, Math.floor(48 * frac))) : 0
+  const gaugeBase = frac > 0.5 ? 0 : frac > 0.2 ? 9 : 18
   const lo = side.level ** 3, hi = (side.level + 1) ** 3
-  const expFrac = exp === undefined ? 0 : Math.max(0, Math.min(1, (exp - lo) / Math.max(1, hi - lo)))
-  const u = (n: number) => n * K
-  const stripX = mine ? 8 : 14, stripY = 14
-  const gx = stripX + (mine ? 50 : 38), gy = stripY + 2, gw = mine ? 66 : 64
+  const expPx = exp === undefined ? 0 : Math.max(0, Math.min(80, Math.floor((80 * (exp - lo)) / Math.max(1, hi - lo))))
+  // positions (DS pixels, relative to the box): foe box origin = screen (6, 31), yours = screen (145, 112)
+  const G = mine ? { strip: [0, 11], name: [9, 1.4], gender: [63.3, 2.3], lv: [70.2, 2.4], lvl: [79, 3.3], gauge: [46.8, 9.5], hp: [47.5, 16], exp: [23.2, 24.1], w: 124, h: 36 } : { strip: [0, 10.5], name: [13.7, 1.1], gender: [68, 1.8], lv: [76.1, 3.1], lvl: [84.1, 2.1], gauge: [37.3, 10.1], hp: [0, 0], exp: [0, 0], w: 112, h: 24 }
+  const hpText = `${String(Math.max(0, side.hp)).padStart(3, ' ')}/${side.maxHp}`
   return (
-    <div className={`hp2 ${mine ? 'mine' : 'foe'}`} style={{ width: u(136), height: u(mine ? 42 : 30) }}>
-      <div style={{ position: 'absolute', left: u(mine ? 14 : 8), top: 0 }}><FontText text={nameOf(side.species)} font={1} k={kf} color="#ffffff" shadow="#101018" /></div>
-      <div style={{ position: 'absolute', right: u(mine ? 8 : 18), top: 0, display: 'flex', alignItems: 'flex-start', gap: u(2) }}>
-        {gender && gender !== 'N' && <FontText text={gender === 'M' ? '♂' : '♀'} font={1} k={kf} color={gender === 'M' ? '#4aa8ff' : '#ff5a70'} shadow="#101018" />}
-        <FontText text="Lv" font={1} k={kf} color="#f2c230" shadow="#101018" />
-        <FontText text={String(side.level)} font={1} k={kf} color="#ffffff" shadow="#101018" />
-      </div>
-      {strip && <img src={strip} alt="" draggable={false} style={{ position: 'absolute', left: u(stripX), top: u(stripY), width: u(mine ? 124 : 112), height: u(mine ? 16 : 12), imageRendering: 'pixelated' }} />}
-      {/* the HP gauge: a dark track with the fill on it */}
-      <div style={{ position: 'absolute', left: u(gx), top: u(gy), width: u(gw), height: u(4), background: '#212121', boxShadow: '0 0 0 1px #000' }}>
-        <div style={{ position: 'absolute', left: 0, top: u(1), height: u(1), width: `${frac * 100}%`, background: fill[0], transition: 'width .5s ease' }} />
-        <div style={{ position: 'absolute', left: 0, top: u(2), height: u(1), width: `${frac * 100}%`, background: fill[1], transition: 'width .5s ease' }} />
-      </div>
-      {mine && <div style={{ position: 'absolute', left: u(gx), top: u(gy - 3), width: u(gw), display: 'flex', justifyContent: 'flex-end' }}><FontText text={`${Math.max(0, side.hp)}/${side.maxHp}`} font={1} k={kf} color="#ffffff" shadow="#101018" align="right" /></div>}
-      {mine && (
-        <div style={{ position: 'absolute', left: u(stripX + 36), top: u(stripY + 10), width: u(80), height: u(3), background: '#212121', boxShadow: '0 0 0 1px #000' }}>
-          <div style={{ position: 'absolute', left: 0, top: u(1), height: u(1), width: `${expFrac * 100}%`, background: '#38b6f5', transition: 'width .5s ease' }} />
-        </div>
+    <div className={`hp2 ${mine ? 'mine' : 'foe'}`} style={{ width: G.w * K, height: G.h * K, ['--k' as string]: `${K}px` }}>
+      {strip && <img src={strip} alt="" draggable={false} style={{ position: 'absolute', left: G.strip[0] * K, top: G.strip[1] * K, width: (mine ? 124 : 112) * K, height: (mine ? 16 : 12) * K, imageRendering: 'pixelated' }} />}
+      <div style={{ position: 'absolute', left: (G.name[0] - 1) * K, top: (G.name[1] - 1) * K }}><FontText text={nameOf(side.species)} font={nameFont} k={K} color="#f8f8f8" shadow="#101010" outline /></div>
+      {sheet && (
+        <>
+          {gender && gender !== 'N' && <div style={{ position: 'absolute', left: (G.gender[0] - 1) * K, top: (G.gender[1] - 1) * K }}><FontText text={gender === 'M' ? '♂' : '♀'} font={3} k={K} color={gender === 'M' ? '#38a0f8' : '#e82838'} shadow="#101010" outline /></div>}
+          <Tile url={sheet} t={52} x={G.lv[0]} y={G.lv[1]} K={K} />
+          <div style={{ position: 'absolute', left: (G.lvl[0] - 1) * K, top: (G.lvl[1] - 1) * K }}><FontText text={String(side.level)} font={3} k={K} color="#f8f8f8" shadow="#101010" outline /></div>
+          <Gauge url={sheet} K={K} x={G.gauge[0]} y={G.gauge[1]} n={6} px={fillPx} base={gaugeBase} />
+          {mine && <Digits url={sheet} K={K} x={G.hp[0]} y={G.hp[1]} text={hpText} />}
+          {mine && <Gauge url={sheet} K={K} x={G.exp[0]} y={G.exp[1]} n={10} px={expPx} base={32} />}
+        </>
       )}
-      <div style={{ position: 'absolute', right: u(mine ? 14 : 22), top: u(stripY) }}><StatusIcon status={side.fainted ? 'fnt' : side.status} scale={K / 1.5} /></div>
+      <div style={{ position: 'absolute', left: (mine ? 112 : 100) * K, top: (mine ? 14 : 12) * K }}><StatusIcon status={side.fainted ? 'fnt' : side.status} scale={K / 1.5} /></div>
     </div>
   )
 }
-
 export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed, playerGirl, textSpeed = 'normal', onEnd }: Props) {
   const playerTeam = useMemo(() => trainer.team.filter((m) => m.hp > 0).map((m) => ({ ...m, evs: { ...m.evs }, ivs: { ...m.ivs }, moves: [...m.moves] })), [])
   const foeCopies = useMemo(() => foeTeam.map((m) => ({ ...m, evs: { ...m.evs }, ivs: { ...m.ivs }, moves: [...m.moves] })), [])
@@ -192,7 +212,6 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
   const [text, setText] = useState('')
   const [skip, setSkip] = useState(0)
   const [rows, setRows] = useState<null | 'foe' | 'me'>(null) // the row of six balls shown while a trainer is introduced
-  const rowsShown = useRef(false)
   const fromFight = useRef(false) // coming back from the move screen: the Poké Ball closes
   const [foePic, setFoePic] = useState<HTMLCanvasElement | null>(null) // the foe trainer's picture
   const [myPic, setMyPic] = useState<AnimatedSprite | null>(null) // your own trainer's back picture
@@ -200,6 +219,12 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
   const [trGone, setTrGone] = useState({ foe: false, me: false }) // gone
   const [throwKey, setThrowKey] = useState(0)
   const trSent = useRef({ foe: false, me: false })
+  const [hpOn, setHpOn] = useState({ foe: false, me: false }) // the HP boxes show once the Pokémon stand on their platform
+  const [showScene, setShowScene] = useState(false) // the battle picture is hidden while the way in (flash, bars) plays over the map
+  const [introOn, setIntroOn] = useState(false) // the opening shot has begun
+  const [transDone, setTransDone] = useState(false)
+  const sceneRef = useRef<BattleBackdrop3D | null>(null)
+  const introResolve = useRef<() => void>(() => {})
   const [send, setSend] = useState<null | { side: 'me' | 'foe'; key: number }>(null) // a Pokémon being sent out of its ball
   const wake = useRef<(() => void) | null>(null)
   const [statFx, setStatFx] = useState<null | { side: 'me' | 'foe'; up: boolean; big: boolean; key: number }>(null)
@@ -213,6 +238,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
   const say = async (t: string, hold = 800) => { setText(t); await wait(typeMs(t) + hold) }
   const [mode, setMode] = useState<'wait' | 'menu' | 'fight' | 'switch' | 'bag' | 'done'>('wait')
   const S = dsScale()
+  const Kd = useDsK()
   const [req, setReq] = useState<Request | null>(null)
   const sessionRef = useRef<BattleSession | null>(null)
   const queue = useRef<BattleEvent[]>([])
@@ -259,26 +285,35 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
         case 'text':
           if (/super effective/i.test(ev.text)) void music.playSfx('se:hitStrong')
           else if (/not very effective/i.test(ev.text)) void music.playSfx('se:hitWeak')
+          if (/ sent out /i.test(ev.text)) setRows(null)
+          if (/^Go! /.test(ev.text) && !trSent.current.me) setRows('me')
           await say(ev.text, 750); break
         case 'switch': {
+          const who = ev.side === 'p1' ? 'me' : 'foe'
           const s: Side = { uid: ev.uid, species: ev.species, level: ev.level, hp: ev.hp, maxHp: ev.maxHp, shiny: ev.shiny, fainted: false }
-          const ballOut = ev.side === 'p1' || kind !== 'wild' // trainers' Pokémon (and yours) come out of a Poké Ball; a wild Pokémon just appears
-          if (ballOut) setSend({ side: ev.side === 'p1' ? 'me' : 'foe', key: ++sendKey })
-          { // the trainers step aside: the foe's slides off, yours throws the ball and slides off
-            const who = ev.side === 'p1' ? 'me' : 'foe'
-            if (!trSent.current[who] && (who === 'me' || kind !== 'wild')) {
-              trSent.current[who] = true
-              if (who === 'me') { setThrowKey((k) => k + 1); window.setTimeout(() => setTrOut((o) => ({ ...o, me: true })), 800); window.setTimeout(() => setTrGone((o) => ({ ...o, me: true })), 1900) }
-              else { setTrOut((o) => ({ ...o, foe: true })); window.setTimeout(() => setTrGone((o) => ({ ...o, foe: true })), 1100) }
-            }
+          const ballOut = who === 'me' || kind !== 'wild' // trainers' Pokémon (and yours) come out of a Poké Ball; a wild Pokémon just appears
+          setHpOn((o) => ({ ...o, [who]: false }))
+          if (who === 'me' && !trSent.current.me) { // your row of balls is shown while "Go!" is read, then your trainer throws the ball and fades away
+            trSent.current.me = true
+            await sleep(300); setRows(null)
+            setThrowKey((k) => k + 1)
+            window.setTimeout(() => setTrOut((o) => ({ ...o, me: true })), 750)
+            window.setTimeout(() => setTrGone((o) => ({ ...o, me: true })), 1300)
+            await sleep(450)
+          } else if (who === 'foe' && kind !== 'wild' && !trSent.current.foe) { // the foe trainer fades away, then the ball comes
+            trSent.current.foe = true
+            setTrOut((o) => ({ ...o, foe: true }))
+            window.setTimeout(() => setTrGone((o) => ({ ...o, foe: true })), 450)
+            await sleep(450)
           }
-          if (ev.side === 'p1' && kind !== 'wild' && !rowsShown.current) { rowsShown.current = true; setRows('me'); window.setTimeout(() => setRows(null), 1500) }
-          if (ev.side === 'p1') setMe(s); else setFoe(s)
+          if (ballOut) setSend({ side: who, key: ++sendKey })
+          if (who === 'me') setMe(s); else setFoe(s)
           hpOf.current[ev.uid] = ev.hp
           if (ballOut) { void music.playSfx('se:throw'); await sleep(1050) }
           void music.cry(dexNum(ev.species))
           await sleep(ballOut ? 800 : 1100)
           setSend(null)
+          setHpOn((o) => ({ ...o, [who]: true })) // the HP box pops up once the Pokémon stands there
           break
         }
         case 'hp': {
@@ -373,19 +408,31 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
       if (kind !== 'wild') jobs.push(trainerFrontPic(trainerClassFor(kind === 'gym' ? 'gym' : 'trainer', foeSeed ?? foeName ?? 'trainer'), [2, 3, 4, 5]).then((r) => setFoePic(r?.canvas ?? null)))
       await Promise.race([Promise.all(jobs), sleep(3000)])
     }
-    if (kind !== 'wild') { setText(`You are challenged by ${foeName ?? 'a trainer'}!`); setRows('foe') }
-    void prepare().then(() => sleep(kind !== 'wild' ? 2600 : 900)).then(() => {
+    const introReady = new Promise<void>((res) => { introResolve.current = res })
+    void prepare().then(() => introReady).then(async () => {
       if (cancelled) return
-      setRows(null)
+      if (kind !== 'wild') { // "You are challenged by ...!" with the foe's row of balls (1.45 s after the picture fades in, like the recording)
+        const t = `You are challenged by ${foeName ?? 'a trainer'}!`
+        setText(t); setRows('foe')
+        await sleep(typeMs(t) + 2000)
+        if (cancelled) return
+        setRows(null)
+      }
       s = new BattleSession(playerTeam, foeCopies)
       s.isTrainerBattle = kind !== 'wild'
       s.foeName = foeName ?? ''
       sessionRef.current = s
       let opening = kind !== 'wild' // in a trainer battle the foe trainer sends out first, like in the game
-      s.onEvents((evs) => {
+      s.onEvents((evs0) => {
+        // the sentence ("Go! X!", "Y sent out X!") is read first, then the Pokémon comes out
+        let evs = [...evs0]
+        for (let i = 0; i + 1 < evs.length; i++) {
+          const a = evs[i], b = evs[i + 1]
+          if (a.kind === 'switch' && b.kind === 'text' && /^Go! | sent out /.test(b.text)) { evs[i] = b; evs[i + 1] = a; i++ }
+        }
         if (opening) {
           const a = evs.findIndex((e) => e.kind === 'switch' && e.side === 'p1'), b = evs.findIndex((e) => e.kind === 'switch' && e.side === 'p2')
-          if (a >= 0 && b === a + 2) { opening = false; evs = [...evs.slice(0, a), evs[b], evs[b + 1], evs[a], evs[a + 1], ...evs.slice(b + 2)] }
+          if (a >= 1 && b === a + 2) { opening = false; evs = [...evs.slice(0, a - 1), evs[b - 1], evs[b], evs[a - 1], evs[a], ...evs.slice(b + 1)] }
         }
         queue.current.push(...evs); void pump()
       })
@@ -546,15 +593,15 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
   }
 
   return (
-    <div className="fullscreen battle" style={{ ["--menu-h" as string]: `${192 * S}px` }}>
+    <div className={`fullscreen battle ${showScene ? '' : 'pre'}`} style={{ ["--menu-h" as string]: `${192 * S}px`, ["--k" as string]: `${Kd}px` }}>
       <div className={`stage-cam ${mode === 'fight' ? 'zoom' : ''}`}>
-      <BattleBackdrop env={environment} onLayout={setLayout} />
+      <BattleBackdrop env={environment} onLayout={setLayout} sceneRef={sceneRef} />
       <canvas ref={fxCanvas} className="fx-canvas" />
 
 
       {layout && foePic && !trGone.foe && (
         <div className="stage-sprite" style={{ left: layout.foe.x, top: layout.foe.y + layout.foe.w * 0.1, width: layout.foe.w }}>
-          <TrainerFigure still={foePic} k={(layout.foe.w * 1.05) / 76.8} side="foe" out={trOut.foe} play={0} />
+          <TrainerFigure still={foePic} k={(layout.foe.w * 1.05) / 76.8} side="foe" out={trOut.foe} play={0} sil={introOn ? 1 : 0} />
         </div>
       )}
       {layout && myPic && !trGone.me && (
@@ -584,17 +631,18 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
         </>
       )}
       </div>
-      <BattleWipe />
-      {rows && <TeamBalls count={rows === 'foe' ? foeTeam.length : playerTeam.length} alive={rows === 'foe' ? foeTeam.map((m) => m.hp > 0) : playerTeam.map((m) => m.hp > 0)} k={Math.max(1, S * 1.4)} />}
+      {!transDone && <BattleTransition onBlack={() => setShowScene(true)} onFade={() => { sceneRef.current?.startIntro(900); setIntroOn(true); window.setTimeout(() => introResolve.current(), 1450) }} onDone={() => setTransDone(true)} />}
+      {rows && <TeamBalls key={rows} side={rows} count={rows === 'foe' ? foeTeam.length : playerTeam.length} alive={rows === 'foe' ? foeTeam.map((m) => m.hp > 0) : playerTeam.map((m) => m.hp > 0)} K={Kd} />}
       <div className="foe-zone">
-        {foe && <HpBox side={foe} mine={false} gender={foeCopies.find((m) => m.uid === foe.uid)?.gender} />}
+        {foe && hpOn.foe && <HpBox side={foe} mine={false} gender={foeCopies.find((m) => m.uid === foe.uid)?.gender} />}
       </div>
       <div className="me-zone">
-        {me && <HpBox side={me} mine exp={teamRef.current.find((m) => m.uid === me.uid)?.exp} gender={teamRef.current.find((m) => m.uid === me.uid)?.gender} />}
+        {me && hpOn.me && <HpBox side={me} mine exp={teamRef.current.find((m) => m.uid === me.uid)?.exp} gender={teamRef.current.find((m) => m.uid === me.uid)?.gender} />}
       </div>
       <div className="battle-bottom">
         <div className="battle-band" style={{ cursor: 'pointer' }} onClick={() => { setSkip((k) => k + 1); wake.current?.() }}><TypedText text={text} ms={msPer} skip={skip} /></div>
 
+        {mode === 'wait' && <IdleBall S={S} />}
         {mode === 'menu' && req && (
           <CommandScreen
             S={S}

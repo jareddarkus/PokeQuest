@@ -144,7 +144,7 @@ function BallHalves({ S, open, onDone }: { S: number; open: boolean; onDone?: ()
   const half = (top: boolean): React.CSSProperties => ({
     position: 'absolute', left: 0, width: 256 * S, height: 96 * S, top: top ? 0 : 96 * S, overflow: 'hidden', pointerEvents: 'none', zIndex: 6,
     backgroundImage: `url(${closed})`, backgroundSize: `${256 * S}px ${192 * S}px`, backgroundPosition: top ? '0 0' : `0 -${96 * S}px`, imageRendering: 'pixelated',
-    animation: `${open ? (top ? 'pq-half-up' : 'pq-half-down') : (top ? 'pq-half-in-up' : 'pq-half-in-down')} .34s cubic-bezier(.5,0,.5,1) forwards`,
+    animation: `${open ? (top ? 'pq-half-up' : 'pq-half-down') : (top ? 'pq-half-in-up' : 'pq-half-in-down')} .16s cubic-bezier(.5,0,.5,1) forwards`,
   })
   return (
     <>
@@ -187,6 +187,21 @@ function PartyDots({ S, party, foeCount }: { S: number; party?: Array<'ok' | 'fn
   )
 }
 
+/**
+ * The lower screen while nothing can be chosen (reference video): the Poké Ball closed and dim (the command picture seen from further away, dark), the ring around it.
+ * When the commands come the ball zooms in and lights up (see .cmd-in), when a command was chosen it zooms out and dims again (this).
+ */
+export function IdleBall({ S }: { S: number }) {
+  const bg = useUiUrl('menu:bg')
+  return (
+    <div className="ds-screen idle-ball" style={{ width: 256 * S, height: 192 * S, overflow: 'hidden', background: '#101216' }}>
+      <ScreenBar S={S} />
+      <div className="idle-ball-pic" style={{ position: 'absolute', inset: 0, backgroundImage: bg ? `url(${bg})` : undefined, backgroundSize: '100% 100%', imageRendering: 'pixelated' }} />
+      <div style={{ position: 'absolute', left: '50%', top: '53%', width: 118 * S, height: 118 * S, transform: 'translate(-50%,-50%)', borderRadius: '50%', border: `${Math.max(1, S)}px solid rgba(255,255,255,.1)`, boxShadow: '0 0 0 ' + 6 * S + 'px rgba(255,255,255,.05)' }} />
+    </div>
+  )
+}
+
 /** The battle command screen drawn like the original: Poké Ball backdrop, FIGHT in the middle, BAG / POKÉMON / RUN below. */
 export function CommandScreen({ S, onFight, onBag, onPokemon, onRun, pokemonOff, runOff, closing, party, foeCount }: {
   S: number; onFight: () => void; onBag: () => void; onPokemon: () => void; onRun: () => void; pokemonOff: boolean; runOff: boolean; closing?: boolean
@@ -206,7 +221,8 @@ export function CommandScreen({ S, onFight, onBag, onPokemon, onRun, pokemonOff,
     </button>
   )
   return (
- <div className="ds-screen" style={{ width: 256 * S, height: 192 * S, backgroundImage: closingNow && movesBg ? `url(${movesBg})` : bg ? `url(${bg})` : undefined }}>
+ <div style={{ width: 256 * S, height: 192 * S, overflow: 'hidden', background: '#101216', position: 'relative' }}>
+ <div className="ds-screen cmd-in" style={{ width: 256 * S, height: 192 * S, backgroundImage: closingNow && movesBg ? `url(${movesBg})` : bg ? `url(${bg})` : undefined }}>
       {closingNow && <BallHalves S={S} open={false} onDone={() => setClosingNow(false)} />}
       <ScreenBar S={S} />
       {!closingNow && <PartyDots S={S} party={party} foeCount={foeCount} />}
@@ -217,6 +233,7 @@ export function CommandScreen({ S, onFight, onBag, onPokemon, onRun, pokemonOff,
       <Btn img={run} x={96} y={150} w={64} h={37} label="Run" onClick={onRun} off={runOff} />
       <Btn img={poke} x={157} y={142} w={93} h={46} label="Pokémon" onClick={onPokemon} off={pokemonOff} />
     </div>
+ </div>
   )
 }
 

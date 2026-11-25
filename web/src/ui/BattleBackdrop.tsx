@@ -3,7 +3,7 @@ import { BattleBackdrop3D, ENVIRONMENTS, type BattleLayout } from '../rom/battle
 import { getBattleFiles } from '../rom/store'
 
 /** The 3D battle scenery from the player's game file. It tells the screen where the two platforms are. */
-export default function BattleBackdrop({ env = 'grass', onLayout }: { env?: string; onLayout: (l: BattleLayout) => void }) {
+export default function BattleBackdrop({ env = 'grass', onLayout, sceneRef }: { env?: string; onLayout: (l: BattleLayout) => void; sceneRef?: React.MutableRefObject<BattleBackdrop3D | null> }) {
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
     let live = true
@@ -13,6 +13,8 @@ export default function BattleBackdrop({ env = 'grass', onLayout }: { env?: stri
       if (!live || !files || !ref.current) return
       scene = new BattleBackdrop3D(ref.current, files, ENVIRONMENTS[env] ?? ENVIRONMENTS.grass)
       onResize = () => scene && onLayout(scene.layout())
+      scene.onFrame = onLayout
+      if (sceneRef) sceneRef.current = scene
       onResize()
       window.addEventListener('resize', onResize)
     })
@@ -20,6 +22,7 @@ export default function BattleBackdrop({ env = 'grass', onLayout }: { env?: stri
       live = false
       window.removeEventListener('resize', onResize)
       scene?.dispose()
+      if (sceneRef) sceneRef.current = null
     }
   }, [env])
   return <div ref={ref} className="battle-backdrop" />

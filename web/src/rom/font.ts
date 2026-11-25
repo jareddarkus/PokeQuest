@@ -80,7 +80,7 @@ export function parseNftr(d: Uint8Array): NftrFont | null {
  * Draws a line of text into a new canvas (1 pixel of the canvas = 1 pixel of the game's own font). Glyph values: 2 and 3 = the letter, 1 = its soft edge / shadow.
  * `color` is the letter, `shadow` the colour of the edge pixels (null = they are drawn in the letter colour).
  */
-export function renderLine(f: NftrFont, text: string, color: string, shadow: string | null): HTMLCanvasElement {
+export function renderLine(f: NftrFont, text: string, color: string, shadow: string | null, outline = false): HTMLCanvasElement {
   const w = Math.max(1, measureNftr(f, text) + 2), h = f.cellH + 2
   const c = document.createElement('canvas')
   c.width = w; c.height = h
@@ -96,10 +96,20 @@ export function renderLine(f: NftrFont, text: string, color: string, shadow: str
       for (let gx = 0; gx < f.cellW; gx++) {
         const v = f.glyphs[g * f.cellW * f.cellH + gy * f.cellW + gx]
         if (!v) continue
-        const px = x + wd[0] + gx, py = gy
+        const px = x + wd[0] + gx + (outline ? 1 : 0), py = gy + (outline ? 1 : 0)
         if (px < 0 || px >= w || py >= h) continue
         const o = (py * w + px) * 4
-        const rgb = v >= 2 ? main : edge
+        const body = f.cellH === 8 ? v === 1 : v >= 2 // the 13 x 8 number font draws the letter with value 1 and its shadow with 2; the others the letter with 2/3 and the edge with 1
+        const rgb = body ? main : edge
+        if (outline) { // a full 1-pixel outline around every pixel of the letter (the look of the HP boxes), the letter itself on top
+          for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+            const qx = px + dx, qy = py + dy
+            if (qx < 0 || qy < 0 || qx >= w || qy >= h) continue
+            const oo = (qy * w + qx) * 4
+            if (img.data[oo + 3] === 0) { img.data[oo] = edge[0]; img.data[oo + 1] = edge[1]; img.data[oo + 2] = edge[2]; img.data[oo + 3] = 255 }
+          }
+          if (!body) continue
+        }
         img.data[o] = rgb[0]; img.data[o + 1] = rgb[1]; img.data[o + 2] = rgb[2]; img.data[o + 3] = 255
       }
     }

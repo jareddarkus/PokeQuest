@@ -33,8 +33,8 @@ function wrap(f: NftrFont, text: string, maxW: number): string[] {
  * `font`: 0 = the main text font (15 px), 1 = the small one (10 px), 2 = the medium one (13 px).
  * Falls back to ordinary page text while the font is not there (before the game file is imported).
  */
-export default function FontText({ text, k = 2, font = 0, color = '#ffffff', shadow = '#6b6b78', maxWidth, align = 'left', reveal, style }: {
-  text: string; reveal?: number; k?: number; font?: 0 | 1 | 2; color?: string; shadow?: string | null; maxWidth?: number; align?: 'left' | 'right' | 'center'; style?: React.CSSProperties
+export default function FontText({ text, k = 2, font = 0, color = '#ffffff', shadow = '#6b6b78', maxWidth, align = 'left', outline = false, reveal, style }: {
+  text: string; reveal?: number; k?: number; font?: 0 | 1 | 2 | 3; color?: string; shadow?: string | null; outline?: boolean; maxWidth?: number; align?: 'left' | 'right' | 'center'; style?: React.CSSProperties
 }) {
   const fonts = useGameFonts()
   const ref = useRef<HTMLCanvasElement>(null)
@@ -54,9 +54,9 @@ export default function FontText({ text, k = 2, font = 0, color = '#ffffff', sha
     shown.forEach((l, i) => {
       const w = measureNftr(f, l)
       const x = align === 'right' ? W - w - 2 : align === 'center' ? Math.round((W - w) / 2) : 0
-      if (l) ctx.drawImage(renderLine(f, l, color, shadow), x, i * lineH)
+      if (l) ctx.drawImage(renderLine(f, l, color, shadow, outline), x, i * lineH)
     })
-  }, [f, key, color, shadow, align, W, k])
+  }, [f, key, color, shadow, align, W, k, outline])
   if (!f) return <span style={style}>{reveal === undefined ? text : text.slice(0, reveal)}</span>
   return <canvas ref={ref} aria-label={text} role="img" style={{ width: W * k, height: (lines.length * lineH + 1) * k, imageRendering: 'pixelated', display: 'block', ...style }} />
 }

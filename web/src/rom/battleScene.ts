@@ -16,7 +16,8 @@ export const ENVIRONMENTS: Record<string, BattleEnvironment> = {
 // where things stand (in map tiles) and how the camera looks at them; tuned by eye to look like the game
 const FOE_PLATFORM = { x: 0.52, z: -0.62, scale: 0.85 }
 const ME_PLATFORM = { x: -0.4, z: 0.3, scale: 1.12 }
-const INTRO = { pos: [0.55, 0.85, 0.2], target: [0.55, 0.12, -0.8] } as const
+// the opening shot (reference video): the camera starts low and close to the ground beside the far platform and flies back to the usual view in about 0.9 s
+const INTRO = { pos: [0.1, 0.22, -0.05], target: [0.5, 0.16, -0.62] } as const
 const CAMERA = { fov: 33, pos: [0, 0.56, 1.5], target: [0, 0.22, -0.2] } as const
 
 export interface BattleLayout {
@@ -30,6 +31,11 @@ export class BattleBackdrop3D {
   private camera: THREE.PerspectiveCamera
   private raf = 0
   private mount: HTMLElement
+  private introAt = Infinity // when the opening shot starts (the camera waits at the first pose until then)
+  private introMs = 900
+  /** called every frame while the camera moves, with where the platforms are on screen then */
+  onFrame: ((l: BattleLayout) => void) | null = null
+  private moving = false
 
   constructor(mount: HTMLElement, files: Uint8Array[], env: BattleEnvironment) {
     this.mount = mount
@@ -58,17 +64,31 @@ export class BattleBackdrop3D {
       st.scale.setScalar(p.scale)
       this.scene.add(st)
     }
-    const t0 = performance.now()
     const loop = () => {
       this.raf = requestAnimationFrame(loop)
-      // the opening shot: the camera starts high above the far platform and glides down to the usual view (about 1.3 s, after a short pause)
-      const k = Math.max(0, Math.min(1, (performance.now() - t0 - 250) / 1300))
-      const e = k * k * (3 - 2 * k)
+      const k = Math.max(0, Math.min(1, (performance.now() - this.introAt) / this.introMs))
+      const e = 1 - (1 - k) * (1 - k) // fast at first, settling at the end
       this.camera.position.set(INTRO.pos[0] + (CAMERA.pos[0] - INTRO.pos[0]) * e, INTRO.pos[1] + (CAMERA.pos[1] - INTRO.pos[1]) * e, INTRO.pos[2] + (CAMERA.pos[2] - INTRO.pos[2]) * e)
       this.camera.lookAt(INTRO.target[0] + (CAMERA.target[0] - INTRO.target[0]) * e, INTRO.target[1] + (CAMERA.target[1] - INTRO.target[1]) * e, INTRO.target[2] + (CAMERA.target[2] - INTRO.target[2]) * e)
       this.renderer.render(this.scene, this.camera)
+      if (this.moving) { this.onFrame?.(this.measure()); if (k >= 1) { this.moving = false; this.onFrame?.(this.layout()) } }
     }
     loop()
+  }
+
+  /** Starts the opening shot now (takes `ms`); until then the camera waits at the first pose. */
+  startIntro(ms = 900) { this.introAt = performance.now(); this.introMs = ms; this.moving = true }
+
+  /** where the two platforms are on screen with the camera as it is right now */
+  private measure(): BattleLayout {
+    const w = this.mount.clientWidth, h = this.mount.clientHeight
+    this.camera.updateMatrixWorld()
+    const at = (p: { x: number; z: number; scale: number }) => {
+      const centre = new THREE.Vector3(p.x, 0.02, p.z).project(this.camera)
+      const edge = new THREE.Vector3(p.x + 0.3 * p.scale, 0.02, p.z).project(this.camera)
+      return { x: (centre.x * 0.5 + 0.5) * w, y: (-centre.y * 0.5 + 0.5) * h, w: Math.abs((edge.x - centre.x) * 0.5 * w) * 2 }
+    }
+    return { foe: at(FOE_PLATFORM), me: at(ME_PLATFORM) }
   }
 
   /** Size the picture to its container and return where the two platforms are on screen (in pixels). */

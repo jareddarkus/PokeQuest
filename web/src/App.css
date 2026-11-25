@@ -411,3 +411,43 @@ button.big small { opacity: .7; font-size: .75rem; }
 .tr-fig.foe.out { transform: translateX(130%); opacity: 0; }
 .tr-fig.me.out { transform: translateX(-130%); opacity: 0; }
 .tr-fig.me { margin-left: -22%; margin-bottom: -16%; }
+
+/* HP boxes at the places of the real top screen (measured on the reference video; --k = screen pixels per DS pixel) */
+.foe-zone .hp2 { left: calc(6 * var(--k)); top: calc(31 * var(--k)); right: auto; bottom: auto; }
+.me-zone .hp2 { right: calc(-13 * var(--k)); left: auto; top: auto; bottom: calc(var(--menu-h, 0px) + 50 * var(--k)); }
+@media (min-width: 1000px) { .me-zone .hp2 { right: calc(-13 * var(--k)); bottom: calc(50 * var(--k)); } }
+/* they pop in at once (about two frames), they do not glide */
+.hp2.foe, .hp2.mine { animation: pq-hp-pop .04s linear backwards; }
+@keyframes pq-hp-pop { from { opacity: 0; } to { opacity: 1; } }
+
+/* the message of the top screen: a dark see-through band across the bottom of the picture, 44 DS pixels high, edges a little lighter */
+.battle-bottom { max-width: none; padding: 0; gap: 0; }
+.battle-band { box-sizing: border-box; width: min(100%, calc(256 * var(--k))); height: calc(44 * var(--k)); min-height: 0; padding: calc(9 * var(--k)) calc(8 * var(--k)); display: block; border: 0;
+  background: linear-gradient(to bottom, rgba(0,0,0,.27) 0, rgba(0,0,0,.27) 1.5%, rgba(0,0,0,.45) 4%, rgba(0,0,0,.6) 9%, rgba(0,0,0,.6) 95%, rgba(0,0,0,.35) 100%); }
+
+/* the team rows: bar slides in from the edge in about 0.1 s, the balls turn into view one after another */
+.tbs { position: absolute; inset: 0; z-index: 6; pointer-events: none; }
+.tbs-bar { position: absolute; background: #000; }
+.tbs-bar.foe { left: 0; background: linear-gradient(to right, #333 0, #000 28%); animation: pq-bar-from-l .1s ease-out backwards; }
+.tbs-bar.me { right: 0; background: linear-gradient(to left, #333 0, #000 28%); animation: pq-bar-from-r .1s ease-out backwards; }
+@keyframes pq-bar-from-l { from { transform: translateX(-100%); } to { transform: none; } }
+@keyframes pq-bar-from-r { from { transform: translateX(100%); } to { transform: none; } }
+.tbs-ball { position: absolute; image-rendering: pixelated; animation: pq-ball-turn .14s ease-out backwards; }
+@keyframes pq-ball-turn { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+/* before the way in has covered the map the battle picture is not shown (the map stays visible under the flash and the bars) */
+.fullscreen.battle.pre { background: transparent !important; }
+.fullscreen.battle.pre .stage-cam, .fullscreen.battle.pre .foe-zone, .fullscreen.battle.pre .me-zone, .fullscreen.battle.pre .battle-bottom { visibility: hidden; }
+/* trainers fade out like ghosts (white-ish, see-through) instead of sliding */
+.tr-fig.foe.out, .tr-fig.me.out { transform: none; opacity: 0; filter: brightness(2.2) saturate(.3); transition: opacity .4s ease-in, filter .4s ease-in; }
+.tr-fig.sil0 { filter: brightness(0); }
+.tr-fig.sil1 { animation: pq-sil .9s linear both; }
+@keyframes pq-sil { 0%, 45% { filter: brightness(0); } 100% { filter: none; } }
+/* wide windows: the message band sits at the very bottom of the picture, the command screen above it */
+@media (min-width: 1000px) { .battle-bottom { flex-direction: column-reverse; } }
+
+/* the lower screen: dim closed ball while waiting; the commands zoom in and light up (a little over the end size first), like the reference video */
+.idle-ball .idle-ball-pic { transform: scale(.62); filter: brightness(.32); transform-origin: 50% 53%; animation: pq-idle-in .3s ease-in; }
+@keyframes pq-idle-in { from { transform: scale(1); filter: brightness(1); } to { transform: scale(.62); filter: brightness(.32); } }
+.ds-screen.cmd-in { animation: pq-cmd-in .3s ease-out; }
+@keyframes pq-cmd-in { 0% { transform: scale(.62); filter: brightness(.32); } 55% { transform: scale(1.1); filter: brightness(.9); } 100% { transform: none; filter: none; } }

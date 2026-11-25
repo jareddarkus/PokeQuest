@@ -12,11 +12,15 @@ const OwView = import.meta.env.DEV ? lazy(() => import('./dev/OwView')) : null
 const BldView = import.meta.env.DEV ? lazy(() => import('./dev/BldView')) : null
 const FolMap = import.meta.env.DEV ? lazy(() => import('./dev/FolMap')) : null
 const FontView = import.meta.env.DEV ? lazy(() => import('./dev/FontView')) : null
+const HpView = import.meta.env.DEV ? lazy(() => import('./dev/HpView')) : null
+const TransView = import.meta.env.DEV ? lazy(() => import('./dev/TransView')) : null
 const TrView = import.meta.env.DEV ? lazy(() => import('./dev/TrView')) : null
 const q = new URLSearchParams(location.search)
 const showBld = import.meta.env.DEV && q.has('bldview')
 const showOw = import.meta.env.DEV && q.has('owview')
 const showFol = import.meta.env.DEV && q.has('folmap')
+const showHp = import.meta.env.DEV && q.has('hpview')
+const showTv = import.meta.env.DEV && q.has('transview')
 const showTr = import.meta.env.DEV && q.has('trview')
 const showFont = import.meta.env.DEV && q.has('fontview')
 const showViewer = import.meta.env.DEV && q.has('mapview')
@@ -26,7 +30,15 @@ const showAnim = import.meta.env.DEV && q.has('animtest')
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    {showTr && TrView ? (
+    {showTv && TransView ? (
+      <Suspense fallback={null}>
+        <TransView />
+      </Suspense>
+    ) : showHp && HpView ? (
+      <Suspense fallback={null}>
+        <HpView />
+      </Suspense>
+    ) : showTr && TrView ? (
       <Suspense fallback={null}>
         <TrView />
       </Suspense>

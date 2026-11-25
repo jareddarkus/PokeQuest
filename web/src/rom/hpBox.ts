@@ -113,6 +113,47 @@ export async function decodeHpBoxes(files: Uint8Array[], white: boolean, put: (n
     const b = await toBlob(bar)
     if (b) { await put(name, b); n++ }
   }
+  // the game's own little pictures of the boxes: the HP / EXP gauge pieces, the Poké Ball and gender signs, the digits 0-9, "Lv" (all 8 x 8 tiles of file 434) and the "/" (file 456)
+  const gp = paletteOf(files[white ? 430 : 431])
+  if (gp) {
+    const sheet = document.createElement('canvas')
+    sheet.width = 128; sheet.height = 40 // 16 tiles per row, 65 tiles: 0-64 (64 = the slash)
+    const ctx = sheet.getContext('2d')!
+    const img = ctx.createImageData(128, 40)
+    const put8 = (px: Uint8Array, t: number, slot: number) => {
+      for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) {
+        const b = px[t * 32 + y * 4 + (x >> 1)] ?? 0
+        const v = x & 1 ? b >> 4 : b & 15
+        if (!v) continue
+        const rgb = gp[v] ?? [255, 0, 255]
+        const o = (((slot >> 4) * 8 + y) * 128 + (slot & 15) * 8 + x) * 4
+        img.data[o] = rgb[0]; img.data[o + 1] = rgb[1]; img.data[o + 2] = rgb[2]; img.data[o + 3] = 255
+      }
+    }
+    const t434 = tilesOf(files[434])
+    for (let t = 0; t < 64; t++) put8(t434, t, t)
+    put8(tilesOf(files[456]), 3, 64)
+    ctx.putImageData(img, 0, 0)
+    const gb = await toBlob(sheet)
+    if (gb) { await put('hp:glyphs', gb); n++ }
+  }
+  // the small Poké Balls of the team rows (cells of file 422, tiles 420, colours 421): 0 = a Pokémon, 2 = the dark one (shown black for an empty place)
+  try {
+    const bc = readCells(files[422]), bpx = tilesOf(files[420]), bpal = paletteOf(files[421])
+    if (bpal && bc[0] && bc[2]) {
+      for (const [ci, name] of [[0, 'bt:ball'], [2, 'bt:ballfnt'], [2, 'bt:ballno']] as Array<[number, string]>) {
+        const o = bc[ci][0]
+        const c = drawObj(o, bpx, bpal)
+        if (name === 'bt:ballno') { // an empty place of the row is a black disc with a white ring: the greys of the dark ball become black
+          const ctx = c.getContext('2d')!, img = ctx.getImageData(0, 0, c.width, c.height)
+          for (let i = 0; i < img.data.length; i += 4) { if (img.data[i + 3] && img.data[i] + img.data[i + 1] + img.data[i + 2] < 480) { img.data[i] = img.data[i + 1] = img.data[i + 2] = 8 } }
+          ctx.putImageData(img, 0, 0)
+        }
+        const bb = await toBlob(c)
+        if (bb) { await put(name, bb); n++ }
+      }
+    }
+  } catch { /* the rows use plain circles */ }
   // HP strips (cells 436 = foe, 439 = you with the EXP strip), colours 430 (White 2) or 431 (Black 2)
   const pal = paletteOf(files[white ? 430 : 431])
   if (!pal) return n
