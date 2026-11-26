@@ -18,7 +18,7 @@ import { getAnim, warmAnim } from '../ui/AnimSprite'
 import { pixelDom } from '../ui/MonSprite'
 import type { AnimatedSprite } from '../rom/anim'
 import type { Settings } from './settings'
-import { loadGrassTuft } from '../rom/grassFx'
+import { loadGrassTuft, loadGrassSway, type GrassSway } from '../rom/grassFx'
 import {
   DX, DY, SIZE, T, TYPE_COLOR, collapseRadius, dist, inBounds, isWalkable, tileAt, type Dir, type NpcSpec, type World,
 } from './world'
@@ -302,37 +302,53 @@ export default function GameView3D(props: Props) {
     let tuftTex: THREE.CanvasTexture[] | null = null
     void loadGrassTuft().then((frames) => {
       if (!frames) return
-      tuftTex = frames.map((c) => { const t = new THREE.CanvasTexture(c); t.magFilter = THREE.NearestFilter; t.minFilter = THREE.NearestFilter; t.colorSpace = THREE.SRGBColorSpace; return t })
+      tuftTex = frames.map((c) => { const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.magFilter = THREE.NearestFilter; t.minFilter = THREE.NearestFilter; t.colorSpace = THREE.SRGBColorSpace; return t })
     })
-    const tuftGeo = new THREE.BufferGeometry() // the corners of the game's model (16 units = 1 tile): a little slanted, 0.3 - 0.6 tiles above the ground
-    tuftGeo.setAttribute('position', new THREE.Float32BufferAttribute([-1.1, 0.3, 0.8, 0.9, 0.3, 0.8, 0.9, 0.55, -1.1, -1.1, 0.55, -1.1], 3)) // (the picture is 32 x 32: one picture pixel = one pixel of the map, so it is two tiles wide)
+    let tuftSway: GrassSway | null = null
+    void loadGrassSway().then((sw) => { tuftSway = sw })
+    const tuftGeo = new THREE.BufferGeometry() // the corners of the game's model (16 units = 1 tile): a little slanted, just above the ground at the legs
+    tuftGeo.setAttribute('position', new THREE.Float32BufferAttribute([-1, 0.05, 0.7, 1, 0.05, 0.7, 1, 0.2, -0.3, -1, 0.2, -0.3], 3)) // (the picture is 32 x 32: one picture pixel = one pixel of the map, so it is two tiles wide)
     tuftGeo.setAttribute('uv', new THREE.Float32BufferAttribute([0, 1, 1, 1, 1, 0, 0, 0], 2))
     tuftGeo.setIndex([0, 1, 2, 0, 2, 3])
     const makeCover = () => {
-      const m = new THREE.Mesh(tuftGeo, new THREE.MeshBasicMaterial({ transparent: true, alphaTest: 0.1, depthWrite: true, side: THREE.DoubleSide }))
-      m.visible = false; m.renderOrder = 2; m.frustumCulled = false; scene.add(m)
+      const m = new THREE.Mesh(tuftGeo.clone(), new THREE.MeshBasicMaterial({ transparent: true, alphaTest: 0.1, depthWrite: false, depthTest: false, side: THREE.DoubleSide })) // (drawn right over its character)
+      m.visible = false; m.renderOrder = 2.5; m.frustumCulled = false; scene.add(m)
       return m
     }
     /** Characters are drawn south (nearer the camera) over north, always: the order follows the ground position. */
     const order = (sp: THREE.Sprite, z: number) => { sp.renderOrder = 3 + z * 0.001 }
-    const cover = (m: THREE.Mesh, on: boolean, x: number, ground: number, z: number, _wide = 1.0, frame = 3) => {
+    const cover = (m: THREE.Mesh, on: boolean, x: number, ground: number, z: number, _wide = 1.0, age = 1e9) => {
       m.visible = on && !!tuftTex
       if (!m.visible) return
-      const t = tuftTex![Math.max(0, Math.min(3, frame))]
+      const t = tuftTex![Math.max(0, Math.min(3, Math.floor(age / 100)))]
       const mat = m.material as THREE.MeshBasicMaterial
       if (mat.map !== t) { mat.map = t; mat.needsUpdate = true }
+      // the game's sway: the picture slides left / right and up / down for 45 frames of 1/30 s, then rests on its last position
+      const sw = tuftSway, wi = sw ? Math.max(0, Math.min(sw.frames - 1, Math.floor(age / (1000 / 30)))) : 0
+      const du = sw ? -sw.s[wi] : 0, dv = sw ? sw.t[wi] : 0
+      const uv = m.geometry.getAttribute('uv') as THREE.BufferAttribute
+      if (uv.getX(0) !== du || uv.getY(0) !== 1 + dv) { uv.array.set([du, 1 + dv, 1 + du, 1 + dv, 1 + du, dv, du, dv]); uv.needsUpdate = true }
       m.position.set(x, ground, z)
+      m.renderOrder = 3 + z * 0.001 + 0.0005 // right over its own character, under the characters further south
     }
     const myCover = makeCover(), folCover = makeCover()
+    if (import.meta.env.DEV) (globalThis as { __pqCover?: THREE.Mesh }).__pqCover = myCover // developer hook
     // the burst of the grass effect plays every time a character comes onto a tile of tall grass (the tile of its drawn position changes)
     const grassState = new Map<string, { tile: string; at: number }>()
-    const grassFrame = (key: string, x: number, y: number, now: number): number => {
+    const grassFrame = (key: string, x: number, y: number, now: number): number => { // (returns the age of the effect in milliseconds)
       const tx = Math.round(x), ty = Math.round(y)
       const tile = `${tx},${ty}`
       let g = grassState.get(key)
       if (!g) { g = { tile, at: 0 }; grassState.set(key, g) }
       if (g.tile !== tile) { g.tile = tile; g.at = tileAt(world, tx, ty) === T.Tall ? now : 0 }
-      return g.at ? Math.min(3, Math.floor((now - g.at) / 100)) : 3
+      let age = g.at ? now - g.at : 1e9
+      if (import.meta.env.DEV && key === 'me') { // developer tools: window.__pqGrassAge holds the effect at an age (ms) for screenshots, and a log shows when it restarts
+        const w = globalThis as { __pqGrassAge?: number | null; __pqGrassLog?: Array<[number, string]> }
+        if (typeof w.__pqGrassAge === 'number') age = w.__pqGrassAge
+        const log = (w.__pqGrassLog ??= [])
+        if (g.at && (!log.length || log[log.length - 1][0] !== Math.round(g.at))) log.push([Math.round(g.at), tile])
+      }
+      return age
     }
     const npcCovers = new Map<NpcRuntime, THREE.Mesh>()
     const otherCovers = new Map<string, THREE.Mesh>()
