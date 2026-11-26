@@ -63,7 +63,7 @@ function itemMult(item: string, stat: StatId, species: string): number {
   }
 }
 
-const GREEN = '#6ee24a', RED = '#e03a4c'
+const RED = '#e03a4c'
 
 interface StatMath { base: number; final: number; end: number; cap: number; lines: Array<{ label: string; v: number }>; net: number }
 
@@ -99,13 +99,11 @@ function ChunkTip({ m, lang }: { m: StatMath; lang: 'es' | 'en' }) {
   const sign = (v: number) => (v > 0 ? '+' : '') + v
   const col = (v: number) => (v > 0 ? '#4dff7c' : v < 0 ? '#ff5a6a' : '#ffffff')
   const rows = m.lines.filter((l) => l.v !== 0)
-  const lossy = rows.some((l) => l.v < 0)
   return (
     <span style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 170 }}>
       {rows.map((l, i) => <span key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 14 }}><GT t={l.label} k={2} color={col(l.v)} /><GT t={sign(l.v)} k={2} color={col(l.v)} /></span>)}
       {rows.length === 0 && <GT t={es ? 'Solo la parte de la especie.' : 'Only the species part.'} k={2} color="#ffffff" />}
-      <span style={{ display: 'flex', justifyContent: 'space-between', gap: 14, borderTop: '1px solid rgba(255,255,255,.35)', paddingTop: 3 }}><GT t={es ? 'Total extra' : 'Extra total'} k={2} color={col(m.net)} /><GT t={sign(m.net)} k={2} color={col(m.net)} /></span>
-      {lossy && <GT t={es ? 'Una naturaleza que baja esta estadística resta un 10% al total: se come parte de los puntos de IV y EV.' : 'A nature that lowers this stat takes 10% off the total: it eats part of the IV and EV points.'} k={1} color="#ff5a6a" maxWidth={190} />}
+      {rows.length > 1 && (<span style={{ display: 'flex', justifyContent: 'space-between', gap: 14, borderTop: '1px solid rgba(255,255,255,.35)', paddingTop: 3 }}><GT t={es ? 'Total extra' : 'Extra total'} k={2} color={col(m.net)} /><GT t={sign(m.net)} k={2} color={col(m.net)} /></span>)}
     </span>
   )
 }
@@ -127,7 +125,7 @@ function StatBar({ mon, s, lang, i }: { mon: Mon; s: StatId; lang: 'es' | 'en'; 
       </Tip>
       {chunkW > 0 && (
         <Tip tip={<ChunkTip m={m} lang={lang} />} style={{ position: 'absolute', top: 3, bottom: 3, left: `calc(${chunkL}% + 1px)`, width: `calc(${Math.min(chunkW, 100 - chunkL)}% - 2px)` }}>
-          <span className="sx-seg grow late" style={{ background: pos ? GREEN : RED }} />
+          <span className="sx-seg grow late" style={{ background: pos ? c : RED }} />
         </Tip>
       )}
     </div>
@@ -241,6 +239,9 @@ export default function SummaryCard({ mon, onChange, onBack, onClose, footer }: 
   const mx = st.hp
   const total = STAT_IDS.reduce((a, s) => a + st[s], 0)
   const frac = mx > 0 ? Math.max(0, Math.min(1, mon.hp / mx)) : 0
+  const expLo = mon.level ** 3, expHi = (mon.level + 1) ** 3
+  const expNow = Math.max(0, mon.exp - expLo), expNeed = expHi - expLo
+  const expFrac = mon.level >= 100 ? 1 : Math.max(0, Math.min(1, expNow / expNeed))
   const nm = natureMods(mon.nature)
   const natureTip = nm.plus && nm.minus ? `${trText(mon.nature)}: +${trText(STAT_NAMES[nm.plus])}, −${trText(STAT_NAMES[nm.minus])}` : `${trText(mon.nature)}: ${es ? 'neutral' : 'neutral'}`
   const itemDef = mon.item ? ITEMS[mon.item] : undefined
@@ -284,7 +285,6 @@ export default function SummaryCard({ mon, onChange, onBack, onClose, footer }: 
       <div className="sx-art">
         <div className="sx-row">
           <div className="sx-col">
-            <Chip><GT t="LV." k={2} color={MUTED} /><GT t={String(mon.level)} k={2} /></Chip>
             <Chip><GT t={`${genderGlyph} ${genderLabel}`.trim()} k={2} color={mon.gender === 'M' ? '#2a7de1' : mon.gender === 'F' ? '#e0467c' : INK} /></Chip>
           </div>
           <div className="sx-col r">
@@ -294,10 +294,16 @@ export default function SummaryCard({ mon, onChange, onBack, onClose, footer }: 
         </div>
         <div className="sx-sprite"><div ref={spriteBox} style={{ transform: `translateY(${lift}px)`, transition: 'transform .4s ease-out' }}><div className="sx-spr"><MonSprite species={mon.species} shiny={mon.shiny} scale={small ? 3 : 4} animated /></div></div></div>
         <div className="sx-row">
-          <span className="sx-hp"><span className="sx-un">
-            <GT t={`${es ? 'PS' : 'HP'}: ${mon.hp} / ${mx}`} k={2} />
-            <span className="sx-bar sx-bar-s"><span className="sx-seg" style={{ position: 'absolute', top: 3, bottom: 3, left: 1, width: `calc(${frac * 100}% - 2px)`, background: frac > 0.5 ? STAT_COLOR.hp : frac > 0.2 ? '#f0a800' : '#e03a4c' }} /></span>
-          </span></span>
+          <div className="sx-col">
+            <span className="sx-hp"><span className="sx-un">
+              <span style={{ display: 'flex', gap: 6 }}><GT t={`${es ? 'PS' : 'HP'}:`} k={2} color={MUTED} /><GT t={`${mon.hp} / ${mx}`} k={2} /></span>
+              <span className="sx-bar sx-bar-s"><span className="sx-seg" style={{ position: 'absolute', top: 3, bottom: 3, left: 1, width: `calc(${frac * 100}% - 2px)`, background: frac > 0.5 ? STAT_COLOR.hp : frac > 0.2 ? '#f0a800' : '#e03a4c' }} /></span>
+            </span></span>
+            <span className="sx-hp"><span className="sx-un">
+              <span style={{ display: 'flex', gap: 6 }}><GT t="LV." k={2} color={MUTED} /><GT t={String(mon.level)} k={2} /><span style={{ width: 8 }} /><GT t="EXP:" k={2} color={MUTED} /><GT t={mon.level >= 100 ? 'MAX' : `${expNow} / ${expNeed}`} k={2} /></span>
+              <span className="sx-bar sx-bar-s"><span className="sx-seg" style={{ position: 'absolute', top: 3, bottom: 3, left: 1, width: `calc(${expFrac * 100}% - 2px)`, background: '#2a9df4' }} /></span>
+            </span></span>
+          </div>
           <div className="sx-col r">
             <Chip tip={<GT t={natureTip} k={2} color="#ffffff" maxWidth={150} />} right><GT t={`${es ? 'NATURALEZA' : 'NATURE'}:`} k={2} color={MUTED} /><GT t={trText(mon.nature).toUpperCase()} k={2} /></Chip>
             <Chip tip={<GT t={abilityDesc(mon.ability) || '—'} k={2} color="#ffffff" maxWidth={150} />} right><GT t={`${es ? 'HABILIDAD' : 'ABILITY'}:`} k={2} color={MUTED} /><GT t={trText(mon.ability).toUpperCase()} k={2} /></Chip>
@@ -323,9 +329,9 @@ export default function SummaryCard({ mon, onChange, onBack, onClose, footer }: 
           ))}
           <div className="sx-legend">
             <span><i><b><GT t="1" k={1} color="#ffffff" /></b></i><GT t={es ? 'Especie' : 'Species'} k={1} color={MUTED} /></span>
-            <span><i><b><GT t="2" k={1} color="#ffffff" /></b></i><GT t={es ? 'IV + EV + Naturaleza + Objeto' : 'IV + EV + Nature + Item'} k={1} color={MUTED} /><span style={{ display: 'inline-flex', gap: 4, marginLeft: 6 }}><u style={{ width: 10, height: 10, background: GREEN, display: 'inline-block' }} /><GT t={es ? 'suma' : 'adds'} k={1} color={MUTED} /><u style={{ width: 10, height: 10, background: RED, display: 'inline-block' }} /><GT t={es ? 'resta' : 'takes'} k={1} color={MUTED} /></span></span>
+            <span><i><b><GT t="2" k={1} color="#ffffff" /></b></i><GT t={es ? 'IV + EV + Naturaleza + Objeto' : 'IV + EV + Nature + Item'} k={1} color={MUTED} /></span>
           </div>
-          <span className="sx-chip sx-total"><span className="sx-un"><GT t={`${es ? 'TOTAL' : 'STAT TOTAL'}: ${total}`} k={2} /></span></span>
+          <span className="sx-chip sx-total"><span className="sx-un"><GT t={`${es ? 'TOTAL' : 'STAT TOTAL'}:`} k={2} color={MUTED} /><GT t={String(total)} k={2} /></span></span>
         </div>
       )}
       {tab === 'moves' && (
@@ -339,7 +345,7 @@ export default function SummaryCard({ mon, onChange, onBack, onClose, footer }: 
               </span>
               <GT t={moveFacts(mv, lang)} k={kText} maxWidth={textW} />
               <GT t={moveGameText(mv, lang)} k={kText} maxWidth={textW} color={MUTED} />
-              {onChange && <button className="sx-btn rh" onClick={() => setPickFor(pickFor === sel ? null : sel)}><span><GT t={es ? 'Cambiar movimiento' : 'Replace move'} k={1} color="#ffffff" /></span></button>}
+              {onChange && <button className="sx-btn rh" onClick={() => setPickFor(pickFor === sel ? null : sel)}><span><GT t={es ? 'Cambiar movimiento' : 'Replace move'} k={kText} color="#ffffff" /></span></button>}
             </div></div>
           ) : <GT t="—" />}
           {pickFor !== null && options.filter((o) => !mon.moves.includes(o)).length === 0 && <GT t={es ? 'A este nivel no puede aprender más movimientos.' : 'It cannot learn any other move at this level.'} k={2} color={MUTED} />}

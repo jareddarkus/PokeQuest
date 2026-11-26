@@ -10,6 +10,11 @@ export const SONGS: Record<string, string> = {
   field1: 'SEQ_BGM_R_A',
   field2: 'SEQ_BGM_R_B_SU',
   field3: 'SEQ_BGM_R_C_SU',
+  // more route songs, so that the music of a match (or of practice) can be picked at random
+  field4: 'SEQ_BGM_R_B_AU', field5: 'SEQ_BGM_R_C_AU', field6: 'SEQ_BGM_R_D_SU', field7: 'SEQ_BGM_R_E_SU', field8: 'SEQ_BGM_R_F', field9: 'SEQ_BGM_R_B_SP', field10: 'SEQ_BGM_R_C_SP',
+  // more battle songs (picked at random for every battle)
+  wild2: 'SEQ_BGM_VS_MOVEPOKE', trainer2: 'SEQ_BGM_VS_SUBWAY_TRAINER', trainer3: 'SEQ_BGM_VS_RIVAL',
+  gym2: 'SEQ_BGM_VS_BW_CHAMP', gym3: 'SEQ_BGM_VS_DP_LEADER', gym4: 'SEQ_BGM_VS_RG_LEADER', gym5: 'SEQ_BGM_VS_GS_LEADER', gym6: 'SEQ_BGM_VS_RS_LEADER',
   center: 'SEQ_BGM_POKECEN',
   gym: 'SEQ_BGM_GYM',
   wild: 'SEQ_BGM_VS_NORAPOKE',

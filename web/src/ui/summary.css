@@ -132,13 +132,13 @@
 .sx-type > span, .sx-mv .tchip > span { display: flex; align-items: center; justify-content: center; line-height: 1; }
 .sx-type span span, .sx-mv .tchip span span { line-height: 1 !important; }
 .sx-mvname { display: flex; align-items: center; gap: 8px; }
-.sx-btn.rh { transform: skewX(-12deg); border-radius: 3px; padding: 9px 22px; margin-top: 14px; }
-.sx-btn.rh > span { display: block; transform: skewX(12deg); }
+.sx-btn.rh { transform: skewX(-12deg); border-radius: 3px; padding: 0 26px; height: 44px; margin-top: 14px; margin-left: -18px; display: inline-flex; align-items: center; justify-content: center; }
+.sx-btn.rh > span { display: flex; align-items: center; transform: skewX(12deg); line-height: 1; }
 @media (max-width: 860px) { .sx { grid-template-columns: minmax(0, 1fr); } }
 
 /* the move detail is a slanted card too */
 .sx-detail { transform: skewX(-12deg); border-radius: 3px; padding: 0; }
-.sx-detail > .sx-dun { transform: skewX(12deg); padding: 16px 26px; display: flex; flex-direction: column; gap: 10px; }
+.sx-detail > .sx-dun { transform: skewX(12deg); padding: 16px 40px 16px 48px; display: flex; flex-direction: column; gap: 10px; }
 /* the picture is centred in the space left for it */
 .sx-sprite { align-items: center; }
 /* smooth ease-out entrances */
@@ -168,3 +168,5 @@
 .sx-mv { transition: outline-color .2s ease-out, box-shadow .2s ease-out; }
 .sx-mv:hover { box-shadow: 0 6px 16px rgba(40, 55, 90, .22); }
 @media (prefers-reduced-motion: reduce) { .sx *, .sx::before { animation: none !important; } }
+
+.sx-col .sx-hp { min-width: 230px; }

@@ -183,7 +183,16 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
   }, [battle?.npcId])
 
   // the real songs of the game: route music by ring, battle music by kind of battle
-  const song = battle ? (battle.kind === 'gym' ? 'gymLeader' : battle.kind === 'trainer' ? 'trainer' : 'wild') : ring <= 1 ? 'field1' : ring === 2 ? 'field2' : 'field3'
+  // the music is random: ONE route song for the whole match (picked from the match's shared seed, so every player hears the same one; in practice from its own seed),
+  // and a random battle song for every battle (of the kind: wild / trainer / gym leader)
+  const FIELD_SONGS = ['field1', 'field2', 'field3', 'field4', 'field5', 'field6', 'field7', 'field8', 'field9', 'field10']
+  const fieldSong = FIELD_SONGS[(Math.imul((world.seed | 0) ^ 0x9e3779b9, 2654435761) >>> 0) % FIELD_SONGS.length]
+  const battleSong = useMemo(() => {
+    if (!battle) return ''
+    const pool = battle.kind === 'gym' ? ['gymLeader', 'gym2', 'gym3', 'gym4', 'gym5', 'gym6'] : battle.kind === 'trainer' ? ['trainer', 'trainer2', 'trainer3'] : ['wild', 'wildStrong', 'wild2']
+    return pool[Math.floor(Math.random() * pool.length)]
+  }, [battle?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+  const song = battle ? battleSong : fieldSong
   useEffect(() => { music.setVolume(settings.musicVolume) }, [settings.musicVolume])
   useEffect(() => { music.setSfxVolume(settings.sfxVolume) }, [settings.sfxVolume])
   useEffect(() => { void music.play(song) }, [song])
