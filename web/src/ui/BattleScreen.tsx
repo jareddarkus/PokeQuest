@@ -370,6 +370,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
 
   const teamRef = useRef(playerTeam)
   const hpOf = useRef<Record<string, number>>({})
+  const maxOf = useRef<Record<string, number>>({})
   const pendingHit = useRef<string | null>(null)
 
   const showMenuIfReady = () => {
@@ -389,6 +390,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
     pumping.current = true
     while (queue.current.length) {
       const ev = queue.current.shift()!
+      if (import.meta.env.DEV) (window as unknown as { __pumpEv?: unknown }).__pumpEv = { ev, left: queue.current.length, at: Date.now() } // developer hook
       switch (ev.kind) {
         case 'text':
           // "It's super effective!" comes before the damage: the game plays ONE hit sound for the damage (strong / normal / weak), so the choice is kept for the HP change
@@ -419,7 +421,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
           let playMs = 1100
           if (ballOut) playMs = await sendOutScene(who, thrown, s, () => { setSend({ side: who, key: ++sendKey }); if (who === 'me') setMe(s); else setFoe(s) })
           else { setSend({ side: 'foe', key: ++sendKey, wild: true }); setFoe(s); void music.cryOf(ev.species, dexNum(ev.species)); await sleep(30); wildAppear('foe') }
-          hpOf.current[ev.uid] = ev.hp
+          hpOf.current[ev.uid] = ev.hp; maxOf.current[ev.uid] = ev.maxHp
           await sleep(playMs)
           setSend(null)
           setHpOn((o) => ({ ...o, [who]: true })) // the HP box pops up once the Pokémon stands there
@@ -435,7 +437,10 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
           }
           const before = hpOf.current[ev.uid] ?? ev.hp
           hpOf.current[ev.uid] = ev.hp
-          await sleep(Math.max(700, (Math.abs(ev.hp - before) / Math.max(1, ev.maxHp)) * 48 / 30 * 1000 + 350)) // the gauge drains at the game's speed
+          // (a fainting Pokémon is reported with a max HP of 1: use the real one, and never let the gauge take longer than a full drain)
+          const full = ev.hp === 0 ? Math.max(maxOf.current[ev.uid] ?? 0, before, 1) : Math.max(1, ev.maxHp)
+          if (ev.hp > 0) maxOf.current[ev.uid] = ev.maxHp
+          await sleep(Math.max(700, Math.min(1, Math.abs(ev.hp - before) / full) * 48 / 30 * 1000 + 350)) // the gauge drains at the game's speed
           break
         }
         case 'volatile': {
