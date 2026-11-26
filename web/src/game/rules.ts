@@ -10,9 +10,13 @@ export interface Rules {
   itemsPerBattle: number
   /** experience of a won battle is multiplied by this (default 10) */
   expMultiplier: number
+  /** 1 = players that are still alive may watch a battle of another player (click the player); 0 = they may not */
+  watchAlive: number
+  /** 1 = eliminated players may watch the battles of the player they follow; 0 = they only see the spinning ball */
+  watchEliminated: number
 }
 
-export const DEFAULT_RULES: Rules = { ringSeconds: 300, fallSeconds: 30, maxLegendary: 1, itemsPerBattle: 4, expMultiplier: 10 }
+export const DEFAULT_RULES: Rules = { ringSeconds: 300, fallSeconds: 30, maxLegendary: 1, itemsPerBattle: 4, expMultiplier: 10, watchAlive: 1, watchEliminated: 1 }
 /** The rules in force right now (one object, changed in place). */
 export const RULES: Rules = { ...DEFAULT_RULES }
 

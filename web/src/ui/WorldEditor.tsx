@@ -707,6 +707,8 @@ function RulesPanel({ cw, onChange }: { cw: CustomWorld; onChange: () => void })
       {row('fallSeconds', 'Segundos que tarda en hundirse', 'Lo que dura la caída de un anillo (30 por defecto).', 1, 600)}
       {row('maxLegendary', 'Legendarios por equipo', 'Máximo de Pokémon legendarios en el equipo (1 por defecto).', 0, 6)}
       {row('itemsPerBattle', 'Objetos por combate', 'Cuántos objetos se pueden usar en un solo combate (4 por defecto).', 0, 99)}
+      {row('watchAlive', 'Los jugadores vivos pueden ver combates', '1 = sí, 0 = no. Pulsando a un jugador que combate se ve su combate (y su equipo).', 0, 1)}
+      {row('watchEliminated', 'Los eliminados pueden ver combates', '1 = sí, 0 = no. Un eliminado que sigue a un jugador puede ver su combate (y su equipo).', 0, 1)}
       {row('expMultiplier', 'Multiplicador de experiencia', 'La experiencia de cada combate ganado se multiplica por esto (10 por defecto).', 1, 1000)}
       <button onClick={() => { cw.rules = undefined; onChange() }}>Volver a las reglas por defecto</button>
     </div>
