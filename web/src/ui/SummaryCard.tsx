@@ -118,16 +118,16 @@ function StatBar({ mon, s, lang, i }: { mon: Mon; s: StatId; lang: 'es' | 'en'; 
   const chunkL = pos ? baseW : baseW // (a loss: the red part sits where the lost points were, right after what is left)
   const style = { ['--i' as string]: i } as React.CSSProperties
   return (
-    <div className="sx-bar" style={style}>
-      <Tip tip={<GT t={m.lines[0].label + ': ' + Number(m.base.toFixed(1))} k={2} color="#ffffff" />} style={{ position: 'absolute', top: 3, bottom: 3, left: 1, width: `calc(${baseW}% - 2px)` }}>
+    <div className="sx-bar" style={style}><div className="sx-bar-in">
+      <Tip tip={<GT t={m.lines[0].label + ': ' + Number(m.base.toFixed(1))} k={2} color="#ffffff" />} style={{ position: 'absolute', top: 0, bottom: 0, left: 0, width: chunkW > 0 ? `calc(${baseW}% - 1px)` : `${baseW}%` }}>
         <span className="sx-seg grow" style={{ background: c }} />
       </Tip>
       {chunkW > 0 && (
-        <Tip tip={<ChunkTip m={m} lang={lang} />} style={{ position: 'absolute', top: 3, bottom: 3, left: `calc(${chunkL}% + 1px)`, width: `calc(${Math.min(chunkW, 100 - chunkL)}% - 2px)` }}>
+        <Tip tip={<ChunkTip m={m} lang={lang} />} style={{ position: 'absolute', top: 0, bottom: 0, left: `calc(${chunkL}% + 1px)`, width: `calc(${Math.min(chunkW, 100 - chunkL)}% - 1px)` }}>
           <span className="sx-seg grow late" style={{ background: pos ? c : c + '4d' }} />
         </Tip>
       )}
-    </div>
+    </div></div>
   )
 }
 
@@ -293,11 +293,11 @@ export default function SummaryCard({ mon, onChange, onBack, onClose, footer }: 
           <div className="sx-col">
             <span className="sx-hp"><span className="sx-un">
               <span style={{ display: 'flex', gap: 6 }}><GT t={`${es ? 'PS' : 'HP'}:`} k={2} color={MUTED} /><GT t={`${mon.hp} / ${mx}`} k={2} /></span>
-              <span className="sx-bar sx-bar-s"><span className="sx-seg" style={{ position: 'absolute', top: 3, bottom: 3, left: 1, width: `calc(${frac * 100}% - 2px)`, background: frac > 0.5 ? STAT_COLOR.hp : frac > 0.2 ? '#f0a800' : '#e03a4c' }} /></span>
+              <span className="sx-bar sx-bar-s"><span className="sx-bar-in"><span className="sx-seg" style={{ position: 'absolute', top: 0, bottom: 0, left: 0, width: `${frac * 100}%`, background: frac > 0.5 ? STAT_COLOR.hp : frac > 0.2 ? '#f0a800' : '#e03a4c' }} /></span></span>
             </span></span>
             <span className="sx-hp"><span className="sx-un">
               <span style={{ display: 'flex', gap: 6 }}><GT t="LV." k={2} color={MUTED} /><GT t={String(mon.level)} k={2} /><span style={{ width: 8 }} /><GT t="EXP:" k={2} color={MUTED} /><GT t={mon.level >= 100 ? 'MAX' : `${expNow} / ${expNeed}`} k={2} /></span>
-              <span className="sx-bar sx-bar-s"><span className="sx-seg" style={{ position: 'absolute', top: 3, bottom: 3, left: 1, width: `calc(${expFrac * 100}% - 2px)`, background: '#2a9df4' }} /></span>
+              <span className="sx-bar sx-bar-s"><span className="sx-bar-in"><span className="sx-seg" style={{ position: 'absolute', top: 0, bottom: 0, left: 0, width: `${expFrac * 100}%`, background: '#2a9df4' }} /></span></span>
             </span></span>
           </div>
           <div className="sx-col r">
@@ -338,7 +338,7 @@ export default function SummaryCard({ mon, onChange, onBack, onClose, footer }: 
               {STAT_IDS.map((x, i) => (
                 <div className="sx-stat small" key={x} style={{ ['--i' as string]: i } as React.CSSProperties}>
                   <GT t={STAT_NAMES[x]} k={2} />
-                  <div className="sx-bar"><span className="sx-seg grow" style={{ position: 'absolute', top: 3, bottom: 3, left: 1, width: `calc(${Math.min(100, (mon.evs[x] / 252) * 100)}% - 2px)`, background: STAT_COLOR[x] }} /></div>
+                  <div className="sx-bar"><div className="sx-bar-in"><span className="sx-seg grow" style={{ position: 'absolute', top: 0, bottom: 0, left: 0, width: `${Math.min(100, (mon.evs[x] / 252) * 100)}%`, background: STAT_COLOR[x] }} /></div></div>
                   <span className="v"><GT t={String(mon.evs[x])} k={2} font={0} /></span>
                 </div>
               ))}
@@ -349,7 +349,7 @@ export default function SummaryCard({ mon, onChange, onBack, onClose, footer }: 
               {STAT_IDS.map((x, i) => (
                 <div className="sx-stat small" key={x} style={{ ['--i' as string]: i } as React.CSSProperties}>
                   <GT t={STAT_NAMES[x]} k={2} />
-                  <div className="sx-bar"><span className="sx-seg grow" style={{ position: 'absolute', top: 3, bottom: 3, left: 1, width: `calc(${Math.min(100, (mon.ivs[x] / 31) * 100)}% - 2px)`, background: STAT_COLOR[x] }} /></div>
+                  <div className="sx-bar"><div className="sx-bar-in"><span className="sx-seg grow" style={{ position: 'absolute', top: 0, bottom: 0, left: 0, width: `${Math.min(100, (mon.ivs[x] / 31) * 100)}%`, background: STAT_COLOR[x] }} /></div></div>
                   <span className="v"><GT t={String(mon.ivs[x])} k={2} font={0} /></span>
                 </div>
               ))}

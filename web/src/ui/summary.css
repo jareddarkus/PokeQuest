@@ -194,3 +194,7 @@
 .sx-layer .sx-tip { transform: translateX(-50%) skewX(12deg); }
 .sx-layer .sx-tip.right { transform: skewX(12deg); }
 .sx-art .sx-chip, .sx-art .sx-hp { animation-name: sx-slide; }
+
+/* every bar: the coloured part sits inside the track with the same small margin on all four sides */
+.sx-bar-in { position: absolute; inset: 3px; display: block; }
+.sx-bar-in .sx-seg { border-radius: max(2px, calc(var(--mx-r) - 2px)); }
