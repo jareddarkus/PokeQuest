@@ -5,6 +5,8 @@ import {
 } from '../game/character'
 import { owFrame, owList, owPeople } from '../game/ow'
 import type { Dir } from '../game/world'
+import { fetchDisabledSkins, saveDisabledSkins } from '../net/skins'
+import { isWorldAdmin } from '../world/publish'
 
 interface Props {
   look: Look
@@ -32,23 +34,53 @@ function Choices({ names, value, onPick }: { names: string[]; value: number; onP
   )
 }
 
-function Thumb({ idx, dir = 0, size = 64 }: { idx: number; dir?: number; size?: number }) {
+function Thumb({ idx, dir = 0, size = 64, frame = 0, run = false }: { idx: number; dir?: number; size?: number; frame?: number; run?: boolean }) {
   const ref = useRef<HTMLCanvasElement>(null)
   useEffect(() => {
     const c = ref.current!
     const ctx = c.getContext('2d')!
     ctx.imageSmoothingEnabled = false
     ctx.clearRect(0, 0, c.width, c.height)
-    const f = owFrame(idx, dir, 0)
+    const f = owFrame(idx, dir, frame, run)
     if (f) ctx.drawImage(f, 0, 0, c.width, c.height)
-  }, [idx, dir])
+  }, [idx, dir, frame, run])
   return <canvas ref={ref} width={size} height={size} style={{ width: size, height: size, imageRendering: 'pixelated' }} />
 }
 
-/** Choose one of the real characters of the game. */
+/** All the walking and running pictures of one character, animated (what the owner sees when pointing at a skin). */
+function SkinPreview({ idx }: { idx: number }) {
+  const [t, setT] = useState(0)
+  useEffect(() => { const id = window.setInterval(() => setT((n) => n + 1), 180); return () => window.clearInterval(id) }, [])
+  const step = [0, 1, 0, 2][t % 4]
+  const cell = (dir: number, run: boolean, label: string) => (
+    <div key={`${dir}${run}`} style={{ textAlign: 'center', fontSize: 11 }}>
+      <Thumb idx={idx} dir={dir} size={64} frame={step} run={run} />
+      <div>{label}</div>
+    </div>
+  )
+  return (
+    <div className="panel" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, padding: 8 }}>
+      <b style={{ gridColumn: '1 / -1' }}>Caminar · #{idx}</b>
+      {cell(0, false, 'abajo')}{cell(1, false, 'izq.')}{cell(2, false, 'der.')}{cell(3, false, 'arriba')}
+      <b style={{ gridColumn: '1 / -1' }}>Correr</b>
+      {cell(0, true, 'abajo')}{cell(1, true, 'izq.')}{cell(2, true, 'der.')}{cell(3, true, 'arriba')}
+    </div>
+  )
+}
+
+/** Choose one of the real characters of the game (the owner can also switch characters off for everybody). */
 function RealCustomizer({ look, onChange, onDone }: Props) {
   const [dir, setDir] = useState<Dir>(0)
   const current = lookSprite(look) ?? owList[0]
+  const [disabled, setDisabled] = useState<number[]>([])
+  const [admin, setAdmin] = useState(false)
+  const [adminMode, setAdminMode] = useState(false)
+  const [hover, setHover] = useState<number | null>(null)
+  const [msg, setMsg] = useState('')
+  useEffect(() => { void fetchDisabledSkins().then(setDisabled); void isWorldAdmin().then((a) => setAdmin(a || (import.meta.env.DEV && new URLSearchParams(location.search).has('devadmin')))) }, [])
+  const off = new Set(disabled)
+  const shown = owPeople().filter((i) => adminMode || !off.has(i) || i === current)
+  const toggle = (i: number) => setDisabled((d) => (d.includes(i) ? d.filter((x) => x !== i) : [...d, i]))
   return (
     <div className="fullscreen scroll">
       <div className="customizer">
@@ -61,20 +93,32 @@ function RealCustomizer({ look, onChange, onDone }: Props) {
             <button onClick={() => setDir(3)}>Back</button>
             <button onClick={() => setDir(2)}>▶</button>
           </div>
-          <button onClick={() => onChange({ ...look, sprite: owPeople()[Math.floor(Math.random() * owPeople().length)] })}>Randomize</button>
+          <button onClick={() => { const ok = owPeople().filter((i) => !off.has(i)); const pool = ok.length ? ok : owPeople(); onChange({ ...look, sprite: pool[Math.floor(Math.random() * pool.length)] }) }}>Randomize</button>
           <button className="primary" onClick={onDone}>Done</button>
+          {admin && (
+            <>
+              <label className="mini"><input type="checkbox" checked={adminMode} onChange={(e) => setAdminMode(e.target.checked)} /> Modo propietario (elegir qué personajes hay)</label>
+              {adminMode && <button onClick={async () => { setMsg('Guardando…'); const err = await saveDisabledSkins(disabled); setMsg(err ?? 'Guardado ✓ (los jugadores ya solo ven los activados)') }}>Guardar personajes</button>}
+              {msg && <small>{msg}</small>}
+            </>
+          )}
+          {adminMode && hover !== null && <SkinPreview idx={hover} />}
         </div>
         <div className="panel options">
           <h3>Pick your character</h3>
+          {adminMode && <p className="sub">Pulsa un personaje para activarlo o desactivarlo (los desactivados salen tachados). Pasa el ratón para ver cómo anda y corre.</p>}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-            {owPeople().map((i) => (
+            {shown.map((i) => (
               <button
                 key={i}
                 title={`#${i}`}
-                onClick={() => onChange({ ...look, sprite: i })}
-                style={{ padding: 2, background: i === current ? 'rgba(255,255,255,.35)' : 'rgba(0,0,0,.3)', border: i === current ? '2px solid #fff' : '2px solid transparent', borderRadius: 6 }}
+                onMouseEnter={() => setHover(i)}
+                onMouseLeave={() => setHover((h) => (h === i ? null : h))}
+                onClick={() => (adminMode ? toggle(i) : onChange({ ...look, sprite: i }))}
+                style={{ position: 'relative', padding: 2, background: i === current ? 'rgba(255,255,255,.35)' : 'rgba(0,0,0,.3)', border: i === current ? '2px solid #fff' : '2px solid transparent', borderRadius: 6, opacity: off.has(i) ? 0.35 : 1 }}
               >
                 <Thumb idx={i} />
+                {off.has(i) && <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ff5a5a', fontSize: 34, fontWeight: 900 }}>✗</span>}
               </button>
             ))}
           </div>

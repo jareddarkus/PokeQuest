@@ -394,3 +394,7 @@ Seen in the recording but NOT done: the trainers' battle sprites (the foe traine
 - Chat: window in the bottom left (`ui/ChatPanel.tsx`), tabs Global / Amigos / private chats; private messages go to `whisper:<account number>` (only the receiver can read: realtime policy). Friends: table `friends` + functions add_friend / remove_friend / my_friends / user_id_of.
 - Usernames: 3-16 letters/numbers/_ and no bad words, checked in the page (`net/username.ts`) and in the `signup` function.
 - The owner account is a row of `world_admins`.
+
+## Round 16 — clicking players, trading, skins
+- Click another player: menu (add / remove friend with a confirmation, whisper, trade). Click yourself: reactions (the game's emote bubbles, shown above your head and, in a match, to the others). Trade: request → accept → both choose a Pokémon → both accept → they swap (messages through the match channel, `ui/PlayerMenu.tsx`, `PlayScreen`).
+- Skins: table `skin_config` (`disabled` list; everybody reads, owners write). The character screen hides disabled characters; owner mode (a `world_admins` account) shows all, toggles them and previews their walking and running animations on hover (`net/skins.ts`, `ui/Customizer.tsx`).
