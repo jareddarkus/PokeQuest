@@ -289,3 +289,8 @@ html[data-theme="modern"] .we-root button, html[data-theme="modern"] .we-root la
 .mx-box.over { box-shadow: inset 0 0 0 3px #19a7e0; border-radius: var(--mx-r); }
 .mx-cell { box-shadow: inset 0 0 0 2px #c3cde3; }
 .mx-cell.empty { background: #dde4f1; box-shadow: inset 0 0 0 2px #c3cde3; }
+
+/* progress bars: inside their frame, the same slanted look */
+html[data-theme="modern"] .pq-progress { color: inherit; }
+html[data-theme="modern"] .pq-progress-track { background: #dfe4ee; border: 0; border-radius: var(--mx-r); height: 14px; }
+html[data-theme="modern"] .pq-progress-fill { background: linear-gradient(90deg, #19c37d, #19a7e0); border-radius: var(--mx-r); }
