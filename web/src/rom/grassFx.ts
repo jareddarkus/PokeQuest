@@ -9,7 +9,7 @@ import { parseTextureAnim, valueAt } from './texanim'
 const VARIANT = 1
 let cache: Promise<HTMLCanvasElement[] | null> | null = null
 
-async function loadEffectsNarc(): Promise<Uint8Array[] | null> {
+export async function loadEffectsNarc(): Promise<Uint8Array[] | null> {
   let raw = await loadRomBlob('field:effects')
   if (!raw && import.meta.env.DEV) { // the local test server reads the game file directly
     const { devRomSource } = await import('./devSource')
@@ -55,4 +55,26 @@ export function loadGrassSway(): Promise<GrassSway | null> {
     } catch { return null }
   })()
   return swayCache
+}
+
+/**
+ * The game's own character shadow (file 47 of the effects archive, model "kage"): a 16 x 16 picture with a 14 x 9 pixel ellipse, drawn on a flat square one tile wide
+ * with a see-through polygon (alpha 19 / 31). Returns the picture as a canvas, or null when the game file is not there.
+ */
+let shadowCache: Promise<HTMLCanvasElement | null> | null = null
+export function loadShadowPicture(): Promise<HTMLCanvasElement | null> {
+  if (shadowCache) return shadowCache
+  shadowCache = (async () => {
+    try {
+      const narc = await loadEffectsNarc()
+      const file = narc?.[47]
+      const t = file ? readTexFile(file) : null
+      if (!t || !t.texs[0]) return null
+      const d = decodeTexture(t.texs[0], t.pals[0])
+      const c = document.createElement('canvas'); c.width = d.width; c.height = d.height
+      c.getContext('2d')!.putImageData(new ImageData(new Uint8ClampedArray(d.rgba), d.width, d.height), 0, 0)
+      return c
+    } catch { return null }
+  })()
+  return shadowCache
 }

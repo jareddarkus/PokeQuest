@@ -18,7 +18,7 @@ import { getAnim, warmAnim } from '../ui/AnimSprite'
 import { pixelDom } from '../ui/MonSprite'
 import type { AnimatedSprite } from '../rom/anim'
 import type { Settings } from './settings'
-import { loadGrassTuft, loadGrassSway, type GrassSway } from '../rom/grassFx'
+import { loadGrassTuft, loadGrassSway, loadShadowPicture, type GrassSway } from '../rom/grassFx'
 import {
   DX, DY, SIZE, T, TYPE_COLOR, collapseRadius, dist, inBounds, isWalkable, tileAt, type Dir, type NpcSpec, type World,
 } from './world'
@@ -82,11 +82,29 @@ function fit(sp: THREE.Sprite) {
   else { sp.center.set(0.5, 0.05); sp.scale.set(1.15, 1.45, 1) }
 }
 
-/** A soft dark oval on the ground under a character or Pokémon. */
-const shadowGeo = new THREE.CircleGeometry(0.5, 24).rotateX(-Math.PI / 2)
+/**
+ * The shadow under a character, a Pokémon or a ball on the ground: the game's own one. It is a 16 x 16 pixel picture with a 14 x 9 pixel ellipse (dark grey) on a flat square
+ * that is one tile wide, drawn see-through (alpha 19 / 31) with hard pixels. Until the game file's picture is loaded the same ellipse is drawn by hand.
+ */
+const shadowGeo = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2)
+const SHADOW_ROWS = ['.....++++++.....', '...++++++++++...', '..++++++++++++..', '.++++++++++++++.', '.++++++++++++++.', '.++++++++++++++.', '..++++++++++++..', '...++++++++++...', '.....++++++.....']
+const shadowTex = (() => {
+  const c = document.createElement('canvas'); c.width = 16; c.height = 16
+  const g = c.getContext('2d')!
+  g.fillStyle = 'rgb(66,66,66)'
+  SHADOW_ROWS.forEach((r, y) => { for (let x = 0; x < 16; x++) if (r[x] === '+') g.fillRect(x, y + 4, 1, 1) })
+  const t = new THREE.CanvasTexture(c)
+  t.magFilter = THREE.NearestFilter; t.minFilter = THREE.NearestFilter; t.colorSpace = THREE.SRGBColorSpace
+  return t
+})()
+let shadowLoading = false
 function makeShadow(scene: THREE.Scene, size = 1): THREE.Mesh {
-  const m = new THREE.Mesh(shadowGeo, new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.3, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }))
-  m.scale.set(0.8 * size, 1, 0.45 * size)
+  if (!shadowLoading) {
+    shadowLoading = true
+    void loadShadowPicture().then((c) => { if (c) { shadowTex.image = c; shadowTex.needsUpdate = true } })
+  }
+  const m = new THREE.Mesh(shadowGeo, new THREE.MeshBasicMaterial({ map: shadowTex, alphaTest: 0.5, transparent: true, opacity: 0.613, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }))
+  m.scale.set(size, 1, size)
   m.renderOrder = 1
   scene.add(m)
   return m
@@ -284,7 +302,7 @@ export default function GameView3D(props: Props) {
       s.renderOrder = 3
       s.position.set(pk.x + 0.5, heightAt(pk.x + 0.5, pk.y + 0.5) + 0.05, pk.y + 0.5)
       scene.add(s)
-      const psh = makeShadow(scene, 1.6) // the ball on the ground has a little shadow under it (a little towards the camera so it shows under the ball)
+      const psh = makeShadow(scene, 1.25) // the ball on the ground has a little shadow under it (a little towards the camera so it shows under the ball)
       psh.position.set(pk.x + 0.5, heightAt(pk.x + 0.5, pk.y + 0.5) + 0.04, pk.y + 0.62)
       pickupShadows.set(pk.id, psh)
       s.userData = { tx: pk.x, ty: pk.y, bs, sand: world.tiles[pk.y * SIZE + pk.x] === T.Sand }
