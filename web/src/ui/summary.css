@@ -229,3 +229,8 @@
 .sx-hp .sx-un > span:first-child { gap: 4px; }
 .sx-hp .sx-un span { white-space: nowrap !important; }
 .sx-hp .sx-un > span:first-child { flex-wrap: nowrap; }
+
+/* the picture panel gets more room (the stats and the moves are narrower), and so do the PS and EXP bars */
+@media (min-width: 861px) { .sx { grid-template-columns: minmax(0, 6fr) minmax(0, 5fr); column-gap: 64px; } }
+.sx-bar-s { width: 150px; }
+.sx-col .sx-hp { min-width: 190px; }
