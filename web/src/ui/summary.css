@@ -135,3 +135,36 @@
 .sx-btn.rh { transform: skewX(-12deg); border-radius: 3px; padding: 9px 22px; margin-top: 14px; }
 .sx-btn.rh > span { display: block; transform: skewX(12deg); }
 @media (max-width: 860px) { .sx { grid-template-columns: minmax(0, 1fr); } }
+
+/* the move detail is a slanted card too */
+.sx-detail { transform: skewX(-12deg); border-radius: 3px; padding: 0; }
+.sx-detail > .sx-dun { transform: skewX(12deg); padding: 16px 26px; display: flex; flex-direction: column; gap: 10px; }
+/* the picture is centred in the space left for it */
+.sx-sprite { align-items: center; }
+/* smooth ease-out entrances */
+@keyframes sx-rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes sx-pop { from { opacity: 0; transform: translateY(18px) scale(.94); } to { opacity: 1; transform: translateY(0) scale(1); } }
+/* (the same movements for the slanted shapes: they keep their slant while moving) */
+@keyframes sx-rise-k { from { opacity: 0; transform: skewX(-12deg) translateY(14px); } to { opacity: 1; transform: skewX(-12deg) translateY(0); } }
+@keyframes sx-slide-k { from { opacity: 0; transform: skewX(-12deg) translateX(-16px); } to { opacity: 1; transform: skewX(-12deg) translateX(0); } }
+@keyframes sx-pop-k { from { opacity: 0; transform: skewX(-12deg) translateY(18px) scale(.94); } to { opacity: 1; transform: skewX(-12deg) translateY(0) scale(1); } }
+@keyframes sx-reveal { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+@keyframes sx-slide { from { opacity: 0; transform: translateX(-16px); } to { opacity: 1; transform: translateX(0); } }
+.sx-head { animation: sx-rise .45s cubic-bezier(.16, 1, .3, 1) both; }
+.sx-art::before, .sx-art::after { animation: sx-rise-k .55s cubic-bezier(.16, 1, .3, 1) both; }
+.sx-sprite .sx-spr { animation: sx-pop .7s cubic-bezier(.16, 1, .3, 1) .15s both; }
+.sx-art .sx-chip, .sx-art .sx-hp { animation: sx-slide-k .5s cubic-bezier(.16, 1, .3, 1) .2s both; }
+.sx-stat { animation: sx-slide .5s cubic-bezier(.16, 1, .3, 1) both; animation-delay: calc(var(--i, 0) * 60ms + 120ms); }
+.sx-stat .sx-bar .sx-seg.grow { animation: sx-reveal .8s cubic-bezier(.16, 1, .3, 1) both; animation-delay: calc(var(--i, 0) * 60ms + 200ms); }
+.sx-stat .sx-bar .sx-seg.grow.late { animation-delay: calc(var(--i, 0) * 60ms + 650ms); animation-duration: .45s; }
+.sx-title, .sx-legend { animation: sx-rise .5s cubic-bezier(.16, 1, .3, 1) .1s both; }
+.sx-total { animation: sx-rise-k .5s cubic-bezier(.16, 1, .3, 1) .3s both; }
+.sx-moves > * { animation: sx-pop-k .55s cubic-bezier(.16, 1, .3, 1) both; }
+.sx-moves > *:nth-child(1) { animation-delay: .25s; } .sx-moves > *:nth-child(2) { animation-delay: .32s; }
+.sx-moves > *:nth-child(3) { animation-delay: .39s; } .sx-moves > *:nth-child(4) { animation-delay: .46s; }
+.sx-detail { animation: sx-rise-k .5s cubic-bezier(.16, 1, .3, 1) .1s both; }
+.sx-evo, .sx-pick { animation: sx-rise .5s cubic-bezier(.16, 1, .3, 1) .1s both; }
+.sx-tab { transition: background .2s ease-out, transform .2s ease-out; }
+.sx-mv { transition: outline-color .2s ease-out, box-shadow .2s ease-out; }
+.sx-mv:hover { box-shadow: 0 6px 16px rgba(40, 55, 90, .22); }
+@media (prefers-reduced-motion: reduce) { .sx *, .sx::before { animation: none !important; } }

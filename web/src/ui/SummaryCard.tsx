@@ -1,6 +1,6 @@
 // The Pokémon summary window: header (number, name, types, tabs), the picture panel, the stat bars and the four move cards.
 // Every text is drawn in the game's own font (from the player's game file).
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Dex } from '@pkmn/sim'
 import './summary.css'
 import { STAT_IDS, STAT_NAMES, calcStat, dexNum, evolutionsOf, learnableMoves, moveInfo, natureMods, speciesTypes, type Mon, type StatId } from '../data/dex'
@@ -63,66 +63,75 @@ function itemMult(item: string, stat: StatId, species: string): number {
   }
 }
 
-interface Seg { key: string; v: number; color: string; tip: string; neg?: boolean }
+const GREEN = '#6ee24a', RED = '#e03a4c'
 
-/** A stat split into what makes it: the species (base), the IV, the EV, the nature and the held item. All of it adds up to the stat. */
-function statSegments(mon: Mon, s: StatId, lang: 'es' | 'en'): { segs: Seg[]; final: number; cap: number } {
+interface StatMath { base: number; final: number; end: number; cap: number; lines: Array<{ label: string; v: number }>; net: number }
+
+/** A stat split into the species part and the rest (IV + EV + nature + held item), with every number of the sum. */
+function statMath(mon: Mon, s: StatId, lang: 'es' | 'en'): StatMath {
   const B = Dex.species.get(mon.species).baseStats[s], L = mon.level, IV = mon.ivs[s], EVq = Math.floor(mon.evs[s] / 4)
   const final = calcStat(mon.species, s, L, IV, mon.evs[s], mon.nature)
   const flat = s === 'hp' ? L + 10 : 5
-  // the stat = species part + IV part + EV part (+ nature); the parts are kept with their decimals so that even a small IV / EV shows as a chunk
   const rawF = ((2 * B + IV + EVq) * L) / 100 + flat
   const rawI = Math.floor(rawF)
   let ivP = (IV * L) / 100, evP = (EVq * L) / 100
   let base = rawI - ivP - evP
   let nat = final - rawI
   if (mon.species === 'Shedinja' && s === 'hp') { base = 1; ivP = 0; evP = 0; nat = 0 }
-  const f1 = (x: number) => Number(x.toFixed(1))
-  const c = STAT_COLOR[s]
-  const es = lang === 'es'
-  const nm = natureMods(mon.nature)
-  const natLabel = nm.plus ? `${trText(mon.nature)} (${nm.plus === s ? '+10%' : nm.minus === s ? '-10%' : '0%'})` : trText(mon.nature)
-  const segs: Seg[] = [
-    { key: 'base', v: base, color: c, tip: es ? `Especie (base ${B}): ${f1(base)}` : `Species (base ${B}): ${f1(base)}` },
-    { key: 'iv', v: ivP, color: c, tip: `IV ${IV}: +${f1(ivP)}` },
-    { key: 'ev', v: evP, color: c, tip: `EV ${mon.evs[s]}: +${f1(evP)}` },
-    { key: 'nat', v: Math.max(0, nat), color: c, tip: `${natLabel}: +${nat}`, neg: false },
-  ]
-  if (nat < 0) segs.push({ key: 'natneg', v: -nat, color: '#ffffff', tip: `${natLabel}: ${nat}`, neg: true })
   const im = mon.item ? itemMult(mon.item, s, mon.species) : 1
-  if (im !== 1) {
-    const d = Math.floor(final * im) - final
-    if (d > 0) segs.push({ key: 'item', v: d, color: c, tip: `${trText(mon.item)}: +${d}` })
-    else if (d < 0) segs.push({ key: 'itemneg', v: -d, color: '#ffffff', tip: `${trText(mon.item)}: ${d}`, neg: true })
-  }
-  return { segs, final, cap: barCap(s, L) }
+  const item = im !== 1 ? Math.floor(final * im) - final : 0
+  const nm = natureMods(mon.nature)
+  const es = lang === 'es'
+  const f1 = (x: number) => Number(x.toFixed(1))
+  const lines: StatMath['lines'] = []
+  lines.push({ label: es ? `Especie (base ${B})` : `Species (base ${B})`, v: 0 })
+  if (ivP > 0.04) lines.push({ label: `IV ${IV}`, v: f1(ivP) })
+  if (evP > 0.04) lines.push({ label: `EV ${mon.evs[s]}`, v: f1(evP) })
+  if (nat !== 0) lines.push({ label: `${trText(mon.nature)} (${nm.plus === s ? '+10%' : '-10%'})`, v: nat })
+  if (item !== 0) lines.push({ label: trText(mon.item), v: item })
+  const net = f1(ivP + evP + nat + item)
+  return { base, final, end: final + item, cap: barCap(s, L), lines, net }
 }
 
-function StatBar({ mon, s, lang }: { mon: Mon; s: StatId; lang: 'es' | 'en' }) {
-  const { segs, cap } = statSegments(mon, s, lang)
-  let at = 0
-  const items: ReactNode[] = []
-  for (const g of segs) {
-    if (g.neg) { // a loss (a hindering nature or item): hatched, over the end of the bar
-      const w = Math.min(100, (g.v / cap) * 100)
-      items.push(
-        <Tip key={g.key} tip={<GT t={g.tip} color="#ffffff" />} style={{ position: 'absolute', top: 3, bottom: 3, left: `${Math.max(0, at - w)}%`, width: `${w}%` }}>
-          <span className="sx-seg neg" style={{ background: g.color }} />
-        </Tip>,
-      )
-      continue
-    }
-    if (g.v < 0.05) continue // nothing from this part (no EVs, no nature effect on this stat ...): no chunk
-    const w = (g.v / cap) * 100
-    const width = Math.max(w, 1.8)
-    items.push(
-      <Tip key={g.key} tip={<GT t={g.tip} color="#ffffff" />} style={{ position: 'absolute', top: 3, bottom: 3, left: `calc(${at}% + 1px)`, width: `calc(${Math.min(width, 100 - at)}% - 2px)` }}>
-        <span className="sx-seg" style={{ background: g.color }} />
-      </Tip>,
-    )
-    at += w
-  }
-  return <div className="sx-bar">{items}</div>
+/** What the single chunk tells (also why it is red: a hindering nature takes away part of the IV / EV / species points). */
+function ChunkTip({ m, lang }: { m: StatMath; lang: 'es' | 'en' }) {
+  const es = lang === 'es'
+  const sign = (v: number) => (v > 0 ? '+' : '') + v
+  const col = (v: number) => (v > 0 ? '#7dff9a' : v < 0 ? '#ff8a95' : '#ffffff')
+  const rows = m.lines.filter((l) => l.v !== 0)
+  const lossy = rows.some((l) => l.v < 0)
+  return (
+    <span style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 170 }}>
+      {rows.map((l, i) => <span key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 14 }}><GT t={l.label} k={2} color="#ffffff" /><GT t={sign(l.v)} k={2} color={col(l.v)} /></span>)}
+      {rows.length === 0 && <GT t={es ? 'Solo la parte de la especie.' : 'Only the species part.'} k={2} color="#ffffff" />}
+      <span style={{ display: 'flex', justifyContent: 'space-between', gap: 14, borderTop: '1px solid rgba(255,255,255,.35)', paddingTop: 3 }}><GT t={es ? 'Total extra' : 'Extra total'} k={2} color="#ffffff" /><GT t={sign(m.net)} k={2} color={col(m.net)} /></span>
+      {lossy && <GT t={es ? 'Una naturaleza que baja esta estadística resta un 10% al total: se come parte de los puntos de IV y EV.' : 'A nature that lowers this stat takes 10% off the total: it eats part of the IV and EV points.'} k={1} color="#ffd0d5" maxWidth={190} />}
+    </span>
+  )
+}
+
+function StatBar({ mon, s, lang, i }: { mon: Mon; s: StatId; lang: 'es' | 'en'; i: number }) {
+  const m = statMath(mon, s, lang)
+  const c = STAT_COLOR[s]
+  const pct = (v: number) => Math.max(0, Math.min(100, (v / m.cap) * 100))
+  const delta = m.end - m.base // what the chunk is: IV + EV + nature + item together
+  const pos = delta >= 0
+  const baseW = pos ? pct(m.base) : pct(m.end)
+  const chunkW = Math.max(Math.abs(delta) > 0.04 ? pct(Math.abs(delta)) : 0, Math.abs(delta) > 0.04 ? 1.8 : 0)
+  const chunkL = pos ? baseW : baseW // (a loss: the red part sits where the lost points were, right after what is left)
+  const style = { ['--i' as string]: i } as React.CSSProperties
+  return (
+    <div className="sx-bar" style={style}>
+      <Tip tip={<GT t={m.lines[0].label + ': ' + Number(m.base.toFixed(1))} k={2} color="#ffffff" />} style={{ position: 'absolute', top: 3, bottom: 3, left: 1, width: `calc(${baseW}% - 2px)` }}>
+        <span className="sx-seg grow" style={{ background: c }} />
+      </Tip>
+      {chunkW > 0 && (
+        <Tip tip={<ChunkTip m={m} lang={lang} />} style={{ position: 'absolute', top: 3, bottom: 3, left: `calc(${chunkL}% + 1px)`, width: `calc(${Math.min(chunkW, 100 - chunkL)}% - 2px)` }}>
+          <span className="sx-seg grow late" style={{ background: pos ? GREEN : RED }} />
+        </Tip>
+      )}
+    </div>
+  )
 }
 
 function TypeChip({ type, k = 2 }: { type: string; k?: number }) {
@@ -192,6 +201,37 @@ export default function SummaryCard({ mon, onChange, onBack, onClose, footer }: 
   const [pickFor, setPickFor] = useState<number | null>(null)
   const [options, setOptions] = useState<string[]>([])
   const [vw, setVw] = useState(window.innerWidth)
+  // the picture is centred by what you SEE of it (the game's 96 x 96 picture has empty rows around the Pokémon)
+  const spriteBox = useRef<HTMLDivElement>(null)
+  const [lift, setLift] = useState(0)
+  useEffect(() => {
+    let tries = 0
+    const t0 = performance.now()
+    const t = window.setInterval(() => {
+      if (performance.now() - t0 < 1000) return // (wait until the entrance has finished)
+      const box = spriteBox.current, cv = box?.querySelector('canvas'), img = box?.querySelector('img')
+      const src = cv ?? img
+      if (!box || !src) { if (++tries > 30) clearInterval(t); return }
+      try {
+        const w = cv ? cv.width : (img as HTMLImageElement).naturalWidth, h = cv ? cv.height : (img as HTMLImageElement).naturalHeight
+        if (!w || !h) return
+        const tmp = document.createElement('canvas'); tmp.width = w; tmp.height = h
+        const ctx = tmp.getContext('2d', { willReadFrequently: true })!
+        ctx.drawImage(src as CanvasImageSource, 0, 0)
+        const px = ctx.getImageData(0, 0, w, h).data
+        let top = -1, bot = -1
+        for (let y = 0; y < h; y++) { let any = false; for (let x = 0; x < w && !any; x++) any = px[(y * w + x) * 4 + 3] > 40; if (any) { if (top < 0) top = y; bot = y } }
+        if (top < 0) return
+        const r = src.getBoundingClientRect(), b = (box.parentElement as HTMLElement).getBoundingClientRect()
+        const k = r.height / h
+        const want = b.top + b.height / 2
+        const visibleMid = r.top + ((top + bot + 1) / 2) * k // (r already includes the current lift)
+        setLift((cur) => Math.round(cur + want - visibleMid))
+        clearInterval(t)
+      } catch { clearInterval(t) }
+    }, 250)
+    return () => clearInterval(t)
+  }, [mon.species, vw, tab])
   useEffect(() => { const f = () => setVw(window.innerWidth); window.addEventListener('resize', f); return () => window.removeEventListener('resize', f) }, [])
   useEffect(() => { void learnableMoves(mon.species, mon.level).then(setOptions) }, [mon.species, mon.level])
   const small = vw <= 860
@@ -244,27 +284,27 @@ export default function SummaryCard({ mon, onChange, onBack, onClose, footer }: 
       <div className="sx-art">
         <div className="sx-row">
           <div className="sx-col">
-            <Chip><GT t={`LV. ${mon.level}`} k={2} /></Chip>
+            <Chip><GT t="LV." k={2} color={MUTED} /><GT t={String(mon.level)} k={2} /></Chip>
             <Chip><GT t={`${genderGlyph} ${genderLabel}`.trim()} k={2} color={mon.gender === 'M' ? '#2a7de1' : mon.gender === 'F' ? '#e0467c' : INK} /></Chip>
           </div>
           <div className="sx-col r">
-            <Chip><GT t={`${es ? 'ALT' : 'HT'}: ${sp.heightm} m`} k={2} /></Chip>
-            <Chip><GT t={`${es ? 'PESO' : 'WT'}: ${sp.weightkg} kg`} k={2} /></Chip>
+            <Chip><GT t={`${es ? 'ALT' : 'HT'}:`} k={2} color={MUTED} /><GT t={`${sp.heightm} m`} k={2} /></Chip>
+            <Chip><GT t={`${es ? 'PESO' : 'WT'}:`} k={2} color={MUTED} /><GT t={`${sp.weightkg} kg`} k={2} /></Chip>
           </div>
         </div>
-        <div className="sx-sprite"><div><MonSprite species={mon.species} shiny={mon.shiny} scale={small ? 3 : 4} animated /></div></div>
+        <div className="sx-sprite"><div ref={spriteBox} style={{ transform: `translateY(${lift}px)`, transition: 'transform .4s ease-out' }}><div className="sx-spr"><MonSprite species={mon.species} shiny={mon.shiny} scale={small ? 3 : 4} animated /></div></div></div>
         <div className="sx-row">
           <span className="sx-hp"><span className="sx-un">
             <GT t={`${es ? 'PS' : 'HP'}: ${mon.hp} / ${mx}`} k={2} />
             <span className="sx-bar sx-bar-s"><span className="sx-seg" style={{ position: 'absolute', top: 3, bottom: 3, left: 1, width: `calc(${frac * 100}% - 2px)`, background: frac > 0.5 ? STAT_COLOR.hp : frac > 0.2 ? '#f0a800' : '#e03a4c' }} /></span>
           </span></span>
           <div className="sx-col r">
-            <Chip tip={<GT t={natureTip} k={2} color="#ffffff" maxWidth={150} />} right><GT t={`${es ? 'NATURALEZA' : 'NATURE'}:`} k={2} color={MUTED} /><GT t={mon.nature.toUpperCase()} k={2} /></Chip>
-            <Chip tip={<GT t={abilityDesc(mon.ability) || '—'} k={2} color="#ffffff" maxWidth={150} />} right><GT t={`${es ? 'HABILIDAD' : 'ABILITY'}:`} k={2} color={MUTED} /><GT t={mon.ability.toUpperCase()} k={2} /></Chip>
+            <Chip tip={<GT t={natureTip} k={2} color="#ffffff" maxWidth={150} />} right><GT t={`${es ? 'NATURALEZA' : 'NATURE'}:`} k={2} color={MUTED} /><GT t={trText(mon.nature).toUpperCase()} k={2} /></Chip>
+            <Chip tip={<GT t={abilityDesc(mon.ability) || '—'} k={2} color="#ffffff" maxWidth={150} />} right><GT t={`${es ? 'HABILIDAD' : 'ABILITY'}:`} k={2} color={MUTED} /><GT t={trText(mon.ability).toUpperCase()} k={2} /></Chip>
             <Chip tip={<GT t={mon.item ? itemText : es ? 'No lleva ningún objeto.' : 'Not holding an item.'} k={2} color="#ffffff" maxWidth={150} />} right>
               <GT t={`${es ? 'OBJETO' : 'ITEM'}:`} k={2} color={MUTED} />
               {mon.item && <ItemIcon name={mon.item} size={22} />}
-              <GT t={mon.item ? mon.item.toUpperCase() : es ? 'NINGUNO' : 'NONE'} k={2} />
+              <GT t={mon.item ? trText(mon.item).toUpperCase() : es ? 'NINGUNO' : 'NONE'} k={2} />
             </Chip>
           </div>
         </div>
@@ -277,14 +317,13 @@ export default function SummaryCard({ mon, onChange, onBack, onClose, footer }: 
           {STAT_IDS.map((s) => (
             <div className="sx-stat" key={s}>
               <GT t={STAT_NAMES[s]} k={2} color={nm.plus === s ? '#e0467c' : nm.minus === s ? '#2a7de1' : INK} />
-              <StatBar mon={mon} s={s} lang={lang} />
+              <StatBar mon={mon} s={s} lang={lang} i={STAT_IDS.indexOf(s)} />
               <span className="v"><GT t={String(st[s])} k={3} font={0} /></span>
             </div>
           ))}
           <div className="sx-legend">
-            {[[es ? 'Especie' : 'Species'], ['IV'], ['EV'], [es ? 'Naturaleza' : 'Nature'], ...(mon.item ? [[es ? 'Objeto' : 'Item']] : [])].map(([name], i) => (
-              <span key={name}><i><b><GT t={String(i + 1)} k={1} color="#ffffff" /></b></i><GT t={name} k={1} color={MUTED} /></span>
-            ))}
+            <span><i><b><GT t="1" k={1} color="#ffffff" /></b></i><GT t={es ? 'Especie' : 'Species'} k={1} color={MUTED} /></span>
+            <span><i><b><GT t="2" k={1} color="#ffffff" /></b></i><GT t={es ? 'IV + EV + Naturaleza + Objeto' : 'IV + EV + Nature + Item'} k={1} color={MUTED} /><span style={{ display: 'inline-flex', gap: 4, marginLeft: 6 }}><u style={{ width: 10, height: 10, background: GREEN, display: 'inline-block' }} /><GT t={es ? 'suma' : 'adds'} k={1} color={MUTED} /><u style={{ width: 10, height: 10, background: RED, display: 'inline-block' }} /><GT t={es ? 'resta' : 'takes'} k={1} color={MUTED} /></span></span>
           </div>
           <span className="sx-chip sx-total"><span className="sx-un"><GT t={`${es ? 'TOTAL' : 'STAT TOTAL'}: ${total}`} k={2} /></span></span>
         </div>
@@ -293,15 +332,15 @@ export default function SummaryCard({ mon, onChange, onBack, onClose, footer }: 
         <div className="sx-stats">
           <div className="sx-title"><i /><GT t={es ? 'MOVIMIENTOS' : 'MOVES'} k={2} font={0} /></div>
           {mv && mi ? (
-            <div className="sx-detail">
+            <div className="sx-detail"><div className="sx-dun">
               <span style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
                 <TypePlate type={mi.category} scale={1} /><GT t={mv} k={3} font={0} /><TypeChip type={mi.type} k={1} />
-                <GT t={`${es ? ({ Physical: 'Físico', Special: 'Especial', Status: 'Estado' } as Record<string, string>)[mi.category] : mi.category}  ${mi.power ? (es ? 'Potencia' : 'Power') + ' ' + mi.power : es ? 'sin potencia' : 'no power'}  ${mi.accuracy === true ? '—' : mi.accuracy + '%'}`} k={1} color={MUTED} />
+                <GT t={`${es ? 'POT' : 'PWR'}: ${mi.power || '—'}   |   ${es ? 'PRE' : 'ACC'}: ${mi.accuracy === true ? '—' : mi.accuracy + '%'}`} k={1} color={MUTED} />
               </span>
               <GT t={moveFacts(mv, lang)} k={kText} maxWidth={textW} />
               <GT t={moveGameText(mv, lang)} k={kText} maxWidth={textW} color={MUTED} />
               {onChange && <button className="sx-btn rh" onClick={() => setPickFor(pickFor === sel ? null : sel)}><span><GT t={es ? 'Cambiar movimiento' : 'Replace move'} k={1} color="#ffffff" /></span></button>}
-            </div>
+            </div></div>
           ) : <GT t="—" />}
           {pickFor !== null && options.filter((o) => !mon.moves.includes(o)).length === 0 && <GT t={es ? 'A este nivel no puede aprender más movimientos.' : 'It cannot learn any other move at this level.'} k={2} color={MUTED} />}
           {pickFor !== null && (
