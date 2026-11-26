@@ -4,7 +4,7 @@ import * as THREE from 'three'
 import type { BuiltWorld } from '../rom/chunkWorld'
 import { drawCharacter, lookSprite, randomLook, type Look } from './character'
 import { SWIM_SPRITES, hasOw, owBall, owEmote, owFrame } from './ow'
-import { GYM_MODELS } from '../rom/buildings'
+import { CENTER_MODEL, GYM_MODELS } from '../rom/buildings'
 import { animatedTextures } from '../rom/mapModel'
 import { valueAt } from '../rom/texanim'
 import { safeTileFor, type GameEvents, type GameHandle, type OtherPlayer } from './GameView'
@@ -20,7 +20,7 @@ import type { AnimatedSprite } from '../rom/anim'
 import type { Settings } from './settings'
 import { loadGrassTuft, loadGrassSway, loadShadowPicture, type GrassSway } from '../rom/grassFx'
 import {
-  DX, DY, SIZE, T, TYPE_COLOR, collapseRadius, dist, inBounds, isWalkable, tileAt, type Dir, type NpcSpec, type World,
+  DX, DY, SIZE, T, TYPE_COLOR, collapseRadius, collapseWarn, dist, inBounds, isWalkable, tileAt, type Dir, type NpcSpec, type World,
 } from './world'
 
 interface Props {
@@ -250,8 +250,9 @@ export default function GameView3D(props: Props) {
     }
 
     // gyms: the real gym buildings of the game (a sign at the entrance if the building is not available)
-    world.gyms.forEach((g, gi) => {
-      const spec = GYM_MODELS[gi % GYM_MODELS.length]
+    let gymNo = 0
+    world.gyms.forEach((g) => {
+      const spec = g.center ? CENTER_MODEL : GYM_MODELS[gymNo++ % GYM_MODELS.length]
       const b = g.custom ? null : built.makeBuilding(spec.pack, spec.model) // (a gym made in the editor has the building the owner placed)
       const gy = heightAt(g.x + 0.5, g.y + 0.5)
       if (b) {
@@ -269,7 +270,7 @@ export default function GameView3D(props: Props) {
           }
         }
       }
-      const mat = new THREE.SpriteMaterial({ map: labelTexture(`${g.type.toUpperCase()} GYM`, TYPE_COLOR[g.type]), transparent: false })
+      const mat = new THREE.SpriteMaterial({ map: labelTexture(g.center ? 'POKÉMON CENTER' : `${g.type.toUpperCase()} GYM`, g.center ? '#e8505b' : TYPE_COLOR[g.type]), transparent: false })
       const s = new THREE.Sprite(mat)
       s.center.set(0.5, 0)
       s.scale.set(3, 0.75, 1)
@@ -940,7 +941,7 @@ export default function GameView3D(props: Props) {
       const u = built.uniforms
       u.uTime.value = now / 1000
       u.uCut.value = elapsed === null ? 999 : collapseRadius(elapsedSec)
-      u.uWarn.value = elapsed !== null && elapsedSec % 15 > 8 ? 1 : 0
+      u.uWarn.value = elapsed !== null && collapseWarn(elapsedSec) ? 1 : 0
 
       renderer.render(scene, camera)
     }

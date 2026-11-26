@@ -416,3 +416,12 @@ Seen in the recording but NOT done: the trainers' battle sprites (the foe traine
 - Modern look = the Pokémon info window's: light cards (#f3f5fa), slanted shapes (clip-path for buttons, skew + un-skew for cards), Unbounded Black titles, Lexend text, dark `#0d1018` for primary buttons, ease-out entrances.
 - Screens with a modern version (components in `ui/Modern.tsx`, `ui/ModernBattle.tsx`; the old ones stay as `Classic...` behind a wrapper): Bag, Party, PC, battle command / move / idle screens, HP boxes (`ModernHpBox`), typed battle message, menu buttons, party bar, HUD cards, chat, lobby, title / login / menus, settings. The Pokémon info window (`SummaryCard`) is the same in both themes.
 - Not modernized: the world editor (its own dark tool styles), the battle backdrop / team balls, the status icons.
+
+## Round 20 — round rules (rings, centers, items, legendaries)
+- `game/rules.ts`: `RULES` (ringSeconds 300, fallSeconds 30, maxLegendary 1, itemsPerBattle 4). A world of the editor can change them (tool "Reglas", saved in the world as `rules`; `applyRules` when the world is loaded, so every player uses the owner's).
+- Rings fall one by one: after `ringSeconds` ring 1 crumbles (`fallSeconds`), after 2x ring 2, after 3x ring 3 (`collapseRadius`, `collapseInfo`, `collapseWarn` in world.ts); whoever is on it is pushed to the next ring (the old push code). HUD: "Ring N falls in m:ss".
+- Pokémon Center in rings 1 - 3 (`Gym.center`, real building `pc_01` = pack 0 model 0, import version 50): walk into the door = team healed. When the whole team faints (not against a player) you wake up at the center of your ring (`blackOut` in PlayScreen); in a world of the editor the owner's healing tiles ("Curar equipo") are the centers, otherwise the generated ones stay.
+- Items per battle: `itemsUsed` in BattleScreen (bag title shows "Bag (left/4)"). Legendaries: `RULES.maxLegendary` (catch, PC).
+- Duels between players (peak): `restoreForDuel` heals both teams (HP and PP) first, with a message; used items stay used.
+- PC: drag Pokémon between team and box (HTML drag and drop; a tap still works); the last Pokémon that can still fight cannot leave the team.
+- Not done yet: the peak tournament (forced bracket after the last 5 minutes) and spectating battles.

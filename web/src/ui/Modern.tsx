@@ -121,12 +121,21 @@ export function ModernPc({ team, pc, box, boxes, setBox, toTeam, toPc, onClose }
   toTeam: (i: number) => void; toPc: (i: number) => void; onClose: () => void
 }) {
   useLang()
+  const [over, setOver] = useState<'box' | 'team' | null>(null)
   const first = box * 30
+  // dragging: a Pokémon of the team onto the box sends it to the PC, one of the box onto the team takes it (a tap does the same)
+  const dragStart = (e: React.DragEvent, tag: string) => { e.dataTransfer.setData('text/plain', tag); e.dataTransfer.effectAllowed = 'move' }
+  const drop = (e: React.DragEvent, where: 'box' | 'team') => {
+    e.preventDefault(); setOver(null)
+    const [from, i] = e.dataTransfer.getData('text/plain').split(':')
+    if (where === 'box' && from === 'team') toPc(Number(i))
+    if (where === 'team' && from === 'pc') toTeam(Number(i))
+  }
   const slots = Array.from({ length: 30 }, (_, i) => pc[first + i] ?? null)
   return (
     <MxWindow title="PC" className="mx-pc" onClose={onClose}>
       <div className="mx-pc-body">
-        <div className="mx-box">
+        <div className={`mx-box ${over === 'box' ? 'over' : ''}`} onDragOver={(e) => { e.preventDefault(); setOver('box') }} onDragLeave={() => setOver(null)} onDrop={(e) => drop(e, 'box')}>
           <div className="mx-box-head">
             <button className="mx-arrow" onClick={() => setBox((b) => (b + boxes - 1) % boxes)}><span>‹</span></button>
             <b className="mx-title sm">BOX {box + 1}</b>
@@ -134,17 +143,17 @@ export function ModernPc({ team, pc, box, boxes, setBox, toTeam, toPc, onClose }
           </div>
           <div className="mx-box-grid">
             {slots.map((m, i) => (
-              <button key={i} className={`mx-cell ${m ? '' : 'empty'}`} disabled={!m} onClick={() => m && toTeam(first + i)} title={m ? `${m.species} Lv${m.level}` : ''}>
+              <button key={i} className={`mx-cell ${m ? '' : 'empty'}`} disabled={!m} draggable={!!m} onDragStart={(e) => dragStart(e, `pc:${first + i}`)} onClick={() => m && toTeam(first + i)} title={m ? `${m.species} Lv${m.level}` : ''}>
                 {m && <MonIcon species={m.species} shiny={m.shiny} size={40} />}
               </button>
             ))}
           </div>
         </div>
-        <div className="mx-team">
+        <div className={`mx-team ${over === 'team' ? 'over' : ''}`} onDragOver={(e) => { e.preventDefault(); setOver('team') }} onDragLeave={() => setOver(null)} onDrop={(e) => drop(e, 'team')}>
           <b className="mx-title sm">Your team ({team.length}/6)</b>
-          <span className="mx-mut">Tap a Pokémon to swap it between the team and the box.</span>
+          <span className="mx-mut">Drag a Pokémon between the team and the box (or tap it). You always need one that can still fight.</span>
           {team.map((m, i) => (
-            <button key={m.uid} className="mx-slot small" onClick={() => toPc(i)}>
+            <button key={m.uid} className="mx-slot small" draggable onDragStart={(e) => dragStart(e, `team:${i}`)} onClick={() => toPc(i)}>
               <span className="mx-slot-in"><MonIcon species={m.species} shiny={m.shiny} size={40} /><span className="mx-slot-txt"><b className="mx-title sm">{m.species}</b><span className="mx-mut">Lv {m.level}</span></span></span>
             </button>
           ))}

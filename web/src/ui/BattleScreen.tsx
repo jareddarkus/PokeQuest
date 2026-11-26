@@ -29,6 +29,7 @@ import { MoveFx, FX_NAMES } from './moveFx'
 import { trText, useLang } from '../i18n'
 import FontText from './FontText'
 import { useTheme } from './theme'
+import { RULES } from '../game/rules'
 import { nameOf } from '../i18n'
 
 export type BattleKind = 'wild' | 'trainer' | 'gym'
@@ -320,6 +321,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
   const [bag, setBagState] = useState(trainer.bag)
   const setBag = (b: Record<string, number>) => { bagRef.current = b; setBagState(b) }
   const caughtRef = useRef<Mon | null>(null)
+  const itemsUsed = useRef(0) // the items used in this battle (at most RULES.itemsPerBattle)
   const ranRef = useRef(false)
   const [shake, setShake] = useState<'me' | 'foe' | null>(null)
   const [lunge, setLunge] = useState<'me' | 'foe' | null>(null)
@@ -801,7 +803,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
       const c = caughtRef.current
       const legends = t.team.filter((m) => legendaryNames.has(m.species)).length
       const isLeg = legendaryNames.has(c.species)
-      if (t.team.length < 6 && !(isLeg && legends >= 2)) t = { ...t, team: [...t.team, c] }
+      if (t.team.length < 6 && !(isLeg && legends >= RULES.maxLegendary)) t = { ...t, team: [...t.team, c] }
       else t = { ...t, pc: [...t.pc, c] }
     }
     if (outcome === 'win') await say(kind === 'wild' ? 'You won!' : `You defeated ${foeName ?? 'the trainer'}!`, 700)
@@ -962,7 +964,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
         // no experience for a catch in this version; the Pokémon joins your team
         const c = caughtRef.current
         const legends = t.team.filter((m) => legendaryNames.has(m.species)).length
-        const toPc = t.team.length >= 6 || (legendaryNames.has(c.species) && legends >= 2)
+        const toPc = t.team.length >= 6 || (legendaryNames.has(c.species) && legends >= RULES.maxLegendary)
         onEnd('caught', toPc ? { ...t, pc: [...t.pc, c] } : { ...t, team: [...t.team, c] })
       } else {
         setBall(null)
@@ -1076,7 +1078,12 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
             pockets={kind === 'wild' ? [1, 2] : [1]}
             only={(d) => !pvp && ((d.kind === 'ball' && kind === 'wild') || d.kind === 'heal')}
             canUse={(d) => (d.kind === 'ball' && kind === 'wild') || d.kind === 'heal'}
-            onUse={(id) => { setMode('wait'); if (ITEMS[id].kind === 'ball') throwBall(id); else usePotion(id) }}
+            title={`Bag (${Math.max(0, RULES.itemsPerBattle - itemsUsed.current)}/${RULES.itemsPerBattle})`}
+            onUse={(id) => {
+              if (itemsUsed.current >= RULES.itemsPerBattle) { void say(`You can only use ${RULES.itemsPerBattle} items per battle.`, 600).then(() => setText('Choose an item.')); return }
+              itemsUsed.current++
+              setMode('wait'); if (ITEMS[id].kind === 'ball') throwBall(id); else usePotion(id)
+            }}
             onClose={() => setMode('menu')}
             describe={(d) => (d.kind === 'ball' && foeCopies[0] && s().foeActive ? `Catch rate ${Math.round(catchChance({ ...foeCopies[0], hp: s().foeActive!.hp }, d.ballBonus ?? 1, legendaryNames.has(foeCopies[0].species)) * 100)}%` : null)}
           />

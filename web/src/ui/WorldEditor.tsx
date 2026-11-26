@@ -8,6 +8,7 @@ import { ProgressBar } from './ProgressBar'
 import { signIn } from '../supabase'
 import { claimWorldAdmin, currentUserId, isWorldAdmin, publishWorld, publishedInfo, unpublishWorld } from '../world/publish'
 import { SIZE, T } from '../game/world'
+import { DEFAULT_RULES, type Rules } from '../game/rules'
 import { Dex } from '@pkmn/sim'
 import { EVENT_KINDS, EV, groupColor, kindOf, newEvent, newGroup, type GameEvent, type PokeGroup } from '../world/events'
 import {
@@ -15,7 +16,7 @@ import {
   type CustomWorld,
 } from '../world/customWorld'
 
-type Tool = 'paint' | 'kind' | 'height' | 'model' | 'pine' | 'move' | 'erase' | 'event' | 'zones'
+type Tool = 'paint' | 'kind' | 'height' | 'model' | 'pine' | 'move' | 'erase' | 'event' | 'zones' | 'rules'
 
 const KINDS: Array<{ code: number; label: string; hint: string }> = [
   { code: T.Grass, label: 'Hierba', hint: 'Se puede andar' },
@@ -522,7 +523,7 @@ function Editor({ built, onExit, onPlay }: { built: BuiltWorld; onExit: () => vo
       <div className="we-body">
         <div className="we-side">
           <div className="we-tools">
-            {([['paint', 'Pintar suelo'], ['kind', 'Tipo de casilla'], ['height', 'Altura'], ['model', 'Modelos 3D'], ['pine', 'Pino'], ['move', 'Mover objeto'], ['erase', 'Borrar objeto'], ['event', 'Eventos (números)'], ['zones', 'Zonas de Pokémon']] as Array<[Tool, string]>).map(([k, l]) => (
+            {([['paint', 'Pintar suelo'], ['kind', 'Tipo de casilla'], ['height', 'Altura'], ['model', 'Modelos 3D'], ['pine', 'Pino'], ['move', 'Mover objeto'], ['erase', 'Borrar objeto'], ['event', 'Eventos (números)'], ['zones', 'Zonas de Pokémon'], ['rules', 'Reglas']] as Array<[Tool, string]>).map(([k, l]) => (
               <button key={k} className={tool === k ? 'on' : ''} onClick={() => setTool(k)}>{l}</button>
             ))}
           </div>
@@ -571,6 +572,7 @@ function Editor({ built, onExit, onPlay }: { built: BuiltWorld; onExit: () => vo
               </div>
             </>
           )}
+          {tool === 'rules' && <RulesPanel cw={cwRef.current} onChange={() => { force((n) => n + 1); setSaved('') }} />}
           {tool === 'pine' && <p className="we-help">Clic en el mapa para plantar un pino (ocupa 2 × 2 casillas y bloquea el paso).</p>}
           {tool === 'move' && <p className="we-help">Arrastra un modelo o pino para moverlo. Con uno elegido: R lo gira, Supr lo borra.</p>}
           {tool === 'erase' && <p className="we-help">Clic junto a un modelo o pino para quitarlo.</p>}
@@ -688,6 +690,25 @@ function EventPanel({ cw, selType, setSelType, selId, onChange, onSelect }: { cw
       )}
       <p className="we-help">Eventos puestos: {cw.events.length}. Sin ningún evento, el juego pone entrenadores, gimnasios y objetos solo; con eventos, solo salen los tuyos.</p>
     </>
+  )
+}
+
+/** The rules of the world: how long the rings last, how many legendary Pokémon a team may have, how many items a battle allows. */
+function RulesPanel({ cw, onChange }: { cw: CustomWorld; onChange: () => void }) {
+  const cur = { ...DEFAULT_RULES, ...(cw.rules ?? {}) }
+  const set = (k: keyof Rules, v: number) => { cw.rules = { ...(cw.rules ?? {}), [k]: Math.max(0, Math.round(v)) }; onChange() }
+  const row = (k: keyof Rules, label: string, help: string, min = 0, max = 99999) => (
+    <label key={k}>{label}<input type="number" min={min} max={max} value={k === 'ringSeconds' ? Math.round(cur.ringSeconds / 60 * 10) / 10 : cur[k]} onChange={(e) => set(k, k === 'ringSeconds' ? Number(e.target.value) * 60 : Number(e.target.value))} /><small>{help}</small></label>
+  )
+  return (
+    <div className="we-form">
+      <p className="we-help">Estas reglas se guardan con el mundo y se aplican a todos los jugadores que lo cargan.</p>
+      {row('ringSeconds', 'Minutos entre caídas de anillo', 'Cada tantos minutos se hunde un anillo y manda a los que estén en él al siguiente (5 por defecto).', 0.1, 120)}
+      {row('fallSeconds', 'Segundos que tarda en hundirse', 'Lo que dura la caída de un anillo (30 por defecto).', 1, 600)}
+      {row('maxLegendary', 'Legendarios por equipo', 'Máximo de Pokémon legendarios en el equipo (1 por defecto).', 0, 6)}
+      {row('itemsPerBattle', 'Objetos por combate', 'Cuántos objetos se pueden usar en un solo combate (4 por defecto).', 0, 99)}
+      <button onClick={() => { cw.rules = undefined; onChange() }}>Volver a las reglas por defecto</button>
+    </div>
   )
 }
 

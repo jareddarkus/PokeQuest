@@ -201,14 +201,14 @@ export default function SummaryCard({ mon, onChange, onBack, onClose, footer }: 
   // the picture is centred by what you SEE of it (the game's 96 x 96 picture has empty rows around the Pokémon)
   const spriteBox = useRef<HTMLDivElement>(null)
   const [lift, setLift] = useState(0)
+  const [placed, setPlaced] = useState(false)
   useEffect(() => {
     let tries = 0
-    const t0 = performance.now()
+    setPlaced(false)
     const t = window.setInterval(() => {
-      if (performance.now() - t0 < 1000) return // (wait until the entrance has finished)
       const box = spriteBox.current, cv = box?.querySelector('canvas'), img = box?.querySelector('img')
       const src = cv ?? img
-      if (!box || !src) { if (++tries > 30) clearInterval(t); return }
+      if (!box || !src) { if (++tries > 100) { clearInterval(t); setPlaced(true) } return }
       try {
         const w = cv ? cv.width : (img as HTMLImageElement).naturalWidth, h = cv ? cv.height : (img as HTMLImageElement).naturalHeight
         if (!w || !h) return
@@ -224,9 +224,10 @@ export default function SummaryCard({ mon, onChange, onBack, onClose, footer }: 
         const want = b.top + b.height / 2
         const visibleMid = r.top + ((top + bot + 1) / 2) * k // (r already includes the current lift)
         setLift((cur) => Math.round(cur + want - visibleMid))
+        setPlaced(true) // (it is shown only now, already in its place: it never moves in front of the player)
         clearInterval(t)
-      } catch { clearInterval(t) }
-    }, 250)
+      } catch { clearInterval(t); setPlaced(true) }
+    }, 60)
     return () => clearInterval(t)
   }, [mon.species, vw, tab])
   useEffect(() => { const f = () => setVw(window.innerWidth); window.addEventListener('resize', f); return () => window.removeEventListener('resize', f) }, [])
@@ -281,13 +282,13 @@ export default function SummaryCard({ mon, onChange, onBack, onClose, footer }: 
       </div>
 
       {/* the picture panel */}
-      <div className="sx-art">
+      <div className="sx-art"><div className="sx-layer">
         <div className="sx-row top">
           <Chip><GT t={`${genderGlyph} ${genderLabel}`.trim()} k={2} color={mon.gender === 'M' ? '#2a7de1' : mon.gender === 'F' ? '#e0467c' : INK} /></Chip>
           <Chip><GT t={`${es ? 'ALT' : 'HT'}:`} k={2} color={MUTED} /><GT t={`${sp.heightm} m`} k={2} /></Chip>
           <Chip><GT t={`${es ? 'PESO' : 'WT'}:`} k={2} color={MUTED} /><GT t={`${sp.weightkg} kg`} k={2} /></Chip>
         </div>
-        <div className="sx-sprite"><div ref={spriteBox} style={{ transform: `translateY(${lift}px)`, transition: 'transform .4s ease-out' }}><div className="sx-spr"><MonSprite species={mon.species} shiny={mon.shiny} scale={small ? 3 : 4} animated /></div></div></div>
+        <div className="sx-sprite"><div ref={spriteBox} style={{ transform: `translateY(${lift}px)`, opacity: placed ? 1 : 0, transition: placed ? 'opacity .45s ease-out' : 'none' }}><div className="sx-spr"><MonSprite species={mon.species} shiny={mon.shiny} scale={small ? 3 : 4} animated /></div></div></div>
         <div className="sx-row bottom">
           <div className="sx-col">
             <span className="sx-hp"><span className="sx-un">
@@ -309,7 +310,7 @@ export default function SummaryCard({ mon, onChange, onBack, onClose, footer }: 
             </Chip>
           </div>
         </div>
-      </div>
+      </div></div>
 
       {/* the right side: stats / move details / evolution */}
       {tab === 'stats' && (

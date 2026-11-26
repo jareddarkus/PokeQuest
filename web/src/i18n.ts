@@ -105,12 +105,12 @@ const DICT: Record<string, string> = {
   // menus
   'Menu': 'Menú', 'Team': 'Equipo', 'Bag': 'Mochila', 'PC': 'PC', 'Chat': 'Chat', 'Exit': 'Salir', 'Close': 'Cerrar', 'Back': 'Atrás', 'Use': 'Usar', 'Send': 'Enviar',
   'Items': 'Objetos', 'Medicine': 'Medicinas', 'Poké Balls': 'Poké Balls', 'Your team': 'Tu equipo', 'Pick a Pokémon to see its summary': 'Elige un Pokémon para ver su resumen',
-  'You found:': 'Has encontrado:', 'Theme': 'Tema', 'Modern': 'Moderno', 'Classic': 'Clásico', 'Info': 'Datos', 'Stats': 'Estadísticas', 'Moves': 'Movimientos', 'Nature': 'Naturaleza', 'Ability': 'Habilidad', 'Held item': 'Objeto', 'Type': 'Tipo', 'Level': 'Nivel',
+  'You found:': 'Has encontrado:', 'Nurse Joy: Your Pokémon are fully healed!': 'Enfermera Joy: ¡Tus Pokémon están completamente curados!', 'You blacked out! Your Pokémon were healed.': '¡Te has desmayado! Tus Pokémon se han curado.', 'Theme': 'Tema', 'Modern': 'Moderno', 'Classic': 'Clásico', 'Info': 'Datos', 'Stats': 'Estadísticas', 'Moves': 'Movimientos', 'Nature': 'Naturaleza', 'Ability': 'Habilidad', 'Held item': 'Objeto', 'Type': 'Tipo', 'Level': 'Nivel',
   'Exp. points': 'Puntos de Exp.', 'To next level': 'Para el siguiente nivel', 'none': 'ninguno', 'Move up': 'Subir', 'Move down': 'Bajar',
   'Choose a Pokémon.': 'Elige un Pokémon.', 'Nothing in this pocket.': 'No hay nada en este bolsillo.',
   'Your bag is empty. Look for Poké Balls on the ground!': 'Tu mochila está vacía. ¡Busca Poké Balls por el suelo!',
   'Tap a Pokémon to swap it between the team and the box.': 'Toca un Pokémon para cambiarlo entre el equipo y la caja.',
-  'Your team is full.': 'Tu equipo está completo.', 'You cannot carry more than 2 legendary Pokémon.': 'No puedes llevar más de 2 Pokémon legendarios.',
+  'Your team is full.': 'Tu equipo está completo.', 'You need at least one Pokémon on your team that can still fight.': 'Necesitas al menos un Pokémon en el equipo que pueda combatir.', 'Before the fight your Pokémon were fully restored (HP and PP). Items you already used stay used.': 'Antes del combate tus Pokémon se han restaurado por completo (PS y PP). Los objetos que ya usaste siguen gastados.',
   'You need at least one Pokémon on your team.': 'Necesitas al menos un Pokémon en tu equipo.', 'It would have no effect.': 'No tendría ningún efecto.',
   'No Pokémon yet.': 'Todavía no hay Pokémon.', 'Total EVs': 'EVs totales',
   // items
@@ -167,7 +167,9 @@ const PATTERNS: Array<[RegExp, string | ((...m: string[]) => string)]> = [
   [/^Team (\d+)\/(\d+) fit · (\d+) Poké Balls?$/, 'Equipo $1/$2 en forma · $3 Poké Balls'], [/^The match begins in (\d+) seconds\. Everybody is picking a starter…$/, 'La partida empieza en $1 segundos. Todos están eligiendo un inicial…'],
   [/^Gym Leader (.+)$/, 'Líder de gimnasio $1'], [/^Trainer (.+)$/, 'Entrenador $1'], [/^(.+) nods: you already beat this gym\.$/, '$1 asiente: ya has vencido este gimnasio.'],
   [/^You beat (.+)! You were taken to ring (\d+)\.$/, '¡Has vencido a $1! Has sido llevado al anillo $2.'], [/^Choose (.+)$/, 'Elegir a $1'], [/^Use (.+) on…$/, 'Usar $1 en…'],
-  [/^Catch rate (\d+)%$/, 'Captura $1%'], [/^(\d+) players?$/, '$1 jugadores'], [/^Exp (\d+)$/, 'Exp. $1'], [/^Next lv\. (\d+)$/, 'Sig. nv. $1'], [/^Lv ?(\d+)$/, 'Nv$1'], [/^Lv\. ?(\d+)$/, 'Nv. $1'], [/^Lv (\d+) · /, 'Nv $1 · '], [/^Exp (\d+)  next (\d+)$/, 'Exp $1  siguiente $2'], [/^EXP (\d+)  next (\d+)$/, 'EXP $1  siguiente $2'],
+  [/^Catch rate (\d+)%$/, 'Captura $1%'],
+  [/^You blacked out! You woke up at the Pokémon Center of ring (\d)\.$/, '¡Te has desmayado! Despertaste en el Centro Pokémon del anillo $1.'], [/^Bag \((\d+)\/(\d+)\)$/, 'Mochila ($1/$2)'], [/^Ring (\d) falls in (.+)$/, 'El anillo $1 se hunde en $2'], [/^Ring (\d) is crumbling!$/, '¡El anillo $1 se está hundiendo!'], [/^Only the peak is left · the tournament starts in (.+)$/, 'Solo queda la cima · el torneo empieza en $1'],
+  [/^You cannot carry more than (\d+) legendary Pokémon\.$/, 'No puedes llevar más de $1 Pokémon legendarios.'], [/^You can only use (\d+) items per battle\.$/, 'Solo puedes usar $1 objetos por combate.'], [/^(\d+) players?$/, '$1 jugadores'], [/^Exp (\d+)$/, 'Exp. $1'], [/^Next lv\. (\d+)$/, 'Sig. nv. $1'], [/^Lv ?(\d+)$/, 'Nv$1'], [/^Lv\. ?(\d+)$/, 'Nv. $1'], [/^Lv (\d+) · /, 'Nv $1 · '], [/^Exp (\d+)  next (\d+)$/, 'Exp $1  siguiente $2'], [/^EXP (\d+)  next (\d+)$/, 'EXP $1  siguiente $2'],
   [/^(.+) nature$/, 'Naturaleza $1'], [/^Power (\d+)$/, 'Potencia $1'], [/^Pow (\d+|—)$/, 'Pot. $1'], [/^no power$/, 'sin potencia'],
   [/^Trainer (\S+)$/, 'Entrenador $1'], [/^Team \((\d+)\/6\)$/, 'Equipo ($1/6)'], [/^Your team \((\d+)\/6\)$/, 'Tu equipo ($1/6)'], [/^BOX (\d+)$/, 'CAJA $1'],
 ]

@@ -1,5 +1,6 @@
 // The world made in the editor: a 160 x 160 tile map (a picture, a kind and a height for every tile) plus placed 3D models.
 // It is drawn with the game's own map pictures and building models (from the player's game file) and plays like the normal island.
+import type { Rules } from '../game/rules'
 import * as THREE from 'three'
 import { applyClip } from '../rom/mapModel'
 import type { BuiltWorld } from '../rom/chunkWorld'
@@ -43,6 +44,8 @@ export interface CustomWorld {
   groups: PokeGroup[]
   /** the group of wild Pokémon of every tile (0 = the normal ones of the ring) */
   enc: Uint8Array
+  /** the rules of this world (ring timing, legendary limit, items per battle); missing = the defaults */
+  rules?: Partial<Rules>
 }
 
 export const DEFAULT_TEXTURE = 'grass01ax'
@@ -68,7 +71,7 @@ export function texIndex(cw: CustomWorld, name: string): number {
 }
 
 export function cloneWorld(cw: CustomWorld): CustomWorld {
-  return { ...cw, tex: [...cw.tex], tile: new Uint16Array(cw.tile), kind: new Uint8Array(cw.kind), level: new Int8Array(cw.level), objects: cw.objects.map((o) => ({ ...o })), events: cw.events.map((e) => ({ ...e, lines: e.lines ? [...e.lines] : undefined, after: e.after ? [...e.after] : undefined })), groups: cw.groups.map((g) => ({ ...g, entries: g.entries.map((q) => ({ ...q })), count: [...g.count] as [number, number] })), enc: new Uint8Array(cw.enc) }
+  return { ...cw, tex: [...cw.tex], tile: new Uint16Array(cw.tile), kind: new Uint8Array(cw.kind), level: new Int8Array(cw.level), rules: cw.rules ? { ...cw.rules } : undefined, objects: cw.objects.map((o) => ({ ...o })), events: cw.events.map((e) => ({ ...e, lines: e.lines ? [...e.lines] : undefined, after: e.after ? [...e.after] : undefined })), groups: cw.groups.map((g) => ({ ...g, entries: g.entries.map((q) => ({ ...q })), count: [...g.count] as [number, number] })), enc: new Uint8Array(cw.enc) }
 }
 
 // ---------------------------------------------------------------- saving
@@ -77,7 +80,7 @@ const unb64 = (s: string): Uint8Array => { const t = atob(s); const a = new Uint
 
 export function encodeWorld(cw: CustomWorld): string {
   return JSON.stringify({
-    v: 1, name: cw.name, tex: cw.tex, barriers: cw.barriers, nextId: cw.nextId, objects: cw.objects, events: cw.events, groups: cw.groups, enc: b64(cw.enc),
+    v: 1, name: cw.name, tex: cw.tex, barriers: cw.barriers, nextId: cw.nextId, objects: cw.objects, events: cw.events, groups: cw.groups, rules: cw.rules, enc: b64(cw.enc),
     tile: b64(new Uint8Array(cw.tile.buffer, cw.tile.byteOffset, cw.tile.byteLength)), kind: b64(cw.kind), level: b64(new Uint8Array(cw.level.buffer, cw.level.byteOffset, cw.level.byteLength)),
   })
 }
@@ -90,7 +93,7 @@ export function decodeWorld(text: string): CustomWorld | null {
     if (kind.length !== SIZE * SIZE || level.length !== SIZE * SIZE || tile.length !== SIZE * SIZE * 2) return null
     return {
       v: 1, name: String(j.name ?? 'Mi mundo'), tex: Array.isArray(j.tex) ? j.tex.map(String) : [], barriers: !!j.barriers, nextId: Number(j.nextId) || 1,
-      objects: Array.isArray(j.objects) ? j.objects : [], events: Array.isArray(j.events) ? j.events : [], groups: Array.isArray(j.groups) ? j.groups : [],
+      objects: Array.isArray(j.objects) ? j.objects : [], events: Array.isArray(j.events) ? j.events : [], groups: Array.isArray(j.groups) ? j.groups : [], rules: j.rules && typeof j.rules === 'object' ? j.rules : undefined,
       enc: typeof j.enc === 'string' && unb64(j.enc).length === SIZE * SIZE ? unb64(j.enc) : new Uint8Array(SIZE * SIZE),
       tile: new Uint16Array(tile.buffer.slice(tile.byteOffset, tile.byteOffset + tile.byteLength)), kind, level: new Int8Array(level.buffer.slice(level.byteOffset, level.byteOffset + level.byteLength)),
     }

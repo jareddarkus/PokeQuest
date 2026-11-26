@@ -61,6 +61,9 @@ export function choosePack(ids: number[], packs: Array<Pack | null>): number {
   return best
 }
 
+/** The Pokémon Center building (model `pc_01`, building 0: every pack has it). */
+export const CENTER_MODEL = { pack: 0, model: 0 }
+
 /** The real gym buildings of the game (pack, model). Each gym of the island gets one. */
 export const GYM_MODELS: Array<{ pack: number; model: number }> = [
   { pack: 35, model: 30 }, // c04_gym_01

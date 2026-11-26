@@ -2,7 +2,7 @@
 // player's game file into the player's browser storage; the game then builds its 3D world from those.
 import { NdsFile, parseNarc } from './nds'
 import { readModelName, readModels, readTexFile } from './nitro'
-import { BUILDING_PACKS_NARC, BUILDING_TEX_NARC, GYM_MODELS, choosePack, parsePack, readBuildingTable, type BuildingSpec } from './buildings'
+import { BUILDING_PACKS_NARC, BUILDING_TEX_NARC, CENTER_MODEL, GYM_MODELS, choosePack, parsePack, readBuildingTable, type BuildingSpec } from './buildings'
 
 /** A block of n x n neighbouring map chunks (each 32 x 32 tiles) taken from the real Unova overworld grid. */
 export interface WorldWindow { x0: number; y0: number; n: number }
@@ -63,7 +63,7 @@ export async function extractWorldData(nds: NdsFile, win: WorldWindow, onProgres
     }
   }
   onProgress?.('Reading the island map…', maps.length, maps.length)
-  for (const g of GYM_MODELS) if (!usedPacks[g.pack] && packFiles[g.pack]) usedPacks[g.pack] = { bld: new Uint8Array(packFiles[g.pack]), tex: new Uint8Array(packTex[g.pack]) }
+  for (const g of [...GYM_MODELS, CENTER_MODEL]) if (!usedPacks[g.pack] && packFiles[g.pack]) usedPacks[g.pack] = { bld: new Uint8Array(packFiles[g.pack]), tex: new Uint8Array(packTex[g.pack]) }
   let anims: Uint8Array[] = []
   try { anims = parseNarc(await nds.get('a/0/6/8')).map((f) => new Uint8Array(f)) } catch { /* no animations */ }
   return { window: win, chunks, textures, buildings, packs: usedPacks, anims }

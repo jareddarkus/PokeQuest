@@ -11,13 +11,14 @@ import { ITEMS, STARTING_BAG, rollPickup } from '../data/items'
 import ItemIcon from './ItemIcon'
 import { maxHp, newUid, type Mon } from '../data/dex'
 import {
-  C, COLLAPSE_SECONDS, squareTile, RADIUS, RING_INNER, SIZE, T, collapseRadius, generateWorld, isWalkable, ringAt, type Dir, type World,
+  C, collapseInfo, squareTile, RADIUS, RING_INNER, SIZE, T, collapseRadius, generateWorld, isWalkable, ringAt, type Dir, type World,
 } from '../game/world'
 import BattleScreen, { CHAR_MS, TypedText, type BattleKind, type BattleOutcome, type PvpLink } from './BattleScreen'
 import { addExtraGrass, buildMeadowVisuals, prepareMeadow } from '../game/meadow'
 import { buildCustomVisuals, type CustomWorld } from '../world/customWorld'
 import { fetchPublishedWorld } from '../world/publish'
 import { applyCustomEvents } from '../world/applyEvents'
+import { applyRules } from '../game/rules'
 import { busyLine, leaderLine, lossLine, preBattleLine } from '../data/npcLines'
 import { BagPanel, CaughtPanel, PcPanel, TeamPanel } from './MenuPanels'
 import SettingsPanel from './SettingsPanel'
@@ -103,7 +104,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
   const hudFrame2 = useFrameStyle('dark', 2)
   const hudFrame = useFrameStyle('dark', 1) // the game's own dark message window for the info boxes
   const [ring, setRing] = useState(1)
-  const [secs, setSecs] = useState(0)
+  const [clock, setClock] = useState<{ ring: number; seconds: number; falling: boolean }>({ ring: 1, seconds: 300, falling: false })
   const [radius, setRadius] = useState(RADIUS)
   const [trainer, setTrainerState] = useState<Trainer>(() => ({ ...emptyTrainer(), bag: { ...STARTING_BAG } }))
   const trainerRef = useRef(trainer)
@@ -164,13 +165,12 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
       if (m.type === 'pvp') { const d = m.data as { t: string; d: unknown }; for (const cb of pvpListeners.current) cb(d.t, d.d); return }
       if (m.type === 'challenge') { // a player touched me at the peak: the duel starts at once
         const ring = (() => { const q = handleRef.current?.getPos(); return q ? ringAt(q.x, q.y) : 0 })()
-        const team = trainerRef.current.team.filter((x) => x.hp > 0)
-        if (battleRef.current || busy.current || eliminatedRef.current || ring !== 4 || !team.length || duelPending.current) { busySender.current?.duel({ to: m.from, type: 'decline' }); return }
+        if (battleRef.current || busy.current || eliminatedRef.current || ring !== 4 || !trainerRef.current.team.length || duelPending.current) { busySender.current?.duel({ to: m.from, type: 'decline' }); return }
         duelPending.current = m.from
-        busySender.current?.duel({ to: m.from, type: 'accept', data: JSON.parse(JSON.stringify(team)) })
+        busySender.current?.duel({ to: m.from, type: 'accept', data: restoreForDuel() })
         startDuelRef.current('guest', m.from, m.data as Mon[])
       } else if (m.type === 'accept') {
-        if (duelPending.current === m.from) startDuelRef.current('host', m.from, m.data as Mon[])
+        if (duelPending.current === m.from) { restoreForDuel(); startDuelRef.current('host', m.from, m.data as Mon[]) }
       } else if (m.type === 'decline') { if (duelPending.current === m.from) duelPending.current = null }
     },
   } : undefined, busySender)
@@ -210,7 +210,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
       const pos = handleRef.current?.getPos()
       if (pos) setRing(ringAt(pos.x, pos.y))
       const el = (Date.now() - startRef.current) / 1000
-      setSecs(COLLAPSE_SECONDS - (el % COLLAPSE_SECONDS))
+      setClock(collapseInfo(el))
       setRadius(collapseRadius(el))
     }, 250)
     return () => clearInterval(id)
@@ -232,6 +232,35 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
       }
     }
     return { x: C, y: C }
+  }
+
+  /** Your whole team fainted: you wake up, healed, at the Pokémon Center of the ring you are in (in the peak, where there is none, right where you are). */
+  const blackOut = () => {
+    const t = trainerRef.current
+    setTrainer({ ...t, team: t.team.map(healedCopy) })
+    const pos = handleRef.current?.getPos()
+    const ring = pos ? ringAt(pos.x, pos.y) : 0
+    let target: { x: number; y: number } | null = null
+    const center = world.gyms.find((g) => g.center && g.ring === ring)
+    if (center) target = { x: center.doorX, y: center.doorY + 1 }
+    else if (world.triggers) { // (a world of the editor: its healing tiles are the centers)
+      for (const [key, v] of world.triggers) { if (v.type !== 6) continue; const hx = key % SIZE, hy = Math.floor(key / SIZE); if (ringAt(hx, hy) === ring) { target = { x: hx, y: hy + 1 }; break } }
+    }
+    if (target) { handleRef.current?.teleport(target.x, target.y); say(`You blacked out! You woke up at the Pokémon Center of ring ${ring}.`) }
+    else say('You blacked out! Your Pokémon were healed.')
+  }
+
+  if (import.meta.env.DEV) (globalThis as { __pqBlackOut?: unknown }).__pqBlackOut = blackOut // developer hook
+
+  /** A Pokémon with all its HP and PP back. */
+  const healedCopy = (m: Mon): Mon => { const { pp: _pp, ...rest } = m; void _pp; return JSON.parse(JSON.stringify({ ...rest, hp: maxHp(m) })) as Mon }
+  /** Before two players fight each other, every Pokémon of both teams gets all its HP and PP back (items already used stay used): it is announced, and the healed team is returned. */
+  const restoreForDuel = (): Mon[] => {
+    const t = trainerRef.current
+    const team = t.team.map(healedCopy)
+    setTrainer({ ...t, team })
+    say('Before the fight your Pokémon were fully restored (HP and PP). Items you already used stay used.')
+    return team
   }
 
   const startBattle = (b: ActiveBattle) => {
@@ -280,7 +309,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
       else if (outcome === 'win') { outPlayers.current.add(b.name ?? ''); say(`You beat ${b.name}! They are out of the match.`) }
       return
     }
-    if (outcome === 'lose') say('You blacked out of the fight! Heal up with Revives and Potions.')
+    if (outcome === 'lose') blackOut()
   }
 
   // two players that touch each other at the peak fight at once (the one whose name comes first asks)
@@ -290,7 +319,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
       if (battleRef.current || busy.current || eliminatedRef.current || duelPending.current || Date.now() < t0Ref.current) return
       const me = handleRef.current?.getPos()
       if (!me || ringAt(me.x, me.y) !== 4) return
-      const team = trainerRef.current.team.filter((x) => x.hp > 0)
+      const team = trainerRef.current.team.map(healedCopy)
       if (!team.length) return
       for (const o of players()) {
         if (outPlayers.current.has(o.id) || !(username < o.id)) continue
@@ -298,7 +327,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
         if (Math.abs(o.x - me.x) <= 1.2 && Math.abs(o.y - me.y) <= 1.2) {
           duelPending.current = o.id
           void music.playSfx('fld:07') // touching another player at the peak: the same sound as a trainer spotting you
-          busySender.current?.duel({ to: o.id, type: 'challenge', data: JSON.parse(JSON.stringify(team)) })
+          busySender.current?.duel({ to: o.id, type: 'challenge', data: team })
           window.setTimeout(() => { if (duelPending.current === o.id && !battleRef.current) duelPending.current = null }, 4000)
           break
         }
@@ -350,6 +379,12 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
       onGym: (id) => {
         const g = world.gyms.find((q) => q.id === id)
         if (!g) return
+        if (g.center) { // a Pokémon Center: the whole team is healed
+          void music.heal()
+          setTrainer({ ...trainerRef.current, team: trainerRef.current.team.map(healedCopy) })
+          say('Nurse Joy: Your Pokémon are fully healed!')
+          return
+        }
         void music.playSfx('fld:KAIDAN') // going into a building
         if (beatenGyms.current.has(id)) { say(`${g.leader} nods: you already beat this gym.`); return }
         const cgrp = g.custom?.group ? world.groups?.get(g.custom.group) : undefined
@@ -454,7 +489,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
       <div className="hud-top-left panel" style={hudFrame ?? undefined}>
         <strong>Ring {ring}</strong>
         <span>
-          {waiting ? 'Island falls when the match starts' : collapseOn ? `Next band falls in ${Math.ceil(secs)}s · island radius ${Math.max(0, radius)}` : 'Island collapse is off'}
+          {waiting ? 'Island falls when the match starts' : collapseOn ? (clock.ring >= 4 ? `Only the peak is left · the tournament starts in ${fmtClock(clock.seconds)}` : clock.falling ? `Ring ${clock.ring} is crumbling!` : `Ring ${clock.ring} falls in ${fmtClock(clock.seconds)}`) : 'Island collapse is off'}
         </span>
         <span>Team {alive}/{trainer.team.length} fit · {trainer.bag['Poke Ball'] ?? 0} Poké Balls</span>
         {!royale && (
@@ -575,6 +610,9 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
 
 export type { Dir }
 
+/** 4:05 */
+const fmtClock = (sec: number): string => `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, '0')}`
+
 export default function PlayScreen(props: Props) {
   const [loaded, setLoaded] = useState<{ world: World; built: BuiltWorld } | 'missing' | null>(null)
   const [prog, setProg] = useState<Progress>({ text: 'Reading the map pieces from your game file…', frac: 0, step: 1, steps: 5 })
@@ -600,6 +638,7 @@ export default function PlayScreen(props: Props) {
       // the world the owner published (everybody plays the same one) unless a world is being tested from the editor
       const custom = props.custom ?? (await fetchPublishedWorld())
       if (!live) return
+      applyRules(custom?.rules) // the rules of that world (ring timing, legendary limit, items per battle)
       let world: World
       if (custom) { // a world from the editor: its own ground, heights and models replace the real map
         setProg({ text: 'Drawing your world…', frac: 0.8, step: 4, steps: 5, done: 0, total: 1, unit: 'step' })

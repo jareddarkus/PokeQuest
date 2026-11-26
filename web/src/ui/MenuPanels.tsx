@@ -13,6 +13,7 @@ import SummaryCard from './SummaryCard'
 import BagScreen from './BagScreen'
 import { useUiUrl } from './CmdButton'
 import { music } from '../audio/music'
+import { RULES } from '../game/rules'
 import { ModernParty, ModernPc } from './Modern'
 import { useTheme } from './theme'
 
@@ -158,10 +159,12 @@ export function PcPanel({ trainer, setTrainer, onClose, onMessage }: PanelProps)
   const toTeam = (i: number) => {
     const m = trainer.pc[i]
     if (trainer.team.length >= 6) { onMessage('Your team is full.'); return }
-    if (legendaryNames.has(m.species) && legends >= 2) { onMessage('You cannot carry more than 2 legendary Pokémon.'); return }
+    if (legendaryNames.has(m.species) && legends >= RULES.maxLegendary) { onMessage(`You cannot carry more than ${RULES.maxLegendary} legendary Pokémon.`); return }
     setTrainer({ ...trainer, team: [...trainer.team, m], pc: trainer.pc.filter((_, k) => k !== i) })
   }
   const toPc = (i: number) => {
+    const mm = trainer.team[i]
+    if (mm.hp > 0 && trainer.team.filter((x) => x.hp > 0).length <= 1) { onMessage('You need at least one Pokémon on your team that can still fight.'); return }
     if (trainer.team.length <= 1) { onMessage('You need at least one Pokémon on your team.'); return }
     setTrainer({ ...trainer, pc: [...trainer.pc, trainer.team[i]], team: trainer.team.filter((_, k) => k !== i) })
   }
