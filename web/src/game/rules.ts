@@ -8,9 +8,11 @@ export interface Rules {
   maxLegendary: number
   /** most items (potions, balls ...) a player can use in one battle */
   itemsPerBattle: number
+  /** experience of a won battle is multiplied by this (default 10) */
+  expMultiplier: number
 }
 
-export const DEFAULT_RULES: Rules = { ringSeconds: 300, fallSeconds: 30, maxLegendary: 1, itemsPerBattle: 4 }
+export const DEFAULT_RULES: Rules = { ringSeconds: 300, fallSeconds: 30, maxLegendary: 1, itemsPerBattle: 4, expMultiplier: 10 }
 /** The rules in force right now (one object, changed in place). */
 export const RULES: Rules = { ...DEFAULT_RULES }
 

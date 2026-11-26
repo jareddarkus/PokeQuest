@@ -4,6 +4,7 @@ import {
 } from '../data/dex'
 import { ITEMS } from '../data/items'
 import { mulberry32 } from './rng'
+import { RULES } from './rules'
 
 export interface Trainer {
   team: Mon[]
@@ -66,12 +67,12 @@ export function addEvs(m: Mon, gain: Partial<Record<StatId, number>>): Mon {
   return { ...m, evs }
 }
 
-/** The experience a won battle gives to one Pokémon (match rule: x5, trainers x1.5). */
+/** The experience a won battle gives to one Pokémon (match rule: multiplied by RULES.expMultiplier, x10 by default; trainers x1.5). */
 export function expGain(foeSpecies: string, foeLevel: number, trainer: boolean, share: number): number {
   const bs = Dex.species.get(foeSpecies).baseStats
   const bst = bs.hp + bs.atk + bs.def + bs.spa + bs.spd + bs.spe
   const base = bst / 5
-  return Math.max(1, Math.floor(((base * foeLevel) / 7) * 5 * (trainer ? 1.5 : 1) * share))
+  return Math.max(1, Math.floor(((base * foeLevel) / 7) * RULES.expMultiplier * (trainer ? 1.5 : 1) * share))
 }
 
 export async function gainExp(m: Mon, amount: number): Promise<LevelUpResult> {

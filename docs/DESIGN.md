@@ -449,3 +449,8 @@ Seen in the recording but NOT done: the trainers' battle sprites (the foe traine
 ## Round 25 — stat badges, category icon, effectiveness in the move info
 - Stat stages are tracked in the battle engine (`stages` events: boost, unboost, setboost, clearboost, clearallboost, clearnegativeboost, invertboost; a switch resets) and shown as small slanted badges next to the HP boxes (green ▲ raised, red ▼ lowered).
 - Move info (battle): the category is the game's own icon (physical / special / status) instead of a word; next to the type: Super effective / Not very effective / No effect / Effective (ES: Muy eficaz / Poco eficaz / No afecta / Eficaz) against the foe's type(s) from the type chart; not shown for status moves. The exact labels of the real games' move menu could not be confirmed by searching (Sword/Shield show such words on the move button; the wording above comes from the games' own battle messages).
+
+## Round 26 — editor button for the owner, XP rule, Gen 8 sprite on the ground
+- The main menu shows "World Builder" to the owner's account (a row in `world_admins`; `dungixel` is in it). It opens the same editor as `?editor`.
+- New rule `expMultiplier` (default 10, was a fixed 5): experience of a won battle is multiplied by it (trainers still x1.5). Editable in the editor's Reglas panel ("Multiplicador de experiencia") and saved with the published world.
+- Animated pictures of Pokémon #650+ that use the full 96 x 96 frame (Scorbunny and others) had empty rows under the feet: they are set down by the same gap as their still picture (`MonSprite.tsx`). Showdown's picture server sends no CORS headers, so the gap cannot be measured from the gif; the still's box is used.

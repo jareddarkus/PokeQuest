@@ -103,7 +103,10 @@ function PixelMon({ species, back, shiny, scale = 2, className }: { species: str
   useEffect(() => setStage(anim ? 0 : 1), [species, back, shiny, anim])
   const S = scale * 0.8 // one picture pixel, like the pictures from the game file
   if (stage === 0 && anim) {
-    return <img className={`mon-sprite pix ${className ?? ''}`} src={spriteUrl(species, { back, shiny }, 0)} alt={species} draggable={false} onError={() => setStage(1)} style={{ width: anim[0] * S, height: anim[1] * S, imageRendering: 'pixelated' }} />
+    // the animated picture has the same 96 x 96 frame as the still one, with empty rows under the feet: set it down so that the feet touch the platform
+    const stillBox = (back ? info?.sb : info?.s) ?? info?.s
+    const gap = anim[0] === 96 && anim[1] === 96 && stillBox ? 95 - stillBox[3] : 0
+    return <img className={`mon-sprite pix ${className ?? ''}`} src={spriteUrl(species, { back, shiny }, 0)} alt={species} draggable={false} onError={() => setStage(1)} style={{ width: anim[0] * S, height: anim[1] * S, imageRendering: 'pixelated', transform: `translateY(${gap * S}px)` }} />
   }
   const box = (back ? info?.sb : info?.s) ?? info?.s ?? [0, 0, 95, 95]
   const w = (box[2] - box[0] + 1) * S, h = (box[3] - box[1] + 1) * S

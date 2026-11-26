@@ -174,6 +174,7 @@ export default function App() {
         onCustomize={() => setScreen('customize')}
         onSettings={() => setShowSettings(true)}
         onLogout={logout}
+        onEditor={() => setEditing(true)}
       />
       {showSettings && <SettingsPanel settings={settings} onChange={setSettings} onClose={() => setShowSettings(false)} />}
     </>

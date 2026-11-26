@@ -89,6 +89,7 @@ const DICT: Record<string, string> = {
   'Playing without an account': 'Jugando sin cuenta', 'Pokémon White 2 Together': 'Pokémon Blanco 2 en compañía', 'Shared world with your friends (coming later)': 'Mundo compartido con tus amigos (próximamente)',
   'Log in with your account to play the Battle Royale with your friends. (The Practice Island works without an account.)': 'Inicia sesión con tu cuenta para jugar al Battle Royale con tus amigos. (La isla de práctica funciona sin cuenta.)',
   // game file
+  'World Builder': 'Constructor de mundos', 'Make and publish the world everybody plays (owner only)': 'Crea y publica el mundo que juega todo el mundo (solo propietario)',
   'Choose my Pokémon White 2 file': 'Elegir mi archivo de Pokémon Blanco 2', 'Could not read that file.': 'No se pudo leer ese archivo.',
   'You only need to do this once per browser.': 'Solo tienes que hacerlo una vez por navegador.', 'Done!': '¡Listo!',
   'This game contains no Pokémon pictures. Choose': 'Este juego no contiene imágenes de Pokémon. Elige', 'your own Pokémon White 2': 'tu propio Pokémon Blanco 2',
