@@ -22,8 +22,8 @@ interface PanelProps {
 }
 
 // ---------------------------------------------------------------- summary (stats, moves, evolution)
-export function Summary({ mon, onChange, onBack, footer }: { mon: Mon; onChange?: (m: Mon) => void; onBack: () => void; footer?: React.ReactNode }) {
-  return <SummaryCard mon={mon} onChange={onChange} onBack={onBack} footer={footer} />
+export function Summary({ mon, onChange, onBack, onClose, footer }: { mon: Mon; onChange?: (m: Mon) => void; onBack: () => void; onClose?: () => void; footer?: React.ReactNode }) {
+  return <SummaryCard mon={mon} onChange={onChange} onBack={onBack} onClose={onClose} footer={footer} />
 }
 
 /** Right after a catch: the new Pokémon's summary. */
@@ -55,7 +55,7 @@ export function TeamPanel({ trainer, setTrainer, onClose, initial }: PanelProps 
         {mon && sel !== null ? (
           <>
             <Summary
-              mon={mon} onChange={(m) => setMon(sel, m)} onBack={() => (initial != null ? onClose() : setSel(null))}
+              mon={mon} onChange={(m) => setMon(sel, m)} onBack={() => (initial != null ? onClose() : setSel(null))} onClose={onClose}
               footer={<>
                 <button className="sx-btn ghost" onClick={() => swap(sel, sel - 1)} disabled={sel === 0}>↑</button>
                 <button className="sx-btn ghost" onClick={() => swap(sel, sel + 1)} disabled={sel >= trainer.team.length - 1}>↓</button>

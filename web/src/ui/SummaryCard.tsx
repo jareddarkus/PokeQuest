@@ -181,7 +181,7 @@ function EvoNode({ name, cur, lang }: { name: string; cur: string; lang: 'es' | 
   )
 }
 
-export default function SummaryCard({ mon, onChange, onBack, backLabel = 'Back', footer }: { mon: Mon; onChange?: (m: Mon) => void; onBack: () => void; backLabel?: string; footer?: ReactNode }) {
+export default function SummaryCard({ mon, onChange, onBack, onClose, backLabel = 'Back', footer }: { mon: Mon; onChange?: (m: Mon) => void; onBack: () => void; onClose?: () => void; backLabel?: string; footer?: ReactNode }) {
   const lang = useLang()
   const es = lang === 'es'
   const [tab, setTab] = useState<'stats' | 'moves' | 'evo'>('stats')
@@ -215,6 +215,7 @@ export default function SummaryCard({ mon, onChange, onBack, backLabel = 'Back',
 
   return (
     <div className="sx">
+      <button className="sx-x" onClick={onClose ?? onBack} aria-label="Close" title="Close">✕</button>
       {/* header */}
       <div className="sx-head">
         <div className="sx-who">

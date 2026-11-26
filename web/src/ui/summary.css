@@ -114,3 +114,9 @@
 @keyframes sx-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-9px); } }
 @media (prefers-reduced-motion: reduce) { .sx-float { animation: none; } }
 .sx-stat .v { white-space: nowrap; }
+
+/* the X in the top right corner closes the window */
+.sx-x { position: absolute !important; top: 10px; right: 12px; z-index: 40; width: 34px; height: 34px; border: 0; border-radius: 50%; cursor: pointer; background: #fff; color: #1c2333; font-size: 16px; line-height: 1; box-shadow: 0 2px 8px rgba(40, 55, 90, .25); }
+.sx-x:hover { background: #1c2333; color: #fff; }
+.sx { padding-top: 28px; }
+.sx-head { padding-right: 38px; }
