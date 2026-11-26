@@ -317,7 +317,7 @@ export default function SummaryCard({ mon, onChange, onBack, onClose, footer }: 
           <div className="sx-title"><i /><GT t={es ? 'ESTADÍSTICAS' : 'STATS'} k={2} font={0} /></div>
           {STAT_IDS.map((s) => (
             <div className="sx-stat" key={s}>
-              <GT t={STAT_NAMES[s]} k={2} color={nm.plus === s ? '#e0467c' : nm.minus === s ? '#2a7de1' : INK} />
+              <GT t={STAT_NAMES[s]} k={2} color={nm.plus === s ? '#12a150' : nm.minus === s ? '#e03a4c' : INK} />
               <StatBar mon={mon} s={s} lang={lang} i={STAT_IDS.indexOf(s)} />
               <span className="v"><GT t={String(st[s])} k={3} font={0} /></span>
             </div>
