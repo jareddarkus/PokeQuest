@@ -304,3 +304,9 @@ html[data-theme="modern"] .party-hp { box-sizing: border-box; padding: 2px; heig
 html[data-theme="modern"] .party-hp span { border-radius: max(2px, calc(var(--mx-r) - 2px)); }
 html[data-theme="modern"] .pq-progress-track { padding: 3px; }
 html[data-theme="modern"] .pq-progress-fill { border-radius: max(2px, calc(var(--mx-r) - 2px)); }
+
+/* phones: the menu buttons keep their names (dark letters on the light slabs, white on the dark one) */
+@media (max-width: 640px) {
+  html[data-theme="modern"] .hud-top-right .menu-slab { width: 138px; padding: 4px 14px 4px 16px; gap: 8px; }
+  html[data-theme="modern"] .hud-top-right .menu-slab > span:not(.menu-badge) { display: inline !important; color: inherit; font-size: .82rem; white-space: nowrap; }
+}

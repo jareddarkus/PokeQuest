@@ -242,3 +242,37 @@
 @media (min-width: 861px) { .sx { grid-template-columns: minmax(0, 11fr) minmax(0, 10fr); } }
 .sx-id { background: transparent; box-shadow: none; }
 .sx-id > .sx-un { padding: 12px 6px 12px 2px; }
+
+/* ===== phones: a clean single-column window; the name and the tabs stay on top while you scroll ===== */
+@media (max-width: 860px) {
+  .sx-modal { width: 100vw; max-height: 100dvh; border-radius: 0; }
+  .sx { border-radius: 0; overflow: visible; padding: 0 12px 18px; row-gap: 12px; min-height: 100dvh; }
+  /* header: the number, the name, the types, then the tabs in one line; the X sits at the top right */
+  .sx-head { position: sticky; top: 0; z-index: 20; display: grid; gap: 8px; margin: 0 -12px; padding: 12px 12px 8px; background: var(--bg); box-shadow: 0 8px 14px -10px rgba(40, 55, 90, .35); }
+  .sx-who { flex-wrap: wrap; gap: 6px 10px; padding-right: 58px; }
+  .sx-id > .sx-un { padding: 4px 2px; }
+  .sx-name > span { gap: 8px !important; }
+  .sx-tabs { flex-wrap: nowrap; gap: 6px; }
+  .sx-tab { padding: 8px 10px; flex: 1 1 auto; min-width: max-content; }
+  .sx-tab, .sx-tab > span, .sx-tab > span span { white-space: nowrap !important; }
+  .sx-tab > span span { font-size: 10.5px !important; }
+  .sx-tab.sx-x { position: absolute; top: 12px; right: 12px; flex: none; min-width: 0; width: 46px; padding: 8px 0; }
+  /* the picture panel: compact */
+  .sx-art { margin: 6px 8px 0 14px; padding: 12px 14px; min-height: 0; }
+  .sx-art::after { inset: 8px 10px; }
+  .sx-layer .sx-row.top { justify-content: center; }
+  .sx-row.top .sx-chip { zoom: .82; max-width: 100%; }
+  .sx-row.top .sx-chip .sx-un { flex-wrap: nowrap; white-space: nowrap; }
+  .sx-sprite { min-height: 130px; }
+  .sx-layer .sx-row.bottom { flex-direction: column; align-items: stretch; gap: 10px; }
+  .sx-row.bottom .sx-col { flex-direction: row; gap: 8px; align-items: stretch; }
+  .sx-row.bottom .sx-col .sx-hp { flex: 1 1 0; min-width: 0; padding: 6px 10px 8px; }
+  .sx-row.bottom .sx-col .sx-bar-s { width: 100%; }
+  .sx-row.bottom .sx-col .sx-hp .sx-un span { font-size: 12px; }
+  .sx-row.bottom .sx-col.r { flex-wrap: wrap; justify-content: flex-start; align-items: flex-start; }
+  .sx-row.bottom .sx-col.r .sx-chip { flex: none; }
+  /* stats and moves */
+  .sx-stat { grid-template-columns: 88px minmax(0, 1fr) 40px; gap: 8px; }
+  .sx-stats { padding-left: 6px; padding-right: 10px; }
+  .sx-moves { padding: 0 6px; }
+}

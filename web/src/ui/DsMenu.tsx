@@ -146,7 +146,8 @@ function Corner({ S, flipX, flipY, style }: { S: number; flipX?: boolean; flipY?
 /** the grey shadow the game puts under the letters of the move buttons */
 const MOVE_SHADOW = '#787878'
 
-function MoveButton({ mv, x, y, S, selected, onSelect, onClick, onInfo }: { mv: MoveView; x: number; y: number; S: number; selected: boolean; onSelect: () => void; onClick: () => void; onInfo: (m: MoveView | null) => void }) {
+function MoveButton({ mv, x, y, S, selected, onSelect, onClick, onInfo, eff }: { mv: MoveView; x: number; y: number; S: number; selected: boolean; onSelect: () => void; onClick: () => void; onInfo: (m: MoveView | null) => void; eff?: 'none' | 'weak' | 'normal' | 'strong' | null }) {
+  const es = useLang() === 'es'
   const timer = useRef<number | null>(null)
   const longPressed = useRef(false)
   const frame = useTypedFrame(mv.type)
@@ -174,6 +175,8 @@ function MoveButton({ mv, x, y, S, selected, onSelect, onClick, onInfo }: { mv: 
       <span style={{ position: 'absolute', left: 17 * S, top: 20 * S, lineHeight: 0 }}><TypePlate type={mv.type} scale={S} /></span>
       <span style={{ position: 'absolute', left: 51 * S, top: 20 * S }}><FontText text="PP" font={0} k={S} color="#ffffff" shadow={MOVE_SHADOW} /></span>
       <span style={{ position: 'absolute', right: 22 * S, top: 20 * S }}><FontText text={pp} font={0} k={S} color="#ffffff" shadow={MOVE_SHADOW} align="right" /></span>
+      {/* how the move fares against the foe (shown on the button too, so a phone sees it without holding the move) */}
+      {eff && eff !== 'normal' && <span style={{ position: 'absolute', left: 0, right: 0, bottom: 2 * S, textAlign: 'center', fontFamily: "'Lexend', system-ui, sans-serif", fontWeight: 400, fontSize: 5.6 * S, lineHeight: 1, color: EFFECT_COLOR[eff], textShadow: '0 1px 0 #000' }}>{EFFECT_LABEL[es ? 'es' : 'en'][eff]}</span>}
     </button>
     {selected && !off && (
       <>
@@ -302,7 +305,7 @@ function ClassicMoves({ S, moves, party, onMove, onBack, foeTypes }: { S: number
         <div className="ds-screen" style={{ width: 256 * S, height: 192 * S, backgroundImage: bg ? `url(${bg})` : undefined }}>
           <BallHalves S={S} open />
           <PartyDots S={S} party={party} />
-          {moves.slice(0, 4).map((mv, i) => <MoveButton key={mv.id} mv={mv} x={pos[i][0]} y={pos[i][1]} S={S} selected={sel === i} onSelect={() => { lastMoveSlot = i; setSel(i) }} onClick={() => onMove(i)} onInfo={setInfo} />)}
+          {moves.slice(0, 4).map((mv, i) => <MoveButton key={mv.id} mv={mv} x={pos[i][0]} y={pos[i][1]} S={S} selected={sel === i} onSelect={() => { lastMoveSlot = i; setSel(i) }} eff={effectOf(mv.type, Dex.moves.get(mv.id) as never, foeTypes ?? [])} onClick={() => onMove(i)} onInfo={setInfo} />)}
           <button className="ds-btn" aria-label="Back" onClick={() => { cancel(); onBack() }} style={{ left: 176 * S, top: 146 * S, width: 80 * S, height: 44 * S }}>
             {back ? <img src={back} alt="Back" draggable={false} style={{ width: '100%', height: '100%' }} /> : 'Back'}
           </button>

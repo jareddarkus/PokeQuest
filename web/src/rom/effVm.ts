@@ -68,7 +68,7 @@ export async function runEffScript(d: Uint8Array, host: EffHost, depth = 0): Pro
       case 0x0c: case 0x0d: case 0x0e: case 0x0f: { // an effect flying from one Pokémon to the other
         const o = op === 0x0d || op === 0x0f ? 2 : 0 // (the variants with a start position carry three more numbers)
         const from = host.sideOf(a[3 + o]), to = host.sideOf(a[4 + o])
-        const frames = a[6 + o], height = fx(a[7 + o])
+        const frames = Math.round(fx(a[6 + o])), height = fx(a[7 + o]) // (the flight time is a fixed-point number: 122880 = 30 frames; read as a plain number the effects of most moves never left the attacker)
         pending.push(host.emitter(a[0], a[1], from === 'all' ? 'me' : from, to === 'all' ? 'foe' : to, 0, fx(a[5 + o]), { radius: 1, life: fx(a[8 + o]), size: 1, frames, height }))
         break
       }
