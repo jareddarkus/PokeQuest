@@ -30,7 +30,8 @@ export function applyClip(mat: THREE.Material, clip: ClipUniforms): void {
     shader.uniforms.uWarn = clip.uWarn
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;')
+      // (flat pictures drawn as many copies in one go: each copy sits at its own place, so the clip must use the copy's matrix)
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvec4 pqP = vec4(transformed, 1.0);\n#ifdef USE_INSTANCING\npqP = instanceMatrix * pqP;\n#endif\nvWPos = (modelMatrix * pqP).xyz;')
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;\nuniform float uCut;\nuniform vec2 uCenter;\nuniform float uTime;\nuniform float uWarn;')
       .replace('#include <clipping_planes_fragment>', '#include <clipping_planes_fragment>\nfloat pqD = max(abs(vWPos.x - uCenter.x), abs(vWPos.z - uCenter.y));\nif (pqD > uCut) discard;')
