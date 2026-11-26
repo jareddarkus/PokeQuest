@@ -8,6 +8,7 @@ import { useLook, useSettings } from './game/settings'
 import MainMenu from './ui/MainMenu'
 import Customizer from './ui/Customizer'
 import SettingsPanel from './ui/SettingsPanel'
+import { setTheme } from './ui/theme'
 import PlayScreen from './ui/PlayScreen'
 import RomGate from './ui/RomGate'
 import { ProgressBar } from './ui/ProgressBar'
@@ -20,6 +21,7 @@ import TitleDragon from './ui/TitleDragon'
 import WorldEditor from './ui/WorldEditor'
 import type { CustomWorld } from './world/customWorld'
 import './App.css'
+import './modern.css'
 
 type Screen = 'menu' | 'customize' | 'practice' | 'lobby' | 'match'
 
@@ -91,6 +93,7 @@ export default function App() {
   const [look, setLook] = useLook()
   useEffect(() => { startTranslator() }, [])
   useEffect(() => { setLang(settings.language ?? 'es') }, [settings.language])
+  useEffect(() => { setTheme(settings.theme ?? 'modern') }, [settings.theme])
   const [lookDone, setLookDone] = useState(() => {
     try { return localStorage.getItem('pokequest.look.done') === '1' } catch { return false }
   })

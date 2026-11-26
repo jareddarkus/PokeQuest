@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { maxHp, type Mon } from '../data/dex'
 import { MonIcon } from './MonSprite'
 import { useUiUrl } from './CmdButton'
+import { useTheme } from './theme'
 
 /**
  * Your six Pokémon on the right side of the screen (empty places included), like the party bar of PokeMMO: icon, level and HP bar.
@@ -13,7 +14,8 @@ export default function PartyBar({ team, onOpen, onReorder, hidden }: { team: Mo
   const normalArt = useUiUrl('screen:party:5')
   const faintedArt = useUiUrl('screen:party:3')
   const emptyArt = useUiUrl('screen:party:6')
-  const art = !!(normalArt && faintedArt && emptyArt)
+  const theme = useTheme()
+  const art = theme === 'classic' && !!(normalArt && faintedArt && emptyArt)
   const pk = window.innerWidth <= 640 ? 0.58 : 1.05
   const drag = useRef<{ from: number; x: number; y: number; moved: boolean } | null>(null)
   const [dragging, setDragging] = useState<{ from: number; over: number | null; x: number; y: number } | null>(null)

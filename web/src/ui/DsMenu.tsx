@@ -8,6 +8,8 @@ import { TYPE_COLOR, type PType } from '../game/world'
 import { useUiUrl } from './CmdButton'
 import TypePlate from './TypePlate'
 import { music } from '../audio/music'
+import { ModernCommand, ModernIdle, ModernMoves } from './ModernBattle'
+import { useTheme } from './theme'
 const decide = () => { void music.playSfx('se:decide') }
 const cancel = () => { void music.playSfx('se:cancel') }
 
@@ -237,7 +239,7 @@ function PartyDots({ S, party, foeCount }: { S: number; party?: Array<'ok' | 'fn
  * The lower screen while nothing can be chosen (reference video): the Poké Ball closed and dim (the command picture seen from further away, dark), the ring around it.
  * When the commands come the ball zooms in and lights up (see .cmd-in), when a command was chosen it zooms out and dims again (this).
  */
-export function IdleBall({ S }: { S: number }) {
+function ClassicIdle({ S }: { S: number }) {
   const bg = useUiUrl('menu:bg')
   return (
     <Lower S={S}>
@@ -250,7 +252,7 @@ export function IdleBall({ S }: { S: number }) {
 }
 
 /** The battle command screen drawn like the original: Poké Ball backdrop, FIGHT in the middle, BAG / POKÉMON / RUN below. */
-export function CommandScreen({ S, onFight, onBag, onPokemon, onRun, closing, party, foeCount }: {
+function ClassicCommand({ S, onFight, onBag, onPokemon, onRun, closing, party, foeCount }: {
   S: number; onFight: () => void; onBag: () => void; onPokemon: () => void; onRun: () => void; closing?: boolean
   /** your six places: a healthy Pokémon, a fainted one, or empty */
   party?: Array<'ok' | 'fnt' | 'none'>
@@ -287,7 +289,7 @@ export function CommandScreen({ S, onFight, onBag, onPokemon, onRun, closing, pa
 
 /** The move screen: four coloured move buttons with the red corners on the chosen one, the row of party balls and the back button (bottom right). */
 let lastMoveSlot = 0
-export function MoveScreen({ S, moves, party, onMove, onBack }: { S: number; moves: MoveView[]; party?: Array<'ok' | 'fnt' | 'none'>; onMove: (i: number) => void; onBack: () => void }) {
+function ClassicMoves({ S, moves, party, onMove, onBack }: { S: number; moves: MoveView[]; party?: Array<'ok' | 'fnt' | 'none'>; onMove: (i: number) => void; onBack: () => void }) {
   const bg = useUiUrl('moves:bg')
   const back = useUiUrl('cmd:back')
   const pos: Array<[number, number]> = [[0, 34], [129, 34], [0, 82], [129, 82]]
@@ -345,4 +347,17 @@ function MoveInfoCard({ mv, S }: { mv: MoveView; S: number }) {
       </div>
     </div>
   )
+}
+
+// The lower battle screen: the game's own pictures (classic look) or light slanted cards (modern look).
+export function IdleBall({ S }: { S: number }) {
+  return useTheme() === 'modern' ? <ModernIdle S={S} /> : <ClassicIdle S={S} />
+}
+type CommandProps = Parameters<typeof ClassicCommand>[0]
+export function CommandScreen(props: CommandProps) {
+  return useTheme() === 'modern' ? <ModernCommand S={props.S} onFight={props.onFight} onBag={props.onBag} onPokemon={props.onPokemon} onRun={props.onRun} party={props.party} foeCount={props.foeCount} /> : <ClassicCommand {...props} />
+}
+type MovesProps = Parameters<typeof ClassicMoves>[0]
+export function MoveScreen(props: MovesProps) {
+  return useTheme() === 'modern' ? <ModernMoves S={props.S} moves={props.moves} party={props.party} onMove={props.onMove} onBack={props.onBack} /> : <ClassicMoves {...props} />
 }

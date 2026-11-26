@@ -14,6 +14,14 @@ export default function SettingsPanel({ settings, onChange, onClose, onCustomize
         <h2>Settings</h2>
 
         <div className="row">
+          <span>Theme</span>
+          <div className="seg">
+            <button className={(settings.theme ?? 'modern') === 'modern' ? 'on' : ''} onClick={() => onChange({ theme: 'modern' })}>Modern</button>
+            <button className={settings.theme === 'classic' ? 'on' : ''} onClick={() => onChange({ theme: 'classic' })}>Classic</button>
+          </div>
+        </div>
+
+        <div className="row">
           <span>Language</span>
           <div className="seg">
             <button className={settings.language === 'es' ? 'on' : ''} onClick={() => onChange({ language: 'es' })}>Español</button>

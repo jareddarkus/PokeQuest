@@ -3,6 +3,8 @@ import { useUiUrl } from './CmdButton'
 import { DsScreen, DsText, dsK } from './DsScreen'
 import ItemIcon from './ItemIcon'
 import { MonIcon } from './MonSprite'
+import { ModernParty } from './Modern'
+import { useTheme } from './theme'
 
 // The slots of the party screen, in DS pixels: two columns, the right one 8 pixels lower (the positions of the panels in the game's own picture).
 const SLOTS: Array<[number, number]> = [[1, 12], [129, 20], [1, 60], [129, 68], [1, 108], [129, 116]]
@@ -46,7 +48,7 @@ function Slot({ mon, i, K, onPick, current }: { mon: Mon | null; i: number; K: n
 }
 
 /** The party screen on the game's own slot panels: two columns of three, the right column a little lower. `K` = pixels per DS pixel (default: fits the window). */
-export default function PartyScreen({ team, onPick, onClose, K: K0, hint, closeLabel, active }: {
+function ClassicParty({ team, onPick, onClose, K: K0, hint, closeLabel, active }: {
   team: Mon[]
   onPick: (i: number) => void
   onClose?: () => void
@@ -66,4 +68,12 @@ export default function PartyScreen({ team, onPick, onClose, K: K0, hint, closeL
       </DsScreen>
     </div>
   )
+}
+
+type PartyProps = Parameters<typeof ClassicParty>[0]
+/** The party: on the game's own slot panels (classic look) or light slanted cards (modern look). */
+export default function PartyScreen(props: PartyProps) {
+  const theme = useTheme()
+  if (theme === 'modern') return <ModernParty team={props.team} onPick={props.onPick} onClose={props.onClose} hint={props.hint} active={props.active} />
+  return <ClassicParty {...props} />
 }

@@ -4,18 +4,17 @@ import { DsScreen, DsText, dsK } from './DsScreen'
 import ItemIcon from './ItemIcon'
 import { itemDesc, shortDesc, trText, useLang } from '../i18n'
 import FontText from './FontText'
+import { POCKETS } from './pockets'
+import { ModernBag } from './Modern'
+import { useTheme } from './theme'
 
-export const POCKETS = [
-  { name: 'Items', bg: 'bag:dark', kinds: ['stone', 'held', 'passive'] },
-  { name: 'Medicine', bg: 'bag:blue', kinds: ['heal', 'revive', 'vitamin', 'candy', 'pp'] },
-  { name: 'Poké Balls', bg: 'bag:red', kinds: ['ball'] },
-]
+export { POCKETS }
 
 /**
  * The Bag on the game's own Bag backgrounds, laid out like the real one: the item's description in a pink box on top, a list of dark rows
  * (the chosen one outlined in white) and the pockets along the bottom.
  */
-export default function BagScreen({ bag, pockets, canUse, onUse, onClose, only, title, describe, K: K0 }: {
+function ClassicBag({ bag, pockets, canUse, onUse, onClose, only, title, describe, K: K0 }: {
   K?: number
   bag: Record<string, number>
   pockets?: number[] // which pockets to show (default: all)
@@ -76,6 +75,14 @@ export default function BagScreen({ bag, pockets, canUse, onUse, onClose, only, 
       {btn(208, 172, 42, 'Close', onClose, 'rgba(255,255,255,.88)')}
     </DsScreen>
   )
+}
+
+type BagProps = Parameters<typeof ClassicBag>[0]
+/** The Bag: on the game's own pictures (classic look) or the light slanted cards (modern look). */
+export default function BagScreen(props: BagProps) {
+  const theme = useTheme()
+  if (theme === 'modern') return <ModernBag bag={props.bag} pockets={props.pockets} canUse={props.canUse} onUse={props.onUse} onClose={props.onClose} only={props.only} title={props.title} describe={props.describe} />
+  return <ClassicBag {...props} />
 }
 
 export { ITEMS }

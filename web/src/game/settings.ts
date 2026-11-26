@@ -10,6 +10,8 @@ export interface Settings {
   language: 'es' | 'en'
   /** how fast the battle text is typed */
   textSpeed: 'slow' | 'normal' | 'fast' | 'instant'
+  /** the look of the interface: modern (default) or classic */
+  theme: 'modern' | 'classic'
 }
 
 export function isTouchDevice(): boolean {
@@ -28,6 +30,7 @@ export function defaultSettings(): Settings {
     sfxVolume: 0.7,
     language: 'es',
     textSpeed: 'normal',
+    theme: 'modern',
   }
 }
 

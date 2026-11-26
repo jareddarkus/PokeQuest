@@ -28,6 +28,7 @@ import { playerBackClass, trainerClassFor } from '../data/trainerClasses'
 import { MoveFx, FX_NAMES } from './moveFx'
 import { trText, useLang } from '../i18n'
 import FontText from './FontText'
+import { useTheme } from './theme'
 import { nameOf } from '../i18n'
 
 export type BattleKind = 'wild' | 'trainer' | 'gym'
@@ -81,6 +82,7 @@ export function TypedText({ text, ms, skip }: { text: string; ms: number; skip: 
   // the log box is as wide as the lower screen, so its text is as big as the lower screen's pixels (the game's own font: white with a light grey shadow)
   const S = dsScale()
   useDsK() // (re-draw when the window changes size)
+  if (useTheme() === 'modern') return <span className="mxb-text" style={{ fontSize: 8.4 * S }}>{full.slice(0, n)}</span>
   return <FontText text={full} reveal={n} k={S} font={0} color="#f8f8f8" shadow="#a4b0b0" maxWidth={Math.floor(256 - 16)} style={{ textAlign: 'left' }} />
 }
 
@@ -207,7 +209,7 @@ function useDrain(target: number, max: number): number {
  * the name in the game's font (white, black outline), the gender sign, "Lv" and the level in the game's digits, the grey plate with the HP label, the
  * 48-pixel HP gauge (yours also shows the HP numbers and the 80-pixel EXP gauge).
  */
-export function HpBox({ side, mine, exp, gender, k, nameFont = 2 }: { side: Side; mine: boolean; exp?: number; gender?: 'M' | 'F' | 'N'; k?: number; nameFont?: 0 | 1 | 2 }) {
+function ClassicHpBox({ side, mine, exp, gender, k, nameFont = 2 }: { side: Side; mine: boolean; exp?: number; gender?: 'M' | 'F' | 'N'; k?: number; nameFont?: 0 | 1 | 2 }) {
   const strip = useUiUrl(mine ? 'hp:stripme' : 'hp:stripfoe')
   const sheet = useUiUrl('hp:glyphs')
   const K0 = useDsK()
@@ -243,6 +245,36 @@ export function HpBox({ side, mine, exp, gender, k, nameFont = 2 }: { side: Side
       <div style={{ position: 'absolute', left: (mine ? 112 : 100) * K, top: (mine ? 14 : 12) * K }}><StatusIcon status={side.fainted ? 'fnt' : side.status} scale={K / 1.5} /></div>
     </div>
   )
+}
+
+/** The HP box in the modern look: a light slanted card with the name, level, the HP gauge (and the numbers and the EXP gauge for yours). */
+function ModernHpBox({ side, mine, exp, gender, k }: { side: Side; mine: boolean; exp?: number; gender?: 'M' | 'F' | 'N'; k?: number }) {
+  const K0 = useDsK()
+  const K = k ?? K0
+  const shownHp = useDrain(side.hp, side.maxHp)
+  const frac = side.maxHp > 0 ? Math.max(0, Math.min(1, shownHp / side.maxHp)) : 0
+  const lo = side.level ** 3, hi = (side.level + 1) ** 3
+  const expFrac = exp === undefined ? 0 : Math.max(0, Math.min(1, (exp - lo) / Math.max(1, hi - lo)))
+  const color = frac > 0.5 ? '#19c37d' : frac > 0.2 ? '#f0a800' : '#e03a4c'
+  return (
+    <div className={`hp2 mxh ${mine ? 'mine' : 'foe'}`} style={{ width: (mine ? 124 : 112) * K, height: (mine ? 40 : 30) * K, ['--k' as string]: `${K}px`, fontSize: 6.6 * K }}>
+      <div className="mxh-card"><div className="mxh-in">
+        <div className="mxh-top">
+          <b className="mxh-name">{nameOf(side.species)}</b>
+          {gender && gender !== 'N' && <span className="mxh-g" style={{ color: gender === 'M' ? '#2a7de1' : '#e0467c' }}>{gender === 'M' ? '♂' : '♀'}</span>}
+          <span className="mxh-lv">Lv {side.level}</span>
+          <span className="mxh-st"><StatusIcon status={side.fainted ? 'fnt' : side.status} scale={K / 1.5} /></span>
+        </div>
+        <div className="mxh-row"><span className="mxh-lab">PS</span><span className="mxh-bar"><i style={{ width: `${frac * 100}%`, background: color }} /></span></div>
+        {mine && <div className="mxh-num">{Math.max(0, Math.ceil(shownHp))} / {side.maxHp}</div>}
+        {mine && <div className="mxh-row"><span className="mxh-lab">EXP</span><span className="mxh-bar exp"><i style={{ width: `${expFrac * 100}%` }} /></span></div>}
+      </div></div>
+    </div>
+  )
+}
+
+export function HpBox(props: Parameters<typeof ClassicHpBox>[0]) {
+  return useTheme() === 'modern' ? <ModernHpBox side={props.side} mine={props.mine} exp={props.exp} gender={props.gender} k={props.k} /> : <ClassicHpBox {...props} />
 }
 export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed, pvp, playerGirl, textSpeed = 'normal', onEnd }: Props) {
   const playerTeam = useMemo(() => trainer.team.filter((m) => m.hp > 0).map((m) => ({ ...m, evs: { ...m.evs }, ivs: { ...m.ivs }, moves: [...m.moves] })), [])

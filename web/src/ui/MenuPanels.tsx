@@ -13,6 +13,8 @@ import SummaryCard from './SummaryCard'
 import BagScreen from './BagScreen'
 import { useUiUrl } from './CmdButton'
 import { music } from '../audio/music'
+import { ModernParty, ModernPc } from './Modern'
+import { useTheme } from './theme'
 
 interface PanelProps {
   trainer: Trainer
@@ -39,6 +41,7 @@ export function CaughtPanel({ mon, onClose }: { mon: Mon; onClose: () => void })
 
 // ---------------------------------------------------------------- team
 export function TeamPanel({ trainer, setTrainer, onClose, initial }: PanelProps & { initial?: number | null }) {
+  const theme = useTheme()
   const [sel, setSel] = useState<number | null>(initial ?? null)
   const mon = sel !== null ? trainer.team[sel] : null
   const setMon = (i: number, m: Mon) => setTrainer({ ...trainer, team: trainer.team.map((x, k) => (k === i ? m : x)) })
@@ -51,7 +54,7 @@ export function TeamPanel({ trainer, setTrainer, onClose, initial }: PanelProps 
   }
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className={mon && sel !== null ? 'sx-modal' : ''} style={mon && sel !== null ? undefined : { background: '#0c0c10', padding: 8, borderRadius: 10, boxShadow: '0 8px 40px rgba(0,0,0,.6)' }} onClick={(e) => e.stopPropagation()}>
+      <div className={mon && sel !== null ? 'sx-modal' : theme === 'modern' ? 'mx-modal' : ''} style={mon && sel !== null || theme === 'modern' ? undefined : { background: '#0c0c10', padding: 8, borderRadius: 10, boxShadow: '0 8px 40px rgba(0,0,0,.6)' }} onClick={(e) => e.stopPropagation()}>
         {mon && sel !== null ? (
           <>
             <Summary
@@ -119,13 +122,16 @@ export function BagPanel({ trainer, setTrainer, onClose, onMessage }: PanelProps
     if (!(trainer.bag[itemId] > 1)) setItemId(null)
   }
 
+  const theme = useTheme()
   const needsTarget = (id: string) => ['heal', 'revive', 'vitamin', 'candy', 'stone', 'held', 'pp'].includes(ITEMS[id].kind)
 
   const K = dsK(3)
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="bag-frame" onClick={(e) => e.stopPropagation()} style={{ background: '#0c0c10', padding: 8, borderRadius: 10, boxShadow: '0 8px 40px rgba(0,0,0,.6)' }}>
-        {!itemId ? (
+      <div className={theme === 'modern' ? 'mx-modal' : 'bag-frame'} onClick={(e) => e.stopPropagation()} style={theme === 'modern' ? undefined : { background: '#0c0c10', padding: 8, borderRadius: 10, boxShadow: '0 8px 40px rgba(0,0,0,.6)' }}>
+        {itemId && theme === 'modern' ? (
+          <ModernParty team={trainer.team} onPick={apply} onClose={() => setItemId(null)} title={`Use ${ITEMS[itemId].name} on…`} hint="Pick the Pokémon." />
+        ) : !itemId ? (
           <BagScreen bag={trainer.bag} canUse={(d) => needsTarget(d.id)} onUse={(id) => setItemId(id)} onClose={onClose} />
         ) : (
           <DsScreen bg="bag:blue" K={K}>
@@ -159,12 +165,22 @@ export function PcPanel({ trainer, setTrainer, onClose, onMessage }: PanelProps)
     if (trainer.team.length <= 1) { onMessage('You need at least one Pokémon on your team.'); return }
     setTrainer({ ...trainer, pc: [...trainer.pc, trainer.team[i]], team: trainer.team.filter((_, k) => k !== i) })
   }
+  const theme = useTheme()
   const [box, setBox] = useState(0)
   const K = Math.max(1, Math.min(3, Math.floor((window.innerHeight - 120) / 160), Math.floor((window.innerWidth - 260) / 168)))
   const boxes = Math.max(1, Math.ceil((trainer.pc.length + 1) / 30))
   const wall = useUiUrl(`screen:pc:${box % 24}`)
   const first = box * 30
   const slots = Array.from({ length: 30 }, (_, i) => trainer.pc[first + i] ?? null)
+  if (theme === 'modern') {
+    return (
+      <div className="modal-backdrop" onClick={onClose}>
+        <div className="mx-modal" onClick={(e) => e.stopPropagation()}>
+          <ModernPc team={trainer.team} pc={trainer.pc} box={box} boxes={boxes} setBox={setBox} toTeam={toTeam} toPc={toPc} onClose={onClose} />
+        </div>
+      </div>
+    )
+  }
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} style={{ background: '#0c0c10', padding: 10, borderRadius: 10, display: 'flex', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap', justifyContent: 'center', maxWidth: '96vw' }}>
