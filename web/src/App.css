@@ -565,3 +565,21 @@ button.big small { opacity: .7; font-size: .75rem; }
 .we-table th { text-align: left; font-weight: 400; color: #aab; font-size: 11px; }
 .we-table input { width: 100%; box-sizing: border-box; }
 .we-table td:not(:first-child) input { width: 52px; }
+
+/* clicking players */
+.pm-backdrop { position: fixed; inset: 0; z-index: 70; }
+.pm-popup { position: fixed; min-width: 190px; padding: 10px; display: flex; flex-direction: column; gap: 6px; background: rgba(16,18,26,.97); border: 2px solid rgba(255,255,255,.6); border-radius: 8px; }
+.pm-popup button { background: #2b3040; color: #fff; border: 1px solid #556; border-radius: 6px; padding: 7px 10px; cursor: pointer; font: inherit; text-align: left; }
+.pm-popup button:hover { background: #3b4358; }
+.pm-title { font-family: var(--font-title); }
+.pm-ask { margin: 0; max-width: 210px; }
+.pm-danger { background: #8a2a2a !important; }
+.pm-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+.pm-grid button { padding: 4px; text-align: center; }
+.pm-trade { width: min(560px, 94vw); }
+.pm-cols { display: flex; gap: 14px; flex-wrap: wrap; }
+.pm-cols > div { flex: 1; min-width: 200px; display: flex; flex-direction: column; gap: 6px; }
+.pm-list { display: flex; flex-direction: column; gap: 4px; max-height: 240px; overflow-y: auto; }
+.pm-list button { display: flex; align-items: center; gap: 6px; text-align: left; }
+.pm-list button.on { outline: 2px solid #ffd36a; }
+.pm-offer { display: flex; align-items: center; gap: 8px; min-height: 52px; }

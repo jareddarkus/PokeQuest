@@ -35,6 +35,8 @@ export interface GameEvents {
   onBump?: () => void
   /** button A pressed in front of a character: talk to it */
   onNpcTalk?: (npcId: string) => void
+  /** a player was clicked (name; null = yourself) at this place of the window */
+  onPlayerClick?: (name: string | null, clientX: number, clientY: number) => void
 }
 
 export interface GameHandle {
@@ -44,6 +46,8 @@ export interface GameHandle {
   defeatNpc: (id: string) => void
   setPaused: (p: boolean) => void
   setNpcFreeze: (id: string | null) => void
+  /** a speech bubble (a picture of the game's emotes) above a player's head for a moment; id null = you */
+  showEmote: (id: string | null, idx: number) => void
 }
 
 interface Props {
@@ -125,6 +129,7 @@ export default function GameView(props: Props) {
     const held = new Set<string>()
 
     const handle: GameHandle = {
+      showEmote: () => {},
       teleport: (x, y) => {
         me.x = x; me.y = y; me.fromX = x; me.fromY = y; me.t = 1
       },

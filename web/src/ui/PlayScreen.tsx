@@ -8,7 +8,7 @@ import type { Settings } from '../game/settings'
 import { ENCOUNTER_RATE, groupMon, groupTeam, gymTeam, trainerTeam, wildEncounter } from '../game/encounters'
 import { addItems, emptyTrainer, makeStarter, type Trainer } from '../game/state'
 import { ITEMS, STARTING_BAG, rollPickup } from '../data/items'
-import { maxHp, type Mon } from '../data/dex'
+import { maxHp, newUid, type Mon } from '../data/dex'
 import {
   C, COLLAPSE_SECONDS, squareTile, RADIUS, RING_INNER, SIZE, T, collapseRadius, generateWorld, isWalkable, ringAt, type Dir, type World,
 } from '../game/world'
@@ -25,6 +25,7 @@ import MenuButton from './MenuButton'
 import PartyBar from './PartyBar'
 import { useFrameStyle } from './DsFrame'
 import ChatDock from './ChatPanel'
+import { PlayerPopup, ReactionPopup, TradePanel, type TradeState } from './PlayerMenu'
 import { supabase } from '../supabase'
 import { useMatchPlayers } from '../net/useMatchPlayers'
 import { useChat } from './useChat'
@@ -113,6 +114,14 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
   const [chatOpen, setChatOpen] = useState(false)
   const chatUser = username ?? (import.meta.env.DEV && new URLSearchParams(location.search).has('devuser') ? 'DevUser' : null) // (developer test without an account: ?devuser)
   const chat = useChat(chatUser, chatOpen)
+  // clicking players: a menu for another player (friend, whisper, trade), reactions for yourself; trading with a player
+  const [pmenu, setPmenu] = useState<null | { name: string | null; x: number; y: number }>(null)
+  const [trade, setTradeState] = useState<TradeState | null>(null)
+  const tradeRef = useRef<TradeState | null>(null)
+  const setTrade = (t: TradeState | null) => { tradeRef.current = t; setTradeState(t) }
+  const [tradeAsk, setTradeAsk] = useState<string | null>(null) // a player asks to trade
+  const tradeAskRef = useRef<string | null>(null)
+  tradeAskRef.current = tradeAsk
   // trainers that other players are fighting right now (message "busy" every 3 s; forgotten after 9 s)
   const busyNpcs = useRef(new Map<string, { by: string; until: number }>())
   const busySender = useRef<{ send: (npcId: string, on: boolean) => void; duel: (msg: { to?: string; type: string; data?: unknown }) => void } | null>(null)
@@ -138,6 +147,13 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
     onBusy: (npc, by, on) => { if (on) busyNpcs.current.set(npc, { by, until: Date.now() + 9000 }); else busyNpcs.current.delete(npc) },
     onDuel: (m) => {
       if (m.type === 'eliminated') { outPlayers.current.add(m.from); return }
+      if (m.type === 'react') { const idx = (m.data as { idx?: number } | undefined)?.idx; if (typeof idx === 'number') handleRef.current?.showEmote(m.from, idx); return }
+      if (m.type === 'trade-req') { if (!battleRef.current && !tradeRef.current && !tradeAskRef.current) setTradeAsk(m.from); else busySender.current?.duel({ to: m.from, type: 'trade-no' }); return }
+      if (m.type === 'trade-ok') { if (tradeRef.current?.partner === m.from || !tradeRef.current) setTrade({ partner: m.from, mine: null, theirs: null, myAccept: false, theirAccept: false }); return }
+      if (m.type === 'trade-no') { say(`${m.from} no quiere intercambiar ahora.`); return }
+      if (m.type === 'trade-cancel') { if (tradeRef.current?.partner === m.from) { setTrade(null); say(`${m.from} canceló el intercambio.`) } return }
+      if (m.type === 'trade-offer') { const t = tradeRef.current; if (t && t.partner === m.from) setTrade({ ...t, theirs: m.data as Mon, myAccept: false, theirAccept: false }); return }
+      if (m.type === 'trade-accept') { const t = tradeRef.current; if (t && t.partner === m.from) { const nt = { ...t, theirAccept: true }; setTrade(nt); finishTrade(nt) } return }
       if (m.type === 'pvp') { const d = m.data as { t: string; d: unknown }; for (const cb of pvpListeners.current) cb(d.t, d.d); return }
       if (m.type === 'challenge') { // a player touched me at the peak: the duel starts at once
         const ring = (() => { const q = handleRef.current?.getPos(); return q ? ringAt(q.x, q.y) : 0 })()
@@ -268,6 +284,17 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
     return () => window.clearInterval(id)
   }, [royale, username])
 
+  /** when both players accepted: my offered Pokémon leaves, the other player's comes (a new copy with its own number) */
+  const finishTrade = (t: TradeState) => {
+    if (!t.mine || !t.theirs || !t.myAccept || !t.theirAccept) return
+    const got: Mon = { ...JSON.parse(JSON.stringify(t.theirs)), uid: newUid() }
+    const rest = trainerRef.current.team.filter((m) => m.uid !== t.mine!.uid)
+    if (rest.length === trainerRef.current.team.length) { setTrade(null); return }
+    setTrainer({ ...trainerRef.current, team: [...rest, got] })
+    say(`¡Intercambio hecho! Recibes a ${got.species} (Nv${got.level}).`)
+    setTrade(null)
+  }
+  const sendTo = (to: string, type: string, data?: unknown) => busySender.current?.duel({ to, type, data })
   /** the trainer talks, then the battle starts (its own words / group when it was made in the editor) */
   const npcFight = (npc: (typeof world.npcs)[number], npcId: string) => {
     const line = npc.custom ? npc.custom.lines[Math.floor(Math.random() * npc.custom.lines.length)] : preBattleLine(npc.id)
@@ -332,6 +359,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
         setTrainer({ ...trainerRef.current, bag: addItems(trainerRef.current.bag, items) })
         say('You found: ' + Object.entries(items).map(([k, n]) => `${ITEMS[k]?.name ?? k} x${n}`).join(', '))
       },
+      onPlayerClick: (name, x, y) => { if (!battleRef.current && !talking.current) setPmenu({ name, x, y }) },
       onPushed: (_x, _y, r) => say(`The ground crumbled — you were pushed to ring ${r}!`),
       onAlert: () => { void music.playSfx('fld:07') }, // a trainer noticed you
       onBump: () => { void music.playSfx('fld:WALL_HIT') },
@@ -450,6 +478,37 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
       {panel === 'team' && <TeamPanel trainer={trainer} setTrainer={setTrainer} onClose={() => setPanel(null)} onMessage={say} />}
       {panel === 'bag' && <BagPanel trainer={trainer} setTrainer={setTrainer} onClose={() => setPanel(null)} onMessage={say} />}
       {panel === 'pc' && <PcPanel trainer={trainer} setTrainer={setTrainer} onClose={() => setPanel(null)} onMessage={say} />}
+
+      {pmenu && pmenu.name !== null && (
+        <PlayerPopup
+          name={pmenu.name} x={pmenu.x} y={pmenu.y} isFriend={chat.friends.some((f) => f.toLowerCase() === pmenu.name!.toLowerCase())}
+          onClose={() => setPmenu(null)}
+          onFriend={(add) => { const n = pmenu.name!; setPmenu(null); if (!chatUser) { say('Inicia sesión para tener amigos.'); return } void chat.friendAction(n, add).then((ok) => say(ok ? (add ? `${n} ahora es tu amigo.` : `${n} ya no es tu amigo.`) : 'No se pudo hacer eso.')) }}
+          onWhisper={() => { const n = pmenu.name!; setPmenu(null); if (!chatUser) { say('Inicia sesión para chatear.'); return } chat.openWhisper(n); setChatOpen(true) }}
+          onTrade={() => { const n = pmenu.name!; setPmenu(null); if (!royale) { say('Solo se puede intercambiar en una partida con otros jugadores.'); return } sendTo(n, 'trade-req'); say(`Petición de intercambio enviada a ${n}…`) }}
+        />
+      )}
+      {pmenu && pmenu.name === null && (
+        <ReactionPopup x={pmenu.x} y={pmenu.y} onClose={() => setPmenu(null)} onPick={(idx) => { setPmenu(null); handleRef.current?.showEmote(null, idx); busySender.current?.duel({ type: 'react', data: { idx } }) }} />
+      )}
+      {tradeAsk && (
+        <div className="modal-backdrop" style={{ zIndex: 75 }}>
+          <div className="panel modal">
+            <h2>Intercambio</h2>
+            <p className="sub">{tradeAsk} quiere intercambiar Pokémon contigo.</p>
+            <button className="primary" onClick={() => { const n = tradeAsk; setTradeAsk(null); sendTo(n, 'trade-ok'); setTrade({ partner: n, mine: null, theirs: null, myAccept: false, theirAccept: false }) }}>Aceptar</button>
+            <button onClick={() => { sendTo(tradeAsk, 'trade-no'); setTradeAsk(null) }}>Rechazar</button>
+          </div>
+        </div>
+      )}
+      {trade && (
+        <TradePanel
+          trade={trade} team={trainer.team}
+          onOffer={(m) => { const nt = { ...trade, mine: m, myAccept: false, theirAccept: false }; setTrade(nt); sendTo(trade.partner, 'trade-offer', JSON.parse(JSON.stringify(m))) }}
+          onAccept={() => { const nt = { ...trade, myAccept: true }; setTrade(nt); sendTo(trade.partner, 'trade-accept'); finishTrade(nt) }}
+          onCancel={() => { sendTo(trade.partner, 'trade-cancel'); setTrade(null) }}
+        />
+      )}
 
       {eliminated && (
         <div className="modal-backdrop" style={{ zIndex: 80 }}>

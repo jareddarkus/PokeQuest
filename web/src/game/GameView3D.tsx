@@ -459,6 +459,58 @@ export default function GameView3D(props: Props) {
       scene.add(bubble)
     }
 
+    // reactions: the game's emote pictures above a head (yours and the other players')
+    const emoteTex = new Map<number, THREE.Texture>()
+    const emoteBubbles = new Map<string, { sp: THREE.Sprite; until: number }>()
+    const emoteFor = (idx: number): THREE.Texture | null => {
+      const hit = emoteTex.get(idx)
+      if (hit) return hit
+      const img = owEmote(idx)
+      if (!img) return null
+      const t = new THREE.Texture(img); t.needsUpdate = true; t.magFilter = THREE.NearestFilter; t.minFilter = THREE.NearestFilter; t.colorSpace = THREE.SRGBColorSpace
+      emoteTex.set(idx, t)
+      return t
+    }
+    const showEmote = (id: string | null, idx: number) => {
+      const tex = emoteFor(idx)
+      if (!tex) return
+      const key = id ?? ' me'
+      let b = emoteBubbles.get(key)
+      if (!b) {
+        const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, alphaTest: 0.1, depthTest: false }))
+        sp.scale.set(1.3, 1.3, 1); sp.center.set(0.5, 0); sp.renderOrder = 11
+        scene.add(sp)
+        b = { sp, until: 0 }
+        emoteBubbles.set(key, b)
+      }
+      ;(b.sp.material as THREE.SpriteMaterial).map = tex
+      b.sp.material.needsUpdate = true
+      b.until = performance.now() + 2200
+    }
+    // clicking a player (a click, not a drag): who is under the mouse? (yours = null)
+    let downAt: { x: number; y: number } | null = null
+    const onCanvasDown = (e: PointerEvent) => { downAt = { x: e.clientX, y: e.clientY } }
+    const onCanvasUp = (e: PointerEvent) => {
+      if (!downAt || Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) > 6 || !propsRef.current.events.onPlayerClick) { downAt = null; return }
+      downAt = null
+      const rect = renderer.domElement.getBoundingClientRect()
+      const px = e.clientX - rect.left, py = e.clientY - rect.top
+      const toScreen = (x: number, y: number, z: number) => { const v = new THREE.Vector3(x, y, z).project(camera); return { x: (v.x * 0.5 + 0.5) * rect.width, y: (-v.y * 0.5 + 0.5) * rect.height } }
+      const hit = (fx: number, fy: number, fz: number): boolean => {
+        const feet = toScreen(fx, fy, fz), head = toScreen(fx, fy + 1.7, fz), side = toScreen(fx + 0.6, fy, fz)
+        const r = Math.max(10, Math.abs(side.x - feet.x))
+        return Math.abs(px - feet.x) < r && py >= head.y - 4 && py <= feet.y + 4
+      }
+      const o = propsRef.current.others()
+      let best: { name: string | null; z: number } | null = null
+      for (const q of o) { if (hit(q.x + 0.5, heightAt(q.x + 0.5, q.y + 0.5), q.y + 0.5) && (!best || q.y > best.z)) best = { name: q.name, z: q.y } }
+      const mx = me.fromX + (me.x - me.fromX) * me.t, my = me.fromY + (me.y - me.fromY) * me.t
+      if (hit(mx + 0.5, heightAt(mx + 0.5, my + 0.5), my + 0.5) && (!best || my >= best.z)) best = { name: null, z: my }
+      if (best) propsRef.current.events.onPlayerClick(best.name, e.clientX, e.clientY)
+    }
+    renderer.domElement.addEventListener('pointerdown', onCanvasDown)
+    renderer.domElement.addEventListener('pointerup', onCanvasUp)
+
     const removed = new Set<string>()
     // items lying on the ground are in the way: characters walking around never step on them
     const pickupAt = (x: number, y: number) => world.pickups.some((q) => q.x === x && q.y === y && !removed.has(q.id))
@@ -481,6 +533,7 @@ export default function GameView3D(props: Props) {
     const handle: GameHandle = {
       teleport: (x, y) => { me.x = x; me.y = y; me.fromX = x; me.fromY = y; me.t = 1; const f1 = followerSpot(x, y, me.dir); fol.x = f1.x; fol.y = f1.y; fol.fromX = f1.x; fol.fromY = f1.y; fol.t = 1 },
       getPos: () => ({ x: me.x, y: me.y, dir: me.dir }),
+      showEmote,
       removePickup: (id) => { removed.add(id); const s = pickupSprites.get(id); if (s) s.visible = false },
       defeatNpc: (id) => { const n = npcs.find((q) => q.spec.id === id); if (n) n.defeated = true },
       setPaused: (p) => { paused = p },
@@ -831,6 +884,16 @@ export default function GameView3D(props: Props) {
       for (const [id, e] of otherSprites) if (!seen.has(id)) { scene.remove(e.body, e.label, e.shadow); otherSprites.delete(id); const oc = otherCovers.get(id); if (oc) { scene.remove(oc); otherCovers.delete(id) } }
 
 
+      // reaction bubbles above heads
+      for (const [k, b] of emoteBubbles) {
+        const t = performance.now()
+        if (t > b.until) { b.sp.visible = false; continue }
+        b.sp.visible = true
+        let ex = 0, ey = 0
+        if (k === ' me') { ex = px; ey = py } else { const q = p.others().find((z) => z.id === k); if (!q) { b.sp.visible = false; continue } ex = q.x; ey = q.y }
+        b.sp.position.set(ex + 0.5, heightAt(ex + 0.5, ey + 0.5) + 1.7, ey + 0.5)
+      }
+
       // the collapsing island
       const u = built.uniforms
       u.uTime.value = now / 1000
@@ -843,6 +906,8 @@ export default function GameView3D(props: Props) {
 
     return () => {
       cancelAnimationFrame(raf)
+      renderer.domElement.removeEventListener('pointerdown', onCanvasDown)
+      renderer.domElement.removeEventListener('pointerup', onCanvasUp)
       window.removeEventListener('keydown', onKeyDown)
       window.removeEventListener('keyup', onKeyUp)
       window.removeEventListener('blur', onBlur)
