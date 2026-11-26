@@ -202,34 +202,40 @@ export default function SummaryCard({ mon, onChange, onBack, onClose, footer }: 
   const spriteBox = useRef<HTMLDivElement>(null)
   const [lift, setLift] = useState(0)
   const [placed, setPlaced] = useState(false)
+  /** Centres the picture by what you see of it; true when the picture was there and has been placed. */
+  const place = (): boolean => {
+    const box = spriteBox.current, cv = box?.querySelector('canvas'), img = box?.querySelector('img')
+    const src = cv ?? img
+    if (!box || !src) return false
+    try {
+      const w = cv ? cv.width : (img as HTMLImageElement).naturalWidth, h = cv ? cv.height : (img as HTMLImageElement).naturalHeight
+      if (!w || !h) return false
+      const tmp = document.createElement('canvas'); tmp.width = w; tmp.height = h
+      const ctx = tmp.getContext('2d', { willReadFrequently: true })!
+      ctx.drawImage(src as CanvasImageSource, 0, 0)
+      const px = ctx.getImageData(0, 0, w, h).data
+      let top = -1, bot = -1
+      for (let y = 0; y < h; y++) { let any = false; for (let x = 0; x < w && !any; x++) any = px[(y * w + x) * 4 + 3] > 40; if (any) { if (top < 0) top = y; bot = y } }
+      if (top < 0) return false
+      const r = src.getBoundingClientRect(), b = (box.parentElement as HTMLElement).getBoundingClientRect()
+      const k = r.height / h
+      const want = b.top + b.height / 2
+      const visibleMid = r.top + ((top + bot + 1) / 2) * k // (r already includes the current lift)
+      setLift((cur) => Math.round(cur + want - visibleMid))
+      return true
+    } catch { return true }
+  }
+  // a new Pokémon (or a new window size): hidden until placed, so it never moves in front of the player
   useEffect(() => {
     let tries = 0
     setPlaced(false)
     const t = window.setInterval(() => {
-      const box = spriteBox.current, cv = box?.querySelector('canvas'), img = box?.querySelector('img')
-      const src = cv ?? img
-      if (!box || !src) { if (++tries > 100) { clearInterval(t); setPlaced(true) } return }
-      try {
-        const w = cv ? cv.width : (img as HTMLImageElement).naturalWidth, h = cv ? cv.height : (img as HTMLImageElement).naturalHeight
-        if (!w || !h) return
-        const tmp = document.createElement('canvas'); tmp.width = w; tmp.height = h
-        const ctx = tmp.getContext('2d', { willReadFrequently: true })!
-        ctx.drawImage(src as CanvasImageSource, 0, 0)
-        const px = ctx.getImageData(0, 0, w, h).data
-        let top = -1, bot = -1
-        for (let y = 0; y < h; y++) { let any = false; for (let x = 0; x < w && !any; x++) any = px[(y * w + x) * 4 + 3] > 40; if (any) { if (top < 0) top = y; bot = y } }
-        if (top < 0) return
-        const r = src.getBoundingClientRect(), b = (box.parentElement as HTMLElement).getBoundingClientRect()
-        const k = r.height / h
-        const want = b.top + b.height / 2
-        const visibleMid = r.top + ((top + bot + 1) / 2) * k // (r already includes the current lift)
-        setLift((cur) => Math.round(cur + want - visibleMid))
-        setPlaced(true) // (it is shown only now, already in its place: it never moves in front of the player)
-        clearInterval(t)
-      } catch { clearInterval(t); setPlaced(true) }
+      if (place() || ++tries > 100) { clearInterval(t); setPlaced(true) }
     }, 60)
     return () => clearInterval(t)
-  }, [mon.species, vw, tab])
+  }, [mon.species, vw]) // eslint-disable-line react-hooks/exhaustive-deps
+  // changing the tab changes the height of the window: the picture is only moved to the new middle (it is not reloaded)
+  useEffect(() => { const t = window.setTimeout(() => { place() }, 30); return () => clearTimeout(t) }, [tab]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { const f = () => setVw(window.innerWidth); window.addEventListener('resize', f); return () => window.removeEventListener('resize', f) }, [])
   useEffect(() => { void learnableMoves(mon.species, mon.level).then(setOptions) }, [mon.species, mon.level])
   const small = vw <= 860
