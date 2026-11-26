@@ -151,6 +151,7 @@ const PATTERNS: Array<[RegExp, string | ((...m: string[]) => string)]> = [
   [/^(.+) used (.+)!$/, '¡$1 usó $2!'], [/^(.+) sent out (.+)!$/, '¡$1 sacó a $2!'], [/^You are challenged by (.+)!$/, '¡$1 te desafía!'], [/^(.+) fainted!$/, '¡$1 se ha debilitado!'], [/^(.+)'s attack missed!$/, '¡$1 ha fallado el ataque!'],
   [/^It doesn't affect (.+)\.\.\.$/, 'No afecta a $1...'], [/^(.+) can't move!$/, '¡$1 no se puede mover!'],
   [/^(.+) became confused!$/, '¡$1 está confuso!'], [/^(.+) is confused!$/, '¡$1 está confuso!'], [/^(.+) snapped out of its confusion!$/, '¡$1 ya no está confuso!'], [/^(.+) fell in love!$/, '¡$1 se ha enamorado!'], [/^(.+) is in love!$/, '¡$1 está enamorado!'],
+  [/^(.+) was hurt by its burn!$/, '¡$1 se resiente de la quemadura!'], [/^(.+) was hurt by poison!$/, '¡$1 se resiente del envenenamiento!'],
   [/^(.+) was burned!$/, '¡$1 se ha quemado!'], [/^(.+) is paralyzed!$/, '¡$1 está paralizado!'], [/^(.+) fell asleep!$/, '¡$1 se ha dormido!'],
   [/^(.+) was poisoned!$/, '¡$1 ha sido envenenado!'], [/^(.+) was badly poisoned!$/, '¡$1 ha sido gravemente envenenado!'], [/^(.+) was frozen solid!$/, '¡$1 ha sido congelado!'],
   [/^(.+) has a status!$/, '¡$1 tiene un estado alterado!'],

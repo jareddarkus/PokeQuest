@@ -208,8 +208,8 @@ function Digits({ url, K, x, y, text }: { url: string; K: number; x: number; y: 
   return <>{[...text].map((ch, i) => (ch === ' ' ? null : <Tile key={i} url={url} t={ch === '/' ? SLASH : DIGIT + Number(ch)} x={x + i * 8} y={y} K={K} />))}</>
 }
 
-/** The HP shown drains (or fills) smoothly towards the real value, 30 gauge pixels (of 48) per second like the game's bar. */
-function useDrain(target: number, max: number): number {
+/** The HP shown drains (or fills) one point per frame (60 a second), as measured on the reference recording (164 HP: 164 frames). */
+function useDrain(target: number, _max: number): number {
   const [v, setV] = useState(target)
   const cur = useRef(target)
   useEffect(() => {
@@ -219,7 +219,7 @@ function useDrain(target: number, max: number): number {
       const dt = Math.min(0.1, (t - last) / 1000)
       last = t
       if (cur.current !== target) {
-        const step = ((30 * Math.max(1, max)) / 48) * dt
+        const step = 60 * dt
         cur.current = Math.abs(target - cur.current) <= step ? target : cur.current + Math.sign(target - cur.current) * step
         setV(cur.current)
       }
@@ -227,7 +227,7 @@ function useDrain(target: number, max: number): number {
     }
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
-  }, [target, max])
+  }, [target])
   return v
 }
 
@@ -429,18 +429,22 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
         }
         case 'hp': {
           const upd = (s: Side | null): Side | null => (s && s.uid === ev.uid ? { ...s, hp: ev.hp, maxHp: ev.hp === 0 ? s.maxHp : ev.maxHp, status: ev.status ?? s.status } : s)
+          const sd: 'me' | 'foe' = ev.side === 'p1' ? 'me' : 'foe'
+          const before = hpOf.current[ev.uid] ?? ev.hp
+          const residual = ev.from === 'brn' || ev.from === 'psn' || ev.from === 'tox' // burn / poison damage at the end of a turn
+          // burn / poison: the status animation plays first, a short pause, then the HP drains (the box flashes red twice, the Pokémon does not flicker)
+          if (residual && ev.hp < before) { await runScript('effect', ev.from === 'brn' ? 39 : 38, sd, sd); await sleep(135) }
           if (ev.side === 'p1') setMe(upd); else setFoe(upd)
-          if (ev.uid in hpOf.current && ev.hp < hpOf.current[ev.uid]) { void music.playSfx(pendingHit.current ?? 'se:hit'); pendingHit.current = null }
+          if (ev.uid in hpOf.current && ev.hp < hpOf.current[ev.uid]) {
+            void music.playSfx(pendingHit.current ?? 'se:hit'); pendingHit.current = null
+            if (residual) void hitFx(sd, 'burn'); else void hitFx(sd, 'hit') // damage from a move: the Pokémon flickers (white, hidden, normal) and its HP box pulses red
+          }
           else if (ev.uid in hpOf.current && ev.hp > hpOf.current[ev.uid]) {
-            const sd: 'me' | 'foe' = ev.side === 'p1' ? 'me' : 'foe'
             void (async () => { if (!(await runScript('effect', 45, sd, sd))) { void music.heal(); return } await runScript('effect', 50, sd, sd) })() // the game's own healing scripts (sound + effect)
           }
-          const before = hpOf.current[ev.uid] ?? ev.hp
           hpOf.current[ev.uid] = ev.hp
-          // (a fainting Pokémon is reported with a max HP of 1: use the real one, and never let the gauge take longer than a full drain)
-          const full = ev.hp === 0 ? Math.max(maxOf.current[ev.uid] ?? 0, before, 1) : Math.max(1, ev.maxHp)
           if (ev.hp > 0) maxOf.current[ev.uid] = ev.maxHp
-          await sleep(Math.max(700, Math.min(1, Math.abs(ev.hp - before) / full) * 48 / 30 * 1000 + 350)) // the gauge drains at the game's speed
+          await sleep(Math.max(residual ? 400 : 560, (Math.abs(ev.hp - before) * 1000) / 60 + 300)) // the gauge drains one point per frame
           break
         }
         case 'volatile': {
@@ -545,6 +549,51 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
   }
 
   /** The player of the game's own animation scripts (moves, stat changes, healing): what a script may do on this screen. */
+  /**
+   * What happens to a Pokémon that is hit, frame by frame (60 a second), measured on the reference recording:
+   *  hit:  the Pokémon is a flat light grey shape for 4 frames, hidden for 4, normal for 4, and so three times (the last time ending hidden, then it stays);
+   *        its HP box turns red in three soft pulses (strength 0 - 1 below) while the gauge drains.
+   *  burn: no flicker; the box flashes red in two sharp pulses (2 frames weak, 6 strong, 2 off ...).
+   */
+  const HIT_SHAPE = (f: number): 'W' | 'H' | 'N' => (f <= 3 || (f >= 11 && f <= 14) || (f >= 24 && f <= 27) ? 'W' : (f >= 4 && f <= 6) || (f >= 15 && f <= 19) || (f >= 28 && f <= 31) ? 'H' : 'N')
+  const HIT_BOX = [0, 0.26, 0.55, 0.8, 0.92, 0.81, 0.56, 0.3, 0, 0, 0, 0.27, 0.27, 0.56, 0.81, 0.92, 0.81, 0.81, 0.56, 0.29, 0, 0, 0, 0.29, 0.58, 0.79, 0.93, 0.92, 0.8, 0.57, 0.27]
+  const BURN_BOX = [0, 0, 0.3, 0.3, 0.88, 0.88, 1, 1, 0.88, 0.88, 0, 0, 0.3, 0.3, 0.88, 0.88, 1, 1, 0.9, 0.9]
+  const hitFx = (sd: 'me' | 'foe', kind: 'hit' | 'burn') => new Promise<void>((done) => {
+    const slow = import.meta.env.DEV ? ((globalThis as { __pqSlow?: number }).__pqSlow ?? 1) : 1 // developer hook: slow the flicker down to look at single frames
+    const mon = document.querySelector<HTMLElement>(`.stage-sprite[data-mon="${sd}"]`)?.firstElementChild as HTMLElement | null // (the Pokémon's picture; the ground shadow stays)
+    const box = document.querySelector<HTMLElement>(`.${sd}-zone .hp2`)
+    if (box && !document.getElementById('pq-hpt-defs')) {
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+      svg.id = 'pq-hpt-defs'; svg.setAttribute('width', '0'); svg.setAttribute('height', '0'); svg.style.position = 'absolute'
+      svg.innerHTML = ['me', 'foe'].map((n) => `<filter id="pq-hpt-${n}" color-interpolation-filters="sRGB" x="0" y="0" width="100%" height="100%"><feColorMatrix id="pq-hpt-m-${n}" type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 1 0"/></filter>`).join('')
+      document.body.appendChild(svg)
+    }
+    const m = document.getElementById(`pq-hpt-m-${sd}`)
+    const t0 = performance.now()
+    const total = kind === 'hit' ? 32 : BURN_BOX.length
+    const tick = () => {
+      const f = Math.floor(((performance.now() - t0) * 60) / 1000 / slow)
+      if (f >= total) {
+        if (mon) { mon.style.visibility = ''; mon.style.filter = '' }
+        if (box) box.style.filter = ''
+        done(); return
+      }
+      if (kind === 'hit' && mon) {
+        const ph = HIT_SHAPE(f)
+        mon.style.visibility = ph === 'H' ? 'hidden' : ''
+        mon.style.filter = ph === 'W' ? 'brightness(0) invert(0.75)' : '' // the flat grey (192, 192, 192) of the recording
+      }
+      const t = (kind === 'hit' ? HIT_BOX : BURN_BOX)[f] ?? 0
+      if (box && m) {
+        // measured red cast of the box at full strength: red x0.66 + 0.15, green x0.55, blue x0.67
+        m.setAttribute('values', `${1 - 0.34 * t} 0 0 0 ${0.15 * t}  0 ${1 - 0.45 * t} 0 0 ${0.01 * t}  0 0 ${1 - 0.33 * t} 0 ${0.02 * t}  0 0 0 1 0`)
+        box.style.filter = t > 0 ? `url(#pq-hpt-${sd})` : ''
+      }
+      requestAnimationFrame(tick)
+    }
+    tick()
+  })
+
   const runScript = async (kind: 'move' | 'effect', index: number, attacker: MonSide, defender: MonSide): Promise<boolean> => {
     const spl = splRef.current, L = layoutRef.current
     if (!spl?.ready || !L) return false

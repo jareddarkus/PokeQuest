@@ -9,7 +9,8 @@ const STAT_NAMES: Record<string, string> = { atk: 'Attack', def: 'Defense', spa:
 export type BattleEvent =
   | { kind: 'text'; text: string }
   | { kind: 'switch'; side: Side; uid: string; species: string; level: number; hp: number; maxHp: number; shiny: boolean }
-  | { kind: 'hp'; side: Side; uid: string; hp: number; maxHp: number; status?: string }
+  /** `from`: what caused it when it is not a move (burn / poison damage at the end of a turn) */
+  | { kind: 'hp'; side: Side; uid: string; hp: number; maxHp: number; status?: string; from?: string }
   | { kind: 'faint'; side: Side; uid: string }
   | { kind: 'status'; side: Side; uid: string; status: string }
   /** confusion / infatuation shown on a Pokémon (the game's own animation) */
@@ -218,7 +219,9 @@ export class BattleSession {
           const side = sideOf(p[1])
           const uid = this.nameOf(p[1])
           const h = this.parseHp(p[2])
-          ev.push({ kind: 'hp', side, uid, hp: h.hp, maxHp: h.max, status: h.status })
+          const src = /\[from\] (brn|psn|tox)/.exec(line)?.[1]
+          ev.push({ kind: 'hp', side, uid, hp: h.hp, maxHp: h.max, status: h.status, ...(src ? { from: src } : {}) })
+          if (src) ev.push({ kind: 'text', text: src === 'brn' ? `${this.pretty(uid, view)} was hurt by its burn!` : `${this.pretty(uid, view)} was hurt by poison!` }) // (in the game: the damage is shown first, then this sentence)
           break
         }
         case 'faint': {
