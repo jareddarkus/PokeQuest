@@ -1,6 +1,7 @@
 // The Battle Royale island: 5 x 5 real Pokémon White 2 map chunks (160 x 160 tiles) cut into a circle of 4 rings.
 // The ground, trees, water and tall grass come from the game file; this file adds rings, gyms, trainers and items.
 import { hash2, mulberry32, pick } from './rng'
+import type { PokeGroup } from '../world/events'
 
 export const T = {
   Water: 0,
@@ -47,6 +48,8 @@ export interface Gym {
   doorY: number
   type: PType
   leader: string
+  /** made in the editor: its own lines / group, no building is drawn for it */
+  custom?: { lines: string[]; group: number; tx: number; ty: number }
 }
 
 export type NpcBehavior = 'stand' | 'look' | 'walk' | 'run'
@@ -61,6 +64,8 @@ export interface NpcSpec {
   look: number // seed for its colours
   /** a creature that floats on water: lives only in the little lakes inside the island (never on land, never in the sea around it) */
   swim?: boolean
+  /** made in the editor: its own words and group of Pokémon (a Person only talks) */
+  custom?: { lines: string[]; after: string[]; group: number; fights: boolean }
 }
 
 export interface PickupSpec {
@@ -79,6 +84,10 @@ export interface World {
   spawns: { x: number; y: number }[]
   /** 1 = a tile of one of the little lakes (water that is not connected to the sea around the island) */
   lake: Uint8Array
+  /** made in the editor: what happens when you step on a tile, the groups of wild Pokémon of the grass, and the groups themselves */
+  triggers?: Map<number, { type: number; text?: string; tx?: number; ty?: number }>
+  encGroup?: Uint8Array
+  groups?: Map<number, PokeGroup>
 }
 
 /** Distance from the centre in whole TILES, square rings (the island is a tile-based mountain of squares, not circles). */

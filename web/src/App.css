@@ -555,3 +555,13 @@ button.big small { opacity: .7; font-size: .75rem; }
 .chat-mini { background: #2b3040; border: 1px solid #556; color: #fff; border-radius: 4px; padding: 1px 6px; cursor: pointer; font: inherit; }
 .chat-dock .chat-input { padding: 6px; display: flex; gap: 6px; }
 .chat-dock .chat-input input { flex: 1; min-width: 0; }
+.we-form { display: flex; flex-direction: column; gap: 6px; padding: 8px; background: #11151b; border: 1px solid #334; border-radius: 8px; }
+.we-form h4 { margin: 0; display: flex; align-items: center; gap: 6px; }
+.we-form h4 i { display: inline-block; width: 14px; height: 14px; border-radius: 50%; }
+.we-form label { display: flex; flex-direction: column; gap: 2px; color: #bcc; }
+.we-form input, .we-form select, .we-form textarea { background: #0b0e12; color: #fff; border: 1px solid #4a5568; border-radius: 5px; padding: 4px 6px; font: inherit; }
+.we-form .we-row input { width: 64px; }
+.we-table { width: 100%; border-collapse: collapse; }
+.we-table th { text-align: left; font-weight: 400; color: #aab; font-size: 11px; }
+.we-table input { width: 100%; box-sizing: border-box; }
+.we-table td:not(:first-child) input { width: 52px; }

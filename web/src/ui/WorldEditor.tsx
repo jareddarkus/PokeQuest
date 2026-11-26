@@ -8,12 +8,14 @@ import { ProgressBar } from './ProgressBar'
 import { signIn } from '../supabase'
 import { claimWorldAdmin, currentUserId, isWorldAdmin, publishWorld, publishedInfo, unpublishWorld } from '../world/publish'
 import { SIZE, T } from '../game/world'
+import { Dex } from '@pkmn/sim'
+import { EVENT_KINDS, EV, groupColor, kindOf, newEvent, newGroup, type GameEvent, type PokeGroup } from '../world/events'
 import {
   DEFAULT_TEXTURE, MAX_LEVEL, buildCustomVisuals, cloneWorld, decodeWorld, emptyWorld, encodeWorld, heightOf, loadLocal, saveLocal, texIndex,
   type CustomWorld,
 } from '../world/customWorld'
 
-type Tool = 'paint' | 'kind' | 'height' | 'model' | 'pine' | 'move' | 'erase'
+type Tool = 'paint' | 'kind' | 'height' | 'model' | 'pine' | 'move' | 'erase' | 'event' | 'zones'
 
 const KINDS: Array<{ code: number; label: string; hint: string }> = [
   { code: T.Grass, label: 'Hierba', hint: 'Se puede andar' },
@@ -89,6 +91,10 @@ function Editor({ built, onExit, onPlay }: { built: BuiltWorld; onExit: () => vo
   const [search, setSearch] = useState('')
   const [pack, setPack] = useState<number>(-1)
   const [showBlocked, setShowBlocked] = useState(false)
+  const [showEvents, setShowEvents] = useState(true)
+  const [selEventType, setSelEventType] = useState<number>(EV.Trainer)
+  const [selEventId, setSelEventId] = useState<number>(-1)
+  const [selGroup, setSelGroup] = useState(1)
   const [info, setInfo] = useState('')
   const [saved, setSaved] = useState('')
   const [name, setName] = useState(cwRef.current.name)
@@ -98,8 +104,10 @@ function Editor({ built, onExit, onPlay }: { built: BuiltWorld; onExit: () => vo
   const redraw = useRef<() => void>(() => {})
   const undo = useRef<CustomWorld[]>([])
   const redo = useRef<CustomWorld[]>([])
-  const toolRef = useRef({ tool, brush, selTex, selKind, selModel, rot })
-  toolRef.current = { tool, brush, selTex, selKind, selModel, rot }
+  const toolRef = useRef({ tool, brush, selTex, selKind, selModel, rot, selEventType, selGroup })
+  toolRef.current = { tool, brush, selTex, selKind, selModel, rot, selEventType, selGroup }
+  const selEvRef = useRef(-1)
+  selEvRef.current = selEventId
 
   // palette pictures
   const names = useMemo(() => built.textureNames(), [built])
@@ -197,10 +205,58 @@ function Editor({ built, onExit, onPlay }: { built: BuiltWorld; onExit: () => vo
       overlay.renderOrder = 999
       scene.add(overlay)
     }
+    // events (numbered markers) and wild zones (coloured tiles)
+    let evGroup: THREE.Group | null = null
+    const numberSprite = (n: number, color: string): THREE.Sprite => {
+      const c = document.createElement('canvas'); c.width = 64; c.height = 64
+      const g = c.getContext('2d')!
+      g.fillStyle = color; g.beginPath(); g.arc(32, 32, 28, 0, Math.PI * 2); g.fill()
+      g.lineWidth = 4; g.strokeStyle = '#000'; g.stroke()
+      g.fillStyle = '#000'; g.font = 'bold 36px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(String(n), 32, 34)
+      const t = new THREE.CanvasTexture(c); t.magFilter = THREE.NearestFilter
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthTest: false, transparent: true }))
+      sp.renderOrder = 1002
+      return sp
+    }
+    const rebuildEvents = () => {
+      if (evGroup) { scene.remove(evGroup); evGroup.traverse((o) => { const m = o as THREE.Mesh; m.geometry?.dispose() }); evGroup = null }
+      if (!showEventsRef.current) return
+      const cw = cwRef.current
+      evGroup = new THREE.Group()
+      // wild zones: every tile with a group number is tinted with the colour of its group
+      const pos: number[] = [], col: number[] = []
+      for (let i = 0; i < SIZE * SIZE; i++) {
+        const gid = cw.enc[i]
+        if (!gid) continue
+        const x = i % SIZE, z = (i / SIZE) | 0
+        const y = (cw.kind[i] === T.Water ? built.waterY : heightOf(built, cw.level[i])) + 0.55
+        const c = new THREE.Color(groupColor(gid))
+        pos.push(x, y, z, x + 1, y, z, x + 1, y, z + 1, x, y, z, x + 1, y, z + 1, x, y, z + 1)
+        for (let k = 0; k < 6; k++) col.push(c.r, c.g, c.b)
+      }
+      if (pos.length) {
+        const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3))
+        const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.45, depthTest: false, side: THREE.DoubleSide }))
+        m.renderOrder = 998
+        evGroup.add(m)
+      }
+      for (const e of cw.events) {
+        const gi = Math.max(0, Math.min(SIZE - 1, e.y)) * SIZE + Math.max(0, Math.min(SIZE - 1, e.x))
+        const sp = numberSprite(e.type, kindOf(e.type).color)
+        sp.scale.set(0.95, 0.95, 1)
+        sp.position.set(e.x + 0.5, heightOf(built, cw.level[gi]) + 1.1, e.y + 0.5)
+        evGroup.add(sp)
+        if (e.id === selEvRef.current) { const ring = numberSprite(e.type, '#ffffff'); ring.scale.set(1.25, 1.25, 1); ring.position.copy(sp.position); ring.renderOrder = 1001; evGroup.add(ring) }
+      }
+      scene.add(evGroup)
+    }
+    const showEventsRef = { current: true }
+    ;(redraw as unknown as { events: () => void; showEvents: (b: boolean) => void }).events = rebuildEvents
+    ;(redraw as unknown as { events: () => void; showEvents: (b: boolean) => void }).showEvents = (b) => { showEventsRef.current = b; rebuildEvents() }
     const showBlockedRef = { current: false }
-    redraw.current = () => { rebuildGround(); rebuildObjects() }
+    redraw.current = () => { rebuildGround(); rebuildObjects(); rebuildEvents() }
     ;(redraw as unknown as { blocked: (b: boolean) => void }).blocked = (b) => { showBlockedRef.current = b; updateOverlay() }
-    rebuildGround(); rebuildObjects()
+    rebuildGround(); rebuildObjects(); rebuildEvents()
 
     // the square that follows the mouse
     const cursor = new THREE.Mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffe040, transparent: true, opacity: 0.45, depthTest: false }))
@@ -240,11 +296,14 @@ function Editor({ built, onExit, onPlay }: { built: BuiltWorld; onExit: () => vo
       return out
     }
     let dragging = false, dragOff = { x: 0, z: 0 }
+    let draggingEv = false
+    const selectEvent = (id: number) => { selEvRef.current = id; setSelEventId(id) }
     let painting = false, panning = false, last = { x: 0, y: 0 }, dirty = false, strokeSeen = new Set<number>(), lowering = false
     const apply = () => {
       if (!hover.on) return
       const cw = cwRef.current, t = toolRef.current
       if (t.tool === 'paint') { const ti = texIndex(cw, t.selTex); for (const i of brushTiles()) { cw.tile[i] = ti; if (cw.kind[i] === T.Water) cw.kind[i] = T.Grass } dirty = true }
+      else if (t.tool === 'zones') { for (const i of brushTiles()) cw.enc[i] = t.selGroup; dirty = true }
       else if (t.tool === 'kind') { for (const i of brushTiles()) { cw.kind[i] = t.selKind; if (t.selKind === T.Water) cw.level[i] = 0 } dirty = true }
       else if (t.tool === 'height') {
         for (const i of brushTiles()) {
@@ -257,13 +316,23 @@ function Editor({ built, onExit, onPlay }: { built: BuiltWorld; onExit: () => vo
       }
     }
     let timer = 0
-    const flush = () => { if (!dirty) return; dirty = false; rebuildGround(); setSaved('') }
+    const flush = () => { if (!dirty) return; dirty = false; rebuildGround(); rebuildEvents(); setSaved('') }
     const onDown = (ev: MouseEvent) => {
       if (ev.button === 1 || ev.button === 2) { panning = true; last = { x: ev.clientX, y: ev.clientY }; ev.preventDefault(); return }
       if (ev.button !== 0) return
       pick(ev)
       const t = toolRef.current
       if (!hover.on) return
+      if (t.tool === 'event') {
+        const cw = cwRef.current
+        let best = -1, bd = 0.9
+        cw.events.forEach((e, k) => { const d = Math.hypot(e.x + 0.5 - hover.fx, e.y + 0.5 - hover.fz); if (d < bd) { bd = d; best = k } })
+        snapshot()
+        if (best >= 0) { selectEvent(cw.events[best].id); draggingEv = true }
+        else { const e = newEvent(cw.nextId++, t.selEventType, hover.x, hover.z); cw.events.push(e); selectEvent(e.id); draggingEv = true; setSaved('') }
+        rebuildEvents()
+        return
+      }
       if (t.tool === 'model' || t.tool === 'pine') {
         if (t.tool === 'model' && !t.selModel) { setInfo('Elige primero un modelo de la lista.'); return }
         snapshot()
@@ -300,6 +369,11 @@ function Editor({ built, onExit, onPlay }: { built: BuiltWorld; onExit: () => vo
         return
       }
       pick(ev)
+      if (draggingEv && hover.on) {
+        const e = cwRef.current.events.find((q) => q.id === selEvRef.current)
+        if (e && (e.x !== hover.x || e.y !== hover.z)) { e.x = hover.x; e.y = hover.z; rebuildEvents(); setSaved('') }
+        return
+      }
       if (dragging && hover.on) {
         const o = cwRef.current.objects.find((q) => q.id === selectedId)
         if (o) {
@@ -315,7 +389,7 @@ function Editor({ built, onExit, onPlay }: { built: BuiltWorld; onExit: () => vo
       }
       if (painting) { apply(); if (!timer) timer = window.setTimeout(() => { timer = 0; flush() }, 90) }
     }
-    const onUp = () => { if (dragging) { dragging = false; rebuildObjects(); setSaved('') } painting = false; panning = false; flush(); window.clearTimeout(timer); timer = 0 }
+    const onUp = () => { if (draggingEv) { draggingEv = false; force((n) => n + 1) } if (dragging) { dragging = false; rebuildObjects(); setSaved('') } painting = false; panning = false; flush(); window.clearTimeout(timer); timer = 0 }
     const onWheel = (ev: WheelEvent) => { ev.preventDefault(); look.dist = Math.max(8, Math.min(220, look.dist * (ev.deltaY > 0 ? 1.12 : 0.89))) }
     const keys = new Set<string>()
     const onKey = (ev: KeyboardEvent) => {
@@ -326,6 +400,9 @@ function Editor({ built, onExit, onPlay }: { built: BuiltWorld; onExit: () => vo
         if (ev.key.toLowerCase() === 'r') {
           const o = selectedId >= 0 ? cwRef.current.objects.find((q) => q.id === selectedId) : undefined
           if (o && toolRef.current.tool === 'move') { snapshot(); o.rot = (o.rot + 90) % 360; rebuildObjects(); setSaved('') } else setRot((r) => (r + 90) % 360)
+        }
+        if ((ev.key === 'Delete' || ev.key === 'Backspace') && selEvRef.current >= 0 && toolRef.current.tool === 'event') {
+          snapshot(); cwRef.current.events = cwRef.current.events.filter((q) => q.id !== selEvRef.current); selectEvent(-1); rebuildEvents(); setSaved(''); force((n) => n + 1)
         }
         if ((ev.key === 'Delete' || ev.key === 'Backspace') && selectedId >= 0 && toolRef.current.tool === 'move') {
           snapshot(); cwRef.current.objects = cwRef.current.objects.filter((q) => q.id !== selectedId); selectedId = -1; rebuildObjects(); setSaved('')
@@ -354,7 +431,7 @@ function Editor({ built, onExit, onPlay }: { built: BuiltWorld; onExit: () => vo
       look.x = Math.max(0, Math.min(SIZE, look.x)); look.z = Math.max(0, Math.min(SIZE, look.z))
       place()
       const t = toolRef.current
-      const n = t.tool === 'paint' || t.tool === 'kind' || t.tool === 'height' ? t.brush : 1
+      const n = t.tool === 'paint' || t.tool === 'kind' || t.tool === 'height' || t.tool === 'zones' ? t.brush : 1
       cursor.visible = hover.on
       if (hover.on) {
         const o = Math.floor((n - 1) / 2)
@@ -387,6 +464,7 @@ function Editor({ built, onExit, onPlay }: { built: BuiltWorld; onExit: () => vo
   const doUndoRef = useRef(doUndo), doRedoRef = useRef(doRedo)
   doUndoRef.current = doUndo; doRedoRef.current = doRedo
   useEffect(() => { (redraw as unknown as { blocked?: (b: boolean) => void }).blocked?.(showBlocked) }, [showBlocked])
+  useEffect(() => { (redraw as unknown as { showEvents?: (b: boolean) => void }).showEvents?.(showEvents) }, [showEvents, selEventId])
   // saved automatically a moment after every change
   useEffect(() => {
     const id = window.setInterval(() => { saveLocal({ ...cwRef.current, name, barriers }) }, 4000)
@@ -434,6 +512,7 @@ function Editor({ built, onExit, onPlay }: { built: BuiltWorld; onExit: () => vo
         <button onClick={exportFile}>Exportar</button>
         <button onClick={importFile}>Importar</button>
         <button onClick={newWorld}>Mundo nuevo</button>
+        <label className="we-check"><input type="checkbox" checked={showEvents} onChange={(e) => setShowEvents(e.target.checked)} /> Ver eventos</label>
         <label className="we-check"><input type="checkbox" checked={showBlocked} onChange={(e) => setShowBlocked(e.target.checked)} /> Ver bloqueos</label>
         <label className="we-check" title="El juego añade muros entre los anillos (hace falta ganar un gimnasio para pasar)"><input type="checkbox" checked={barriers} onChange={(e) => setBarriers(e.target.checked)} /> Muros de anillo</label>
         <button onClick={() => setShowPub(true)}>Publicar…</button>
@@ -443,11 +522,11 @@ function Editor({ built, onExit, onPlay }: { built: BuiltWorld; onExit: () => vo
       <div className="we-body">
         <div className="we-side">
           <div className="we-tools">
-            {([['paint', 'Pintar suelo'], ['kind', 'Tipo de casilla'], ['height', 'Altura'], ['model', 'Modelos 3D'], ['pine', 'Pino'], ['move', 'Mover objeto'], ['erase', 'Borrar objeto']] as Array<[Tool, string]>).map(([k, l]) => (
+            {([['paint', 'Pintar suelo'], ['kind', 'Tipo de casilla'], ['height', 'Altura'], ['model', 'Modelos 3D'], ['pine', 'Pino'], ['move', 'Mover objeto'], ['erase', 'Borrar objeto'], ['event', 'Eventos (números)'], ['zones', 'Zonas de Pokémon']] as Array<[Tool, string]>).map(([k, l]) => (
               <button key={k} className={tool === k ? 'on' : ''} onClick={() => setTool(k)}>{l}</button>
             ))}
           </div>
-          {(tool === 'paint' || tool === 'kind' || tool === 'height') && (
+          {(tool === 'paint' || tool === 'kind' || tool === 'height' || tool === 'zones') && (
             <div className="we-row">Pincel: {[1, 2, 3, 5, 8].map((n) => <button key={n} className={brush === n ? 'on' : ''} onClick={() => setBrush(n)}>{n}</button>)}</div>
           )}
           {tool === 'paint' && (
@@ -495,6 +574,12 @@ function Editor({ built, onExit, onPlay }: { built: BuiltWorld; onExit: () => vo
           {tool === 'pine' && <p className="we-help">Clic en el mapa para plantar un pino (ocupa 2 × 2 casillas y bloquea el paso).</p>}
           {tool === 'move' && <p className="we-help">Arrastra un modelo o pino para moverlo. Con uno elegido: R lo gira, Supr lo borra.</p>}
           {tool === 'erase' && <p className="we-help">Clic junto a un modelo o pino para quitarlo.</p>}
+          {tool === 'event' && (
+            <EventPanel cw={cwRef.current} selType={selEventType} setSelType={setSelEventType} selId={selEventId} onChange={() => { force((n) => n + 1); setSaved(''); (redraw as unknown as { events?: () => void }).events?.() }} onSelect={(id) => setSelEventId(id)} />
+          )}
+          {tool === 'zones' && (
+            <GroupPanel cw={cwRef.current} selGroup={selGroup} setSelGroup={setSelGroup} onChange={() => { force((n) => n + 1); setSaved(''); (redraw as unknown as { events?: () => void }).events?.() }} />
+          )}
         </div>
         <div className="we-view" ref={mountRef} />
       </div>
@@ -549,5 +634,98 @@ function PublishPanel({ getWorld, onClose }: { getWorld: () => CustomWorld; onCl
         <button onClick={onClose}>Cerrar</button>
       </div>
     </div>
+  )
+}
+
+
+// ---------------------------------------------------------------- events
+const speciesNames: string[] = Dex.species.all().filter((sp) => sp.num > 0 && sp.exists && !sp.isNonstandard).map((sp) => sp.name)
+const TYPE_NAMES = ['Normal', 'Fire', 'Water', 'Electric', 'Grass', 'Ice', 'Fighting', 'Poison', 'Ground', 'Flying', 'Psychic', 'Bug', 'Rock', 'Ghost', 'Dragon', 'Dark', 'Steel', 'Fairy']
+
+function EventPanel({ cw, selType, setSelType, selId, onChange, onSelect }: { cw: CustomWorld; selType: number; setSelType: (t: number) => void; selId: number; onChange: () => void; onSelect: (id: number) => void }) {
+  const ev = cw.events.find((e) => e.id === selId)
+  const upd = (patch: Partial<GameEvent>) => { if (ev) { Object.assign(ev, patch); onChange() } }
+  const lines = (arr?: string[]) => (arr ?? []).join('\n')
+  const k = ev ? kindOf(ev.type) : null
+  return (
+    <>
+      <p className="we-help">Elige el tipo (su número) y haz clic en el mapa para colocarlo. Clic en uno puesto: lo eliges y lo editas; arrástralo para moverlo; Supr lo borra.</p>
+      <div className="we-kinds">
+        {EVENT_KINDS.map((q) => (
+          <button key={q.type} className={selType === q.type ? 'on' : ''} onClick={() => setSelType(q.type)}>
+            <i style={{ background: q.color }} /> <b>{q.type} · {q.name}</b><small>{q.help}</small>
+          </button>
+        ))}
+      </div>
+      {ev && k && (
+        <div className="we-form">
+          <h4><i style={{ background: k.color }} /> Evento {ev.type}: {k.name} ({ev.x}, {ev.y})</h4>
+          {(ev.type === EV.Trainer || ev.type === EV.Person || ev.type === EV.Gym) && <label>Nombre<input value={ev.name ?? ''} onChange={(e) => upd({ name: e.target.value })} /></label>}
+          {(ev.type === EV.Trainer || ev.type === EV.Person) && (
+            <>
+              <label>Mira hacia<select value={ev.dir ?? 0} onChange={(e) => upd({ dir: Number(e.target.value) })}><option value={0}>Abajo</option><option value={1}>Izquierda</option><option value={2}>Derecha</option><option value={3}>Arriba</option></select></label>
+              <label>Comportamiento<select value={ev.behavior ?? 'stand'} onChange={(e) => upd({ behavior: e.target.value as GameEvent['behavior'] })}><option value="stand">Quieto</option><option value="look">Mira alrededor</option><option value="walk">Pasea</option><option value="run">Corre</option></select></label>
+              <button onClick={() => upd({ look: Math.floor(Math.random() * 1e9) })}>Cambiar colores al azar</button>
+            </>
+          )}
+          {(ev.type === EV.Trainer || ev.type === EV.Person || ev.type === EV.Gym) && <label>Frases (una por línea; sale una al azar)<textarea rows={4} value={lines(ev.lines)} onChange={(e) => upd({ lines: e.target.value.split('\n').filter((l) => l.trim()) })} /></label>}
+          {ev.type === EV.Trainer && <label>Frases al perder<textarea rows={3} value={lines(ev.after)} onChange={(e) => upd({ after: e.target.value.split('\n').filter((l) => l.trim()) })} /></label>}
+          {(ev.type === EV.Trainer || ev.type === EV.Gym) && (
+            <label>Grupo de Pokémon
+              <select value={ev.group ?? 0} onChange={(e) => upd({ group: Number(e.target.value) })}>
+                <option value={0}>(al azar, según el anillo)</option>
+                {cw.groups.map((g) => <option key={g.id} value={g.id}>{g.id} · {g.name}</option>)}
+              </select>
+            </label>
+          )}
+          {ev.type === EV.Gym && <label>Tipo<select value={ev.gymType ?? 'Normal'} onChange={(e) => upd({ gymType: e.target.value })}>{TYPE_NAMES.map((t) => <option key={t}>{t}</option>)}</select></label>}
+          {(ev.type === EV.Gym || ev.type === EV.Teleport) && (
+            <div className="we-row">{ev.type === EV.Gym ? 'Al ganar, llevar a' : 'Llevar a'}: X <input type="number" value={ev.tx ?? -1} onChange={(e) => upd({ tx: Number(e.target.value) })} /> Y <input type="number" value={ev.ty ?? -1} onChange={(e) => upd({ ty: Number(e.target.value) })} />{ev.type === EV.Gym && <small> (-1 = a ningún sitio)</small>}</div>
+          )}
+          {ev.type === EV.Sign && <label>Texto<textarea rows={3} value={ev.text ?? ''} onChange={(e) => upd({ text: e.target.value })} /></label>}
+          <button onClick={() => { cw.events = cw.events.filter((q) => q.id !== ev.id); onSelect(-1); onChange() }}>Borrar este evento</button>
+        </div>
+      )}
+      <p className="we-help">Eventos puestos: {cw.events.length}. Sin ningún evento, el juego pone entrenadores, gimnasios y objetos solo; con eventos, solo salen los tuyos.</p>
+    </>
+  )
+}
+
+function GroupPanel({ cw, selGroup, setSelGroup, onChange }: { cw: CustomWorld; selGroup: number; setSelGroup: (g: number) => void; onChange: () => void }) {
+  const g = cw.groups.find((q) => q.id === selGroup)
+  const upd = (fn: (g: PokeGroup) => void) => { if (g) { fn(g); onChange() } }
+  return (
+    <>
+      <p className="we-help">Un grupo es una lista de Pokémon con niveles. Pinta zonas del mapa con un grupo: en la hierba alta de esa zona saldrán esos Pokémon. Los entrenadores y gimnasios también usan grupos. “Sin grupo” borra la zona.</p>
+      <div className="we-kinds">
+        <button className={selGroup === 0 ? 'on' : ''} onClick={() => setSelGroup(0)}><i style={{ background: '#444' }} /> <b>Sin grupo (borrar)</b></button>
+        {cw.groups.map((q) => (
+          <button key={q.id} className={selGroup === q.id ? 'on' : ''} onClick={() => setSelGroup(q.id)}><i style={{ background: groupColor(q.id) }} /> <b>{q.id} · {q.name}</b><small>{q.entries.map((e) => e.species).join(', ')}</small></button>
+        ))}
+        <button onClick={() => { const id = Math.max(0, ...cw.groups.map((q) => q.id)) + 1; cw.groups.push(newGroup(id)); setSelGroup(id); onChange() }}>+ Grupo nuevo</button>
+      </div>
+      <datalist id="we-species">{speciesNames.map((n) => <option key={n} value={n} />)}</datalist>
+      {g && (
+        <div className="we-form">
+          <h4><i style={{ background: groupColor(g.id) }} /> Grupo {g.id}</h4>
+          <label>Nombre<input value={g.name} onChange={(e) => upd((q) => { q.name = e.target.value })} /></label>
+          <div className="we-row">Entrenador lleva de <input type="number" min={1} max={6} value={g.count[0]} onChange={(e) => upd((q) => { q.count = [Number(e.target.value), Math.max(Number(e.target.value), q.count[1])] })} /> a <input type="number" min={1} max={6} value={g.count[1]} onChange={(e) => upd((q) => { q.count = [Math.min(q.count[0], Number(e.target.value)), Number(e.target.value)] })} /> Pokémon</div>
+          <table className="we-table"><thead><tr><th>Pokémon</th><th>Nv mín</th><th>Nv máx</th><th>Peso</th><th /></tr></thead><tbody>
+            {g.entries.map((e, i) => (
+              <tr key={i}>
+                <td><input list="we-species" value={e.species} onChange={(ev2) => upd(() => { e.species = ev2.target.value })} /></td>
+                <td><input type="number" min={1} max={100} value={e.min} onChange={(ev2) => upd(() => { e.min = Number(ev2.target.value) })} /></td>
+                <td><input type="number" min={1} max={100} value={e.max} onChange={(ev2) => upd(() => { e.max = Number(ev2.target.value) })} /></td>
+                <td><input type="number" min={0} max={100} value={e.weight} onChange={(ev2) => upd(() => { e.weight = Number(ev2.target.value) })} /></td>
+                <td><button onClick={() => upd((q) => { q.entries.splice(i, 1) })}>×</button></td>
+              </tr>
+            ))}
+          </tbody></table>
+          <button onClick={() => upd((q) => { q.entries.push({ species: 'Pikachu', min: 5, max: 8, weight: 1 }) })}>+ Pokémon</button>
+          <button onClick={() => { cw.groups = cw.groups.filter((q) => q.id !== g.id); cw.enc.forEach((v, i) => { if (v === g.id) cw.enc[i] = 0 }); setSelGroup(0); onChange() }}>Borrar este grupo</button>
+          <p className="we-help">El “peso” es la probabilidad relativa: 3 sale el triple que 1.</p>
+        </div>
+      )}
+    </>
   )
 }

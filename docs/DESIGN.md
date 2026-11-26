@@ -388,3 +388,9 @@ Seen in the recording but NOT done: the trainers' battle sprites (the foe traine
 ## Round 14 — publishing + moving objects
 - Table `worlds` (everyone reads, only rows of `world_admins` write), `world_admins`, `app_secrets` (no policies) and the function `claim_world_admin(code)`: the owner logs in inside the editor ("Publicar…"), types the owner code once (kept in Supabase only, NOT in this repo) and then can publish / unpublish. Published world = the one every game (practice and matches) loads; none = the normal island. Code: `src/world/publish.ts`.
 - Editor: "Mover objeto" (drag; R turns, Supr deletes the chosen one).
+
+## Round 15 — events in the editor, chat, safe names
+- Editor tools "Eventos (números)" and "Zonas de Pokémon". Event numbers: 1 start point, 2 trainer, 3 person, 4 gym door, 5 item, 6 heal, 7 teleport, 8 sign (see `src/world/events.ts`). Groups of Pokémon (species, level range, weight) can be painted onto the map (wild grass of that zone) and given to trainers / gyms. With at least one event in a world, only the owner's events appear (no generated trainers, gyms or items); `src/world/applyEvents.ts` puts them into the game's World; `PlayScreen` uses the groups (`game/encounters.ts` groupMon / groupTeam).
+- Chat: window in the bottom left (`ui/ChatPanel.tsx`), tabs Global / Amigos / private chats; private messages go to `whisper:<account number>` (only the receiver can read: realtime policy). Friends: table `friends` + functions add_friend / remove_friend / my_friends / user_id_of.
+- Usernames: 3-16 letters/numbers/_ and no bad words, checked in the page (`net/username.ts`) and in the `signup` function.
+- The owner account is a row of `world_admins`.

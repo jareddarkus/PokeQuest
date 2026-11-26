@@ -5,7 +5,7 @@ import { buildChunkWorld, type BuiltWorld } from '../rom/chunkWorld'
 import { loadWorldData } from '../rom/store'
 import type { Look } from '../game/character'
 import type { Settings } from '../game/settings'
-import { ENCOUNTER_RATE, gymTeam, trainerTeam, wildEncounter } from '../game/encounters'
+import { ENCOUNTER_RATE, groupMon, groupTeam, gymTeam, trainerTeam, wildEncounter } from '../game/encounters'
 import { addItems, emptyTrainer, makeStarter, type Trainer } from '../game/state'
 import { ITEMS, STARTING_BAG, rollPickup } from '../data/items'
 import { maxHp, type Mon } from '../data/dex'
@@ -16,6 +16,7 @@ import BattleScreen, { CHAR_MS, TypedText, type BattleKind, type BattleOutcome, 
 import { addExtraGrass, buildMeadowVisuals, prepareMeadow } from '../game/meadow'
 import { buildCustomVisuals, type CustomWorld } from '../world/customWorld'
 import { fetchPublishedWorld } from '../world/publish'
+import { applyCustomEvents } from '../world/applyEvents'
 import { busyLine, leaderLine, lossLine, preBattleLine } from '../data/npcLines'
 import { BagPanel, PcPanel, TeamPanel } from './MenuPanels'
 import SettingsPanel from './SettingsPanel'
@@ -267,17 +268,33 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
     return () => window.clearInterval(id)
   }, [royale, username])
 
+  /** the trainer talks, then the battle starts (its own words / group when it was made in the editor) */
+  const npcFight = (npc: (typeof world.npcs)[number], npcId: string) => {
+    const line = npc.custom ? npc.custom.lines[Math.floor(Math.random() * npc.custom.lines.length)] : preBattleLine(npc.id)
+    const grp = npc.custom?.group ? world.groups?.get(npc.custom.group) : undefined
+    speakThen(`Trainer ${npc.name}`, line, () => void (grp && grp.entries.length ? groupTeam(grp) : trainerTeam(npc.ring)).then((team) => startBattle({ kind: 'trainer', foe: team, name: `Trainer ${npc.name}`, npcId })))
+  }
   const events: GameEvents = useMemo(
     () => ({
       onMenuKey: () => setMenuOpen((o) => !o),
       onMoveStart: () => setMenuOpen(false), // walking closes the menu again
-      onStep: (_x, _y, tile) => {
+      onStep: (sx, sy, tile) => {
         if (tile === T.Tall) void music.playSfx('fld:12') // walking in tall grass
         else if (tile === T.Water) void music.playSfx('fld:13') // walking in water
+        // tiles made in the editor that do something when you step on them
+        const trig = world.triggers?.get(Math.round(sy) * SIZE + Math.round(sx))
+        if (trig) {
+          if (trig.type === 6) { void music.heal(); setTrainer({ ...trainerRef.current, team: trainerRef.current.team.map((m) => ({ ...m, hp: maxHp(m) })) }); say('Tu equipo se ha curado.') }
+          else if (trig.type === 7 && trig.tx !== undefined && trig.ty !== undefined) { void music.playSfx('fld:KAIDAN'); handleRef.current?.teleport(trig.tx, trig.ty) }
+          else if (trig.type === 8 && trig.text) say(trig.text)
+        }
         if (tile === T.Tall && Math.random() < ENCOUNTER_RATE && trainerRef.current.team.length > 0) {
           const pos = handleRef.current?.getPos()
           const r = pos ? ringAt(pos.x, pos.y) : 1
-          void wildEncounter(r).then((mon) => startBattle({ kind: 'wild', foe: [mon] }))
+          const gid = pos ? world.encGroup?.[Math.round(pos.y) * SIZE + Math.round(pos.x)] ?? 0 : 0
+          const grp = gid ? world.groups?.get(gid) : undefined
+          if (grp && grp.entries.length) void groupMon(grp).then((mon) => startBattle({ kind: 'wild', foe: [mon] }))
+          else void wildEncounter(r).then((mon) => startBattle({ kind: 'wild', foe: [mon] }))
         }
       },
       onGym: (id) => {
@@ -285,11 +302,18 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
         if (!g) return
         void music.playSfx('fld:KAIDAN') // going into a building
         if (beatenGyms.current.has(id)) { say(`${g.leader} nods: you already beat this gym.`); return }
-        speakThen(`Gym Leader ${g.leader}`, leaderLine(g.id), () => void gymTeam(g.type, g.ring).then((team) =>
+        const cgrp = g.custom?.group ? world.groups?.get(g.custom.group) : undefined
+        const gline = g.custom ? g.custom.lines[Math.floor(Math.random() * g.custom.lines.length)] : leaderLine(g.id)
+        speakThen(`Gym Leader ${g.leader}`, gline, () => void (cgrp && cgrp.entries.length ? groupTeam(cgrp) : gymTeam(g.type, g.ring)).then((team) =>
           startBattle({
             kind: 'gym', foe: team, name: `Gym Leader ${g.leader}`,
             onWin: () => {
               beatenGyms.current.add(id)
+              if (g.custom) { // a gym of the editor: taken where the editor says (or nowhere)
+                say(`¡Has vencido a ${g.leader}!`)
+                if (g.custom.tx >= 0 && g.custom.ty >= 0) { void music.playSfx('fld:22'); handleRef.current?.teleport(g.custom.tx, g.custom.ty) }
+                return
+              }
               const pos = handleRef.current!.getPos()
               const spot = nextRingSpot(pos.x, pos.y, g.ring)
               void music.playSfx('fld:22') // the lift up to the next ring
@@ -314,16 +338,18 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
       onNpcSpotted: (npcId) => {
         if (defeatedNpcs.current.has(npcId) || busy.current || talking.current || busyNpcs.current.has(npcId)) return
         const npc = world.npcs.find((n) => n.id === npcId)
-        if (!npc) return
-        speakThen(`Trainer ${npc.name}`, preBattleLine(npc.id), () => void trainerTeam(npc.ring).then((team) => startBattle({ kind: 'trainer', foe: team, name: `Trainer ${npc.name}`, npcId })))
+        if (!npc || npc.custom?.fights === false) return
+        npcFight(npc, npcId)
       },
       onNpcTalk: (npcId) => {
         if (busy.current || talking.current) return
         const npc = world.npcs.find((n) => n.id === npcId)
         if (!npc) return
-        if (busyNpcs.current.has(npcId)) { speakThen(`Trainer ${npc.name}`, busyLine(), () => {}); return } // somebody else is fighting it
-        if (defeatedNpcs.current.has(npcId)) { speakThen(`Trainer ${npc.name}`, lossLine(npcId), () => {}); return }
-        speakThen(`Trainer ${npc.name}`, preBattleLine(npc.id), () => void trainerTeam(npc.ring).then((team) => startBattle({ kind: 'trainer', foe: team, name: `Trainer ${npc.name}`, npcId })))
+        const who = npc.custom && !npc.custom.fights ? npc.name : `Trainer ${npc.name}`
+        if (npc.custom && !npc.custom.fights) { speakThen(who, npc.custom.lines[Math.floor(Math.random() * npc.custom.lines.length)], () => {}); return } // a person: only talks
+        if (busyNpcs.current.has(npcId)) { speakThen(who, busyLine(), () => {}); return } // somebody else is fighting it
+        if (defeatedNpcs.current.has(npcId)) { speakThen(who, npc.custom ? npc.custom.after[Math.floor(Math.random() * npc.custom.after.length)] : lossLine(npcId), () => {}); return }
+        npcFight(npc, npcId)
       },
     }),
     [world],
@@ -487,6 +513,7 @@ export default function PlayScreen(props: Props) {
         built.uniforms.uHide.value = 9999
         const vis = buildCustomVisuals(custom, built)
         world = generateWorld(seed, built.ground, { barriers: custom.barriers })
+        applyCustomEvents(world, custom)
         built.group.add(vis.group)
       } else {
         prepareMeadow(built, seed) // ring 1 = a meadow (lots of tall grass, a ring road and paths, a beach)

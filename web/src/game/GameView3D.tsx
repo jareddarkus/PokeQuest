@@ -233,7 +233,7 @@ export default function GameView3D(props: Props) {
     // gyms: the real gym buildings of the game (a sign at the entrance if the building is not available)
     world.gyms.forEach((g, gi) => {
       const spec = GYM_MODELS[gi % GYM_MODELS.length]
-      const b = built.makeBuilding(spec.pack, spec.model)
+      const b = g.custom ? null : built.makeBuilding(spec.pack, spec.model) // (a gym made in the editor has the building the owner placed)
       const gy = heightAt(g.x + 0.5, g.y + 0.5)
       if (b) {
         // the front of the building (its door side, towards the south) ends at the south edge of the door tile

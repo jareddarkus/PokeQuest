@@ -1,4 +1,5 @@
 import { createMon, ringLevels, ringPool, type Mon } from '../data/dex'
+import type { PokeGroup } from '../world/events'
 
 /** Chance of a wild Pokémon appearing on each step in tall grass. */
 export const ENCOUNTER_RATE = import.meta.env.DEV && new URLSearchParams(location.search).has('enc') ? 1 : 0.11 // ?enc = test switch (dev only)
@@ -35,5 +36,24 @@ export async function gymTeam(type: string, ring: number, rng: () => number = Ma
   if (typed.length === 0) typed = pool
   const team: Mon[] = []
   for (let i = 0; i < 3; i++) team.push(await createMon(pickOne(typed, rng).name, hi + 2 + i, rng, { shiny: false }))
+  return team
+}
+
+/** One Pokémon from a group made in the editor (species and level at random, by weight). */
+export async function groupMon(g: PokeGroup, rng: () => number = Math.random): Promise<Mon> {
+  const total = g.entries.reduce((a, e) => a + Math.max(0, e.weight), 0) || 1
+  let r = rng() * total
+  let e = g.entries[0]
+  for (const q of g.entries) { r -= Math.max(0, q.weight); if (r <= 0) { e = q; break } }
+  const lo = Math.max(1, Math.min(e.min, e.max)), hi = Math.max(e.min, e.max)
+  return createMon(e.species, lo + Math.floor(rng() * (hi - lo + 1)), rng)
+}
+
+/** A trainer's team made of a group of the editor. */
+export async function groupTeam(g: PokeGroup, rng: () => number = Math.random): Promise<Mon[]> {
+  const [a, b] = g.count
+  const n = Math.max(1, Math.min(6, a + Math.floor(rng() * (Math.max(a, b) - a + 1))))
+  const team: Mon[] = []
+  for (let i = 0; i < n; i++) team.push(await groupMon(g, rng))
   return team
 }
