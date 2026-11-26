@@ -1,21 +1,15 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import {
-  NATURES, STAT_IDS, STAT_NAMES, allSpecies, dexNum, learnableMoves, maxHp, moveInfo, natureMods, speciesTypes, statsOf, type Mon,
+  NATURES, STAT_NAMES, allSpecies, maxHp, moveInfo, type Mon,
 } from '../data/dex'
 import { ITEMS } from '../data/items'
 import {
   evolve, healMon, rareCandy, reviveMon, stoneEvolution, useItemFromBag, useVitamin, type Trainer,
 } from '../game/state'
-import { TYPE_COLOR, type PType } from '../game/world'
-import HpBar from './HpBar'
-import ItemIcon from './ItemIcon'
-import MonSprite, { MonIcon } from './MonSprite'
-import StatBars from './StatBars'
-import TypePlate from './TypePlate'
+import { MonIcon } from './MonSprite'
 import { DsScreen, DsText, dsK } from './DsScreen'
 import PartyScreen from './PartyScreen'
-import { abilityDesc, useLang, CATEGORY } from '../i18n'
-import { moveFacts, moveGameText } from '../data/moveText'
+import SummaryCard from './SummaryCard'
 import BagScreen from './BagScreen'
 import { useUiUrl } from './CmdButton'
 import { music } from '../audio/music'
@@ -27,178 +21,25 @@ interface PanelProps {
   onMessage: (text: string) => void
 }
 
-/** The stats page drawn on the game's own summary background: labels on the black column (red = the nature raises it, blue = lowers it), numbers on the white panel. */
-function StatsScreen({ mon }: { mon: Mon }) {
-  const K = dsK(2)
-  const st = statsOf(mon)
-  const nm = natureMods(mon.nature)
-  const lo = mon.level ** 3, hi = (mon.level + 1) ** 3
-  return (
-    <div style={{ display: 'flex', justifyContent: 'center', margin: '8px 0' }}>
-      <DsScreen bg="sum:stats" K={K}>
-        {STAT_IDS.map((id, i) => (
-          <div key={id}>
-            <DsText x={14} y={9 + i * 14.6} K={K} color={nm.plus === id ? '#ff6a5a' : nm.minus === id ? '#6ab4ff' : '#fff'}>{STAT_NAMES[id]}</DsText>
-            <DsText x={82} y={9 + i * 14.6} w={52} K={K} align="right" color="#181820">{id === 'hp' ? `${mon.hp}/${st.hp}` : st[id]}</DsText>
-            <span style={{ position: 'absolute', left: 140 * K, top: (11 + i * 14.6) * K, width: Math.min(56, (st[id] / 400) * 56 + 4) * K, height: 3 * K, background: id === 'hp' ? '#2fdc5a' : '#4a90e0' }} />
-          </div>
-        ))}
-        <DsText x={12} y={113} K={K} color="#181820" size={7}>{natureText(mon.nature)}</DsText>
-        <DsText x={12} y={125} K={K}>{mon.ability}</DsText>
-        <DsText x={164} y={156} K={K} color="#181820" size={6.5}>Exp {mon.exp}</DsText>
-        <DsText x={164} y={167} K={K} color="#181820" size={6.5}>Next lv. {Math.max(0, hi - mon.exp)}</DsText>
-        <span style={{ position: 'absolute', left: 55 * K, top: 168 * K, width: 95 * K * Math.max(0, Math.min(1, (mon.exp - lo) / Math.max(1, hi - lo))), height: 2 * K, background: '#38b6f5' }} />
-      </DsScreen>
-    </div>
-  )
+// ---------------------------------------------------------------- summary (stats, moves, evolution)
+export function Summary({ mon, onChange, onBack, footer }: { mon: Mon; onChange?: (m: Mon) => void; onBack: () => void; footer?: React.ReactNode }) {
+  return <SummaryCard mon={mon} onChange={onChange} onBack={onBack} footer={footer} />
 }
 
-/** "Relaxed (+Defense, −Speed)": what the nature does to the Pokémon. */
-function natureText(nature: string): string {
-  const nm = natureMods(nature)
-  return nm.plus ? `${nature} (+${STAT_NAMES[nm.plus]}, −${STAT_NAMES[nm.minus!]})` : `${nature} (neutral)`
-}
-
-/** The top screen of the summary: the Pokémon, its name, types, HP, ability and item (on the game's dark summary panel). */
-function TopScreen({ mon }: { mon: Mon }) {
-  const K = dsK(2)
-  useLang()
-  const mx = maxHp(mon)
+/** Right after a catch: the new Pokémon's summary. */
+export function CaughtPanel({ mon, onClose }: { mon: Mon; onClose: () => void }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'center' }}>
-      <DsScreen bg="sum:top" K={K}>
-        <span style={{ position: 'absolute', left: 6 * K, top: 38 * K, width: 80 * K, height: 80 * K, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}><MonSprite species={mon.species} shiny={mon.shiny} scale={K * 0.9} animated /></span>
-        <DsText x={92} y={12} K={K} size={11}>{mon.species}{mon.shiny ? ' ★' : ''}</DsText>
-        <DsText x={92} y={28} K={K} size={8}>Lv{mon.level}  {mon.gender === 'M' ? '♂' : mon.gender === 'F' ? '♀' : ''}</DsText>
-        <span style={{ position: 'absolute', left: 92 * K, top: 42 * K, display: 'flex', gap: 3 * K }}>{speciesTypes(mon.species).map((t) => <TypePlate key={t} type={t} scale={K * 1.0} />)}</span>
-        <span style={{ position: 'absolute', left: 92 * K, top: 58 * K }}><HpBar hp={mon.hp} max={mx} scale={K} /></span>
-        <DsText x={92} y={70} w={120} K={K} size={7.5} align="right">{mon.hp}/{mx}</DsText>
-        <DsText x={92} y={86} K={K} size={7.5} color="#ffd84a">{mon.ability}</DsText>
-        <div style={{ position: 'absolute', left: 92 * K, top: 96 * K, width: 156 * K, color: '#fff', fontSize: 6.5 * K, lineHeight: 1.3, fontWeight: 600 }}>{abilityDesc(mon.ability)}</div>
-        <DsText x={92} y={150} K={K} size={7.5}>{mon.item ? mon.item : '—'}</DsText>
-        {mon.item && <span style={{ position: 'absolute', left: 78 * K, top: 146 * K }}><ItemIcon name={mon.item} size={12 * K} /></span>}
-      </DsScreen>
-    </div>
-  )
-}
-
-/** The info page on the game's own summary background: a dark band with the name, then a white panel with rows. */
-function InfoScreen({ mon }: { mon: Mon }) {
-  const K = dsK(2)
-  const hi = (mon.level + 1) ** 3
-  const rows: Array<[string, string]> = [
-    ['Dex No.', `#${dexNum(mon.species)}`],
-    ['Type', speciesTypes(mon.species).join(' / ')],
-    ['Nature', natureText(mon.nature)],
-    ['Ability', mon.ability],
-    ['Held item', mon.item || 'none'],
-    ['Exp. points', String(mon.exp)],
-    ['To next level', String(Math.max(0, hi - mon.exp))],
-  ]
-  return (
-    <div style={{ display: 'flex', justifyContent: 'center', margin: '8px 0' }}>
-      <DsScreen bg="sum:info" K={K}>
-        <DsText x={10} y={14} K={K} size={10}>{mon.species}{mon.shiny ? ' ★' : ''}  Lv{mon.level}  {mon.gender === 'M' ? '♂' : mon.gender === 'F' ? '♀' : ''}</DsText>
-        {rows.map(([k, v], i) => (
-          <div key={k}>
-            <DsText x={8} y={44 + i * 16} K={K} color="#505868" size={7.5}>{k}</DsText>
-            <DsText x={96} y={44 + i * 16} K={K} color="#181820" size={7.5}>{v}</DsText>
-          </div>
-        ))}
-      </DsScreen>
-    </div>
-  )
-}
-
-/** The moves page on the game's own summary background (tap a move to replace it). */
-function MovesScreen({ mon, pickFor, onPick }: { mon: Mon; pickFor: number | null; onPick: (i: number) => void }) {
-  const K = dsK(2)
-  const lang = useLang()
-  const cur = moveInfo(mon.moves[pickFor ?? 0] ?? mon.moves[0])
-  return (
-    <div style={{ display: 'flex', justifyContent: 'center', margin: '8px 0' }}>
-      <DsScreen bg="sum:moves" K={K}>
-        <DsText x={10} y={36} K={K} size={8}>Moves</DsText>
-        {mon.moves.map((mv, i) => {
-          const info = moveInfo(mv)
-          return (
-            <button key={mv + i} onClick={() => onPick(i)} style={{ position: 'absolute', left: 0, top: (57 + i * 16) * K, width: 256 * K, height: 15 * K, border: 'none', background: pickFor === i ? 'rgba(255,216,74,.28)' : 'transparent', cursor: 'pointer', padding: 0 }}>
-              <DsText x={6} y={4} K={K} size={7.5}>{mv}</DsText>
-              <DsText x={124} y={4} K={K} size={7.5} color="#181820">PP {info.pp}</DsText>
-              <DsText x={172} y={4} K={K} size={7.5} color="#181820">Pow {info.power || '—'}</DsText>
-              <span style={{ position: 'absolute', left: 212 * K, top: 2 * K }}><TypePlate type={info.type} scale={K * 0.95} /></span>
-            </button>
-          )
-        })}
-        <DsText x={44} y={153} K={K} size={6.5} color="#181820">{`${cur.type} · ${lang === 'es' ? CATEGORY[cur.category] ?? cur.category : cur.category} · ${cur.power ? `${lang === 'es' ? 'Potencia' : 'Power'} ${cur.power}` : lang === 'es' ? 'sin potencia' : 'no power'}`}</DsText>
-        <div style={{ position: 'absolute', left: 42 * K, top: 160 * K, width: 160 * K, color: '#181820', fontSize: 4.9 * K, lineHeight: 1.18, overflowY: 'auto', height: 31 * K }}>
-          <div style={{ fontWeight: 700 }}>{moveFacts(mon.moves[pickFor ?? 0] ?? mon.moves[0], lang)}</div>
-          <div style={{ fontWeight: 500, fontStyle: 'italic', opacity: 0.8, marginTop: 1.5 * K }}>{moveGameText(mon.moves[pickFor ?? 0] ?? mon.moves[0], lang)}</div>
-        </div>
-      </DsScreen>
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------- summary (stats, nature, ability, moves)
-export function Summary({ mon, onChange, onBack }: { mon: Mon; onChange: (m: Mon) => void; onBack: () => void }) {
-  const [pickFor, setPickFor] = useState<number | null>(null)
-  const [page, setPage] = useState<'info' | 'stats' | 'moves'>('stats')
-  const [options, setOptions] = useState<string[]>([])
-  useEffect(() => {
-    void learnableMoves(mon.species, mon.level).then(setOptions)
-  }, [mon.species, mon.level])
-  const evTotal = STAT_IDS.reduce((a, s) => a + mon.evs[s], 0)
-
-  return (
-    <div className="summary">
-      <TopScreen mon={mon} />
-
-      <div className="btn-row">
-        {(['info', 'stats', 'moves'] as const).map((p) => (
-          <button key={p} className={page === p ? 'primary' : ''} onClick={() => setPage(p)}>{p === 'info' ? 'Info' : p === 'stats' ? 'Stats' : 'Moves'}</button>
-        ))}
+    <div className="modal-backdrop" style={{ zIndex: 60 }} onClick={onClose}>
+      <div className="sx-modal" onClick={(e) => e.stopPropagation()}>
+        <Summary mon={mon} onBack={onClose} />
       </div>
-      {page === 'info' && <InfoScreen mon={mon} />}
-      {page === 'stats' && (
-        <>
-          <StatsScreen mon={mon} />
-          <details style={{ margin: '6px 0' }}>
-            <summary className="muted" style={{ cursor: 'pointer' }}>IV / EV</summary>
-            <StatBars mon={mon} />
-            <div className="muted">Total EVs {evTotal} / 510</div>
-          </details>
-        </>
-      )}
-      {page === 'moves' && <MovesScreen mon={mon} pickFor={pickFor} onPick={(i) => setPickFor(pickFor === i ? null : i)} />}
-
-      {pickFor !== null && (
-        <div className="pick-move">
-          <h3>Replace {mon.moves[pickFor]} with…</h3>
-          <div className="pick-grid">
-            {options.filter((o) => !mon.moves.includes(o)).map((o) => {
-              const info = moveInfo(o)
-              return (
-                <button
-                  key={o}
-                  onClick={() => { onChange({ ...mon, moves: mon.moves.map((x, k) => (k === pickFor ? o : x)) }); setPickFor(null) }}
-                  style={{ boxShadow: `inset 4px 0 0 ${TYPE_COLOR[info.type as PType] ?? '#888'}` }}
-                >
-                  <span>{o}</span><small style={{ display: 'flex', alignItems: 'center', gap: 6 }}><TypePlate type={info.type} scale={1.9} />{info.power || '—'}</small>
-                </button>
-              )
-            })}
-          </div>
-        </div>
-      )}
-      <button onClick={onBack}>Back</button>
     </div>
   )
 }
 
 // ---------------------------------------------------------------- team
-export function TeamPanel({ trainer, setTrainer, onClose }: PanelProps) {
-  const [sel, setSel] = useState<number | null>(null)
+export function TeamPanel({ trainer, setTrainer, onClose, initial }: PanelProps & { initial?: number | null }) {
+  const [sel, setSel] = useState<number | null>(initial ?? null)
   const mon = sel !== null ? trainer.team[sel] : null
   const setMon = (i: number, m: Mon) => setTrainer({ ...trainer, team: trainer.team.map((x, k) => (k === i ? m : x)) })
   const swap = (a: number, b: number) => {
@@ -210,14 +51,16 @@ export function TeamPanel({ trainer, setTrainer, onClose }: PanelProps) {
   }
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className={mon && sel !== null ? 'panel modal wide' : ''} style={mon && sel !== null ? undefined : { background: '#0c0c10', padding: 8, borderRadius: 10, boxShadow: '0 8px 40px rgba(0,0,0,.6)' }} onClick={(e) => e.stopPropagation()}>
+      <div className={mon && sel !== null ? 'sx-modal' : ''} style={mon && sel !== null ? undefined : { background: '#0c0c10', padding: 8, borderRadius: 10, boxShadow: '0 8px 40px rgba(0,0,0,.6)' }} onClick={(e) => e.stopPropagation()}>
         {mon && sel !== null ? (
           <>
-            <Summary mon={mon} onChange={(m) => setMon(sel, m)} onBack={() => setSel(null)} />
-            <div className="btn-row">
-              <button onClick={() => swap(sel, sel - 1)} disabled={sel === 0}>Move up</button>
-              <button onClick={() => swap(sel, sel + 1)} disabled={sel >= trainer.team.length - 1}>Move down</button>
-            </div>
+            <Summary
+              mon={mon} onChange={(m) => setMon(sel, m)} onBack={() => (initial != null ? onClose() : setSel(null))}
+              footer={<>
+                <button className="sx-btn ghost" onClick={() => swap(sel, sel - 1)} disabled={sel === 0}>↑</button>
+                <button className="sx-btn ghost" onClick={() => swap(sel, sel + 1)} disabled={sel >= trainer.team.length - 1}>↓</button>
+              </>}
+            />
           </>
         ) : (
           <>

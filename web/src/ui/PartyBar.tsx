@@ -7,7 +7,7 @@ import { useUiUrl } from './CmdButton'
  * Your six Pokémon on the right side of the screen (empty places included), like the party bar of PokeMMO: icon, level and HP bar.
  * Drag a Pokémon onto another place to swap them (mouse or finger); a click opens the team screen. The first place is your follower.
  */
-export default function PartyBar({ team, onOpen, onReorder, hidden }: { team: Mon[]; onOpen: () => void; onReorder: (from: number, to: number) => void; hidden?: boolean }) {
+export default function PartyBar({ team, onOpen, onReorder, hidden }: { team: Mon[]; onOpen: (slot?: number) => void; onReorder: (from: number, to: number) => void; hidden?: boolean }) {
   const slots = Array.from({ length: 6 }, (_, i) => team[i] ?? null)
   // the game's own party panels (picture 126 x 43 of the party screen) when the game file is imported; scaled to fit the corner of the screen
   const normalArt = useUiUrl('screen:party:5')
@@ -37,7 +37,7 @@ export default function PartyBar({ team, onOpen, onReorder, hidden }: { team: Mo
     drag.current = null
     setDragging(null)
     if (!d) return
-    if (!d.moved) { onOpen(); return }
+    if (!d.moved) { onOpen(d.from); return }
     const to = slotAt(e.clientX, e.clientY)
     if (to !== null && to !== d.from && team[to]) onReorder(d.from, to)
   }
@@ -46,7 +46,7 @@ export default function PartyBar({ team, onOpen, onReorder, hidden }: { team: Mo
     <div className={`party-bar ${hidden ? 'hidden' : ''}`} onPointerMove={move} onPointerUp={up} onPointerCancel={() => { drag.current = null; setDragging(null) }}>
       {slots.map((m, i) => {
         const box: React.CSSProperties | undefined = art ? { width: 126 * pk, height: 43 * pk, padding: 0, border: 'none', borderRadius: 0, boxShadow: i === 0 ? 'inset 3px 0 0 #ffd84a' : 'none', imageRendering: 'pixelated' } : undefined
-        if (!m) return <button key={i} data-slot={i} className="party-slot empty" onClick={onOpen} aria-label="empty place" style={art ? { ...box, background: `url(${emptyArt}) 0 0 / 100% 100% no-repeat`, opacity: 0.4 } : undefined} />
+        if (!m) return <button key={i} data-slot={i} className="party-slot empty" onClick={() => onOpen()} aria-label="empty place" style={art ? { ...box, background: `url(${emptyArt}) 0 0 / 100% 100% no-repeat`, opacity: 0.4 } : undefined} />
         const max = maxHp(m)
         const f = Math.max(0, Math.min(1, m.hp / max))
         const color = m.hp <= 0 ? '#777' : f > 0.5 ? '#2fdc5a' : f > 0.2 ? '#f0b000' : '#ee3d5e'

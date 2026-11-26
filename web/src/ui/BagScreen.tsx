@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { ITEMS, ITEM_LIST, type ItemDef } from '../data/items'
 import { DsScreen, DsText, dsK } from './DsScreen'
 import ItemIcon from './ItemIcon'
-import { itemDesc, useLang } from '../i18n'
+import { itemDesc, shortDesc, trText, useLang } from '../i18n'
+import FontText from './FontText'
 
 export const POCKETS = [
   { name: 'Items', bg: 'bag:dark', kinds: ['stone', 'held', 'passive'] },
@@ -48,7 +49,8 @@ export default function BagScreen({ bag, pockets, canUse, onUse, onClose, only, 
             <DsText x={6} y={4} K={K} size={8}>{cur.name}</DsText>
             <DsText x={150} y={4} w={56} K={K} size={8} align="right">x{bag[cur.id]}</DsText>
             <span style={{ position: 'absolute', left: 6 * K, top: 14 * K }}><ItemIcon name={cur.id} size={24 * K} /></span>
-            <div style={{ position: 'absolute', left: 34 * K, top: 14 * K, width: 170 * K, color: '#fff', fontWeight: 600, fontSize: 7 * K, lineHeight: 1.3, textShadow: '1px 1px 0 rgba(0,0,0,.55)' }}>{itemDesc(cur.name, cur.desc)}{describe?.(cur) ? ` ${describe(cur)}` : ''}</div>
+            {describe?.(cur) && <DsText x={70} y={4} w={76} K={K} size={7} align="right" color="#ffd84a">{describe(cur)!}</DsText>}
+            <div style={{ position: 'absolute', left: 34 * K, top: 14 * K, width: 170 * K }}><FontText text={trText(shortDesc(itemDesc(cur.name, cur.desc)))} font={1} k={K} maxWidth={168} color="#ffffff" shadow="#40404c" /></div>
           </>
         ) : (
           <DsText x={8} y={20} K={K} size={7.5}>{bag && Object.values(bag).some((n) => n > 0) ? 'Nothing in this pocket.' : 'Your bag is empty. Look for Poké Balls on the ground!'}</DsText>

@@ -799,6 +799,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
       el.src = frames[frame]; el.style.display = 'block'
       el.style.width = `${size * sc}px`
       el.style.filter = dark < 1 ? `brightness(${dark})` : ''
+      el.style.transformOrigin = '50% 92%' // (the ball rocks on its bottom: it swings from side to side, it does not spin in place)
       el.style.transform = `translate(${x * sc - (size * sc) / 2}px, ${y * sc - (size * sc) / 2}px) rotate(${rot}deg)`
     }
     const foeEl = document.querySelector<HTMLElement>('.stage-sprite[data-mon="foe"]')
@@ -836,7 +837,8 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
     for (let i = 0; i < shakes; i++) {
       onShake(i)
       void music.playSeq(1384)
-      await tween(34, (k) => draw(ground.x, ground.y, 0, Math.sin(k * Math.PI * 2) * -26 * (k < 0.5 ? 1 : 1)))
+      // one shake = it tips to the left, comes back, tips to the right, comes back (the game's own shake animation is in its program code, not in the effect files; the pauses after it are from the script)
+      await tween(44, (k) => draw(ground.x, ground.y, 0, Math.sin(k * Math.PI * 2) * -32))
       await wait(i === 0 ? 31 : i === 1 ? 36 : 41)
     }
     if (caught) { // click: the ball darkens and stars fly out
@@ -1015,7 +1017,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
             canUse={(d) => (d.kind === 'ball' && kind === 'wild') || d.kind === 'heal'}
             onUse={(id) => { setMode('wait'); if (ITEMS[id].kind === 'ball') throwBall(id); else usePotion(id) }}
             onClose={() => setMode('menu')}
-            describe={(d) => (d.kind === 'ball' && foeCopies[0] && s().foeActive ? `Catch chance about ${Math.round(catchChance({ ...foeCopies[0], hp: s().foeActive!.hp }, d.ballBonus ?? 1, legendaryNames.has(foeCopies[0].species)) * 100)}%.` : null)}
+            describe={(d) => (d.kind === 'ball' && foeCopies[0] && s().foeActive ? `Catch rate ${Math.round(catchChance({ ...foeCopies[0], hp: s().foeActive!.hp }, d.ballBonus ?? 1, legendaryNames.has(foeCopies[0].species)) * 100)}%` : null)}
           />
         )}
       </div>

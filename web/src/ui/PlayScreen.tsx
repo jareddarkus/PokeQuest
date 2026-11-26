@@ -18,7 +18,7 @@ import { buildCustomVisuals, type CustomWorld } from '../world/customWorld'
 import { fetchPublishedWorld } from '../world/publish'
 import { applyCustomEvents } from '../world/applyEvents'
 import { busyLine, leaderLine, lossLine, preBattleLine } from '../data/npcLines'
-import { BagPanel, PcPanel, TeamPanel } from './MenuPanels'
+import { BagPanel, CaughtPanel, PcPanel, TeamPanel } from './MenuPanels'
 import SettingsPanel from './SettingsPanel'
 import StarterPick from './StarterPick'
 import MenuButton from './MenuButton'
@@ -70,6 +70,8 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
   collapseRef.current = collapseOn
   const [menuOpen, setMenuOpen] = useState(false)
   const [panel, setPanel] = useState<null | 'settings' | 'team' | 'bag' | 'pc' | 'chat'>(null)
+  const [teamSel, setTeamSel] = useState<number | null>(null) // a Pokémon clicked in the side bar opens its summary straight away
+  const [caughtMon, setCaughtMon] = useState<Mon | null>(null) // right after a catch: its summary
   const [toast, setToast] = useState<string | null>(null)
   // a trainer (or gym leader) talks before the battle: { who, line, then }
   const [speech, setSpeech] = useState<null | { who: string; line: string; then: () => void }>(null)
@@ -244,6 +246,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
   startDuelRef.current = startDuel
 
   const endBattle = (outcome: BattleOutcome, t: Trainer) => {
+    const before = trainerRef.current
     setTrainer(t)
     const b = battleRef.current
     setBattle(null)
@@ -253,7 +256,12 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
       if (b.npcId) { defeatedNpcs.current.add(b.npcId); handleRef.current?.defeatNpc(b.npcId); say(`${b.name ?? 'Trainer'}: “${lossLine(b.npcId)}”`) }
       b.onWin?.()
     }
-    if (outcome === 'caught') say('Gotcha! The Pokémon joined you (see Team or PC).')
+    if (outcome === 'caught') {
+      say('Gotcha! The Pokémon joined you (see Team or PC).')
+      const had = new Set([...before.team, ...before.pc].map((m) => m.uid))
+      const c = [...t.team, ...t.pc].find((m) => !had.has(m.uid))
+      if (c) setCaughtMon(c) // its summary window, like the game after a catch
+    }
     if (b?.pvp) { // a duel against another player: the loser is out of the match
       duelPending.current = null
       if (outcome === 'lose') { eliminatedRef.current = true; setEliminated(true); busySender.current?.duel({ type: 'eliminated' }) }
@@ -448,7 +456,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
         <MenuButton icon={9} label="Menu" badge={menuOpen || chatOpen ? 0 : chat.unread} onClick={() => setMenuOpen((o) => !o)} />
         {menuOpen && (
           <>
-            <MenuButton icon={12} label="Team" onClick={() => { setPanel('team'); setMenuOpen(false) }} />
+            <MenuButton icon={12} label="Team" onClick={() => { setTeamSel(null); setPanel('team'); setMenuOpen(false) }} />
             <MenuButton icon={7} label="Bag" onClick={() => { setPanel('bag'); setMenuOpen(false) }} />
             <MenuButton icon={6} label="PC" onClick={() => { setPanel('pc'); setMenuOpen(false) }} />
             <MenuButton icon={5} label="Chat" badge={chat.unread} onClick={() => { setChatOpen((o) => !o); setMenuOpen(false) }} />
@@ -458,7 +466,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
         )}
       </div>
 
-      <PartyBar hidden={menuOpen} team={trainer.team} onOpen={() => setPanel('team')} onReorder={(a, b) => { const team = [...trainerRef.current.team]; if (a === b || !team[a] || !team[b]) return; [team[a], team[b]] = [team[b], team[a]]; setTrainer({ ...trainerRef.current, team }) }} />
+      <PartyBar hidden={menuOpen} team={trainer.team} onOpen={(slot) => { setTeamSel(slot ?? null); setPanel('team') }} onReorder={(a, b) => { const team = [...trainerRef.current.team]; if (a === b || !team[a] || !team[b]) return; [team[a], team[b]] = [team[b], team[a]]; setTrainer({ ...trainerRef.current, team }) }} />
 
       {waiting && <div className="match-wait panel" style={hudFrame ?? undefined}><strong>Get ready!</strong><span>The match begins in {Math.max(0, Math.ceil((t0 - now) / 1000))} seconds. Everybody is picking a starter…</span></div>}
 
@@ -479,8 +487,9 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
       {!battle && <MiniMap world={world} getMe={() => handleRef.current?.getPos() ?? null} others={playersVisible} radius={radius} collapseOn={collapseOn} mobile={mobile} />}
       {!battle && <ChatDock chat={chat} canChat={!!chatUser} open={chatOpen} setOpen={setChatOpen} />}
       {panel === 'settings' && <SettingsPanel settings={settings} onChange={onSettings} onClose={() => setPanel(null)} onCustomize={onCustomize} />}
-      {panel === 'team' && <TeamPanel trainer={trainer} setTrainer={setTrainer} onClose={() => setPanel(null)} onMessage={say} />}
+      {panel === 'team' && <TeamPanel initial={teamSel} trainer={trainer} setTrainer={setTrainer} onClose={() => setPanel(null)} onMessage={say} />}
       {panel === 'bag' && <BagPanel trainer={trainer} setTrainer={setTrainer} onClose={() => setPanel(null)} onMessage={say} />}
+      {caughtMon && <CaughtPanel mon={caughtMon} onClose={() => setCaughtMon(null)} />}
       {panel === 'pc' && <PcPanel trainer={trainer} setTrainer={setTrainer} onClose={() => setPanel(null)} onMessage={say} />}
 
       {pmenu && pmenu.name !== null && (

@@ -2,7 +2,7 @@
 // A script = a header (the number of variants, then 14 offsets per variant) followed by commands: a 16-bit command number and 32-bit arguments.
 // Command numbers and argument counts: the public decompilation of Pokémon Black 2 / White 2 (include/asm/btlv_effvm.inc).
 
-const ARGS: number[] = [5, 10, 6, 6, 2, 0, 1, 11, 15, 11, 10, 1, 11, 13, 11, 13, 10, 10, 7, 9, 6, 7, 6, 6, 6, 4, 2, 5, 2, 2, 7, 1, 5, 8, 2, 1, 1, 6, 6, 2, 1, 6, 5, 2, 7, 7, 7, 7, 2, 5, 1, 2, 9, 1, 8, 9, 1, 1, 1, 4, 4, 3, 1, 1, 2, 3, 0, 7, 1, 6, 3, 0, 1, 0, 1, 1, 1, 0]
+export const ARGS: number[] = [5, 10, 6, 6, 2, 0, 1, 11, 15, 11, 10, 1, 11, 13, 11, 13, 10, 10, 7, 9, 6, 7, 6, 6, 6, 4, 2, 5, 2, 2, 7, 1, 5, 8, 2, 1, 1, 6, 6, 2, 1, 6, 5, 2, 7, 7, 7, 7, 2, 5, 1, 2, 9, 1, 8, 9, 1, 1, 1, 4, 4, 3, 1, 1, 2, 3, 0, 7, 1, 6, 3, 0, 1, 0, 1, 1, 1, 0]
 const FIRST_EFFECT = 0x231 // effect numbers below this are moves
 
 export type Side = 'me' | 'foe'

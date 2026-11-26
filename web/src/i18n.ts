@@ -167,7 +167,7 @@ const PATTERNS: Array<[RegExp, string | ((...m: string[]) => string)]> = [
   [/^Team (\d+)\/(\d+) fit · (\d+) Poké Balls?$/, 'Equipo $1/$2 en forma · $3 Poké Balls'], [/^The match begins in (\d+) seconds\. Everybody is picking a starter…$/, 'La partida empieza en $1 segundos. Todos están eligiendo un inicial…'],
   [/^Gym Leader (.+)$/, 'Líder de gimnasio $1'], [/^Trainer (.+)$/, 'Entrenador $1'], [/^(.+) nods: you already beat this gym\.$/, '$1 asiente: ya has vencido este gimnasio.'],
   [/^You beat (.+)! You were taken to ring (\d+)\.$/, '¡Has vencido a $1! Has sido llevado al anillo $2.'], [/^Choose (.+)$/, 'Elegir a $1'], [/^Use (.+) on…$/, 'Usar $1 en…'],
-  [/^Catch chance about (\d+)%\.$/, 'Probabilidad de captura: aprox. $1%.'], [/^(\d+) players?$/, '$1 jugadores'], [/^Exp (\d+)$/, 'Exp. $1'], [/^Next lv\. (\d+)$/, 'Sig. nv. $1'], [/^Lv ?(\d+)$/, 'Nv$1'], [/^Lv\. ?(\d+)$/, 'Nv. $1'], [/^Lv (\d+) · /, 'Nv $1 · '], [/^Exp (\d+)  next (\d+)$/, 'Exp $1  siguiente $2'], [/^EXP (\d+)  next (\d+)$/, 'EXP $1  siguiente $2'],
+  [/^Catch rate (\d+)%$/, 'Captura $1%'], [/^(\d+) players?$/, '$1 jugadores'], [/^Exp (\d+)$/, 'Exp. $1'], [/^Next lv\. (\d+)$/, 'Sig. nv. $1'], [/^Lv ?(\d+)$/, 'Nv$1'], [/^Lv\. ?(\d+)$/, 'Nv. $1'], [/^Lv (\d+) · /, 'Nv $1 · '], [/^Exp (\d+)  next (\d+)$/, 'Exp $1  siguiente $2'], [/^EXP (\d+)  next (\d+)$/, 'EXP $1  siguiente $2'],
   [/^(.+) nature$/, 'Naturaleza $1'], [/^Power (\d+)$/, 'Potencia $1'], [/^Pow (\d+|—)$/, 'Pot. $1'], [/^no power$/, 'sin potencia'],
   [/^Trainer (\S+)$/, 'Entrenador $1'], [/^Team \((\d+)\/6\)$/, 'Equipo ($1/6)'], [/^Your team \((\d+)\/6\)$/, 'Tu equipo ($1/6)'], [/^BOX (\d+)$/, 'CAJA $1'],
 ]
@@ -286,5 +286,12 @@ const D = esDesc as { moves: Record<string, string>; items: Record<string, strin
 /** What a move does: the official Spanish text, or the short English description. */
 export const moveDesc = (move: string): string => (lang === 'es' ? D.moves[move] : undefined) ?? Dex.moves.get(move).shortDesc ?? ''
 export const itemDesc = (item: string, fallback: string): string => (lang === 'es' ? D.items[item] : undefined) ?? fallback
+/** A description cut short like the games' own item texts: whole sentences up to about 100 characters (the newest games' texts run on for four lines). */
+export function shortDesc(text: string, max = 100): string {
+  const parts = text.replace(/\s+/g, ' ').trim().match(/[^.!?]+[.!?]+(\s|$)|[^.!?]+$/g) ?? [text]
+  let out = ''
+  for (const p of parts) { const t = p.trim(); if (!out) out = t; else if ((out + ' ' + t).length <= max) out += ' ' + t; else break }
+  return out
+}
 export const abilityDesc = (ability: string): string => (lang === 'es' ? D.abilities[ability] : undefined) ?? Dex.abilities.get(ability).shortDesc ?? ''
 export const CATEGORY: Record<string, string> = { Physical: 'Físico', Special: 'Especial', Status: 'Estado' }
