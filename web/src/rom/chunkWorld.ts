@@ -19,6 +19,10 @@ export interface BuiltWorld {
   makeBuilding: (pack: number, model: number) => { obj: THREE.Group; w: number; d: number; h: number } | null
   /** a picture of the map textures by name (e.g. 'grass01ax'), as a three.js texture; `repeat` = it tiles; null when no map piece uses it */
   textureNamed: (name: string, repeat: boolean, score?: (r: number, g: number, b: number) => number) => THREE.DataTexture | null
+  /** the names of all the map pictures the game file gave us (for the world editor's palette) */
+  textureNames: () => string[]
+  /** the building packs: how many models each has (for the world editor's palette) */
+  packModels: () => Array<{ pack: number; count: number }>
   /** 1 = a path tile of the meadow (set by game/meadow.ts) */
   pathMask?: Uint8Array
 }
@@ -213,5 +217,7 @@ export function buildChunkWorld(data: WorldData): BuiltWorld {
     return out
   }
   if (import.meta.env.DEV) (globalThis as { __pqTex?: () => string[] }).__pqTex = () => [...new Set(Object.values(data.textures).flatMap((raw) => readTexFile(raw)?.texs.map((x) => x.name) ?? []))]
-  return { group, size, ground, height, waterY, uniforms, makeBuilding, textureNamed }
+  const textureNames = () => [...new Set(Object.values(data.textures).flatMap((raw) => readTexFile(raw)?.texs.map((x) => x.name) ?? []))].sort()
+  const packModels = () => Object.keys(data.packs ?? {}).map((k) => { const raw = data.packs?.[Number(k)]; const parsed = raw ? parsePack(raw.bld) : null; return { pack: Number(k), count: parsed ? parsed.models.length : 0 } })
+  return { group, size, ground, height, waterY, uniforms, makeBuilding, textureNamed, textureNames, packModels }
 }

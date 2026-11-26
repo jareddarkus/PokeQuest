@@ -136,7 +136,7 @@ const NPC_NAMES = [
  * Builds the playable island from the ground tiles of the real map chunks.
  * `ground` has SIZE*SIZE tile codes (Water / Grass / Tall / Tree = blocked ...).
  */
-export function generateWorld(seed: number, ground: Uint8Array): World {
+export function generateWorld(seed: number, ground: Uint8Array, opts: { barriers?: boolean } = {}): World {
   const rng = mulberry32(seed)
   const tiles = new Uint8Array(ground)
 
@@ -148,7 +148,7 @@ export function generateWorld(seed: number, ground: Uint8Array): World {
       if (d > RADIUS) tiles[i] = T.Water
       else {
         const fl = Math.floor(d)
-        if (fl === RING_INNER[0] - 1 || fl === RING_INNER[1] - 1 || fl === RING_INNER[2] - 1) tiles[i] = T.Cliff
+        if (opts.barriers !== false && (fl === RING_INNER[0] - 1 || fl === RING_INNER[1] - 1 || fl === RING_INNER[2] - 1)) tiles[i] = T.Cliff
       }
     }
   }

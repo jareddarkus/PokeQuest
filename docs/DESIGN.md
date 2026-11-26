@@ -377,3 +377,10 @@ Seen in the recording but NOT done: the trainers' battle sprites (the foe traine
 - Catch: the ball is drawn from the eight pictures of the ball's effect file (48 + 4 per ball kind), timings/sounds from the game's script 0x23a (throw 35 frames, open, pulled in, falls and bounces, shakes with 65/70/75 frame pauses, click or break free).
 - Dev tools: ?blocked paints the tiles you cannot walk on red; window.__pqWorld, __pqTp(x, y).
 - Open: floating houses / unwalkable places / battle shadows (need examples).
+
+## Round 13 — the world editor
+- Open the site with `?editor` (e.g. https://jareddarkus.github.io/PokeQuest/?editor). Needs the game file imported (uses the map pictures and building models from it).
+- Tools: paint the ground with any of the game's map pictures (searchable palette), set a tile's kind (grass, tall grass, sand/path, water, blocked, cliff), raise/lower the ground in steps (walls drawn automatically), place the game's 3D building models (thumbnails per pack, R turns them) and pines, erase objects, undo/redo (Ctrl+Z / Ctrl+Y), show blocked tiles, export/import a file, "Probar mundo" plays it as the practice island.
+- The world is saved in this browser (localStorage `pq.world.custom.v1`, auto every 4 s) — 160 x 160 tiles like the island. Code: `src/world/customWorld.ts` (data, saving, drawing), `src/ui/WorldEditor.tsx`.
+- In the game the custom world replaces the real map; gyms, trainers and items are still placed by `generateWorld`; "Muros de anillo" adds the ring walls of the Battle Royale (off by default).
+- Not done yet: publishing a world for friends (needs a Supabase table + owner check) — until then only this browser sees it; objects cannot be moved after placing (erase + place); the import step only keeps the 5 x 5 map pieces and 10 building packs around the island.

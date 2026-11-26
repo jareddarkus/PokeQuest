@@ -16,6 +16,8 @@ import LobbyScreen from './ui/LobbyScreen'
 import type { MatchInfo } from './net/useLobby'
 import { setLang, startTranslator } from './i18n'
 import TitleDragon from './ui/TitleDragon'
+import WorldEditor from './ui/WorldEditor'
+import type { CustomWorld } from './world/customWorld'
 import './App.css'
 
 type Screen = 'menu' | 'customize' | 'practice' | 'lobby' | 'match'
@@ -74,6 +76,9 @@ export default function App() {
   const [ready, setReady] = useState(false)
   const [username, setUsername] = useState<string | null>(null)
   const [screen, setScreen] = useState<Screen>(devJump ? 'practice' : 'menu')
+  // the world editor (open the page with ?editor): the world you test is played like the practice island
+  const [editing, setEditing] = useState(() => new URLSearchParams(location.search).has('editor'))
+  const [testWorld, setTestWorld] = useState<CustomWorld | null>(null)
   const [showSettings, setShowSettings] = useState(false)
   const [match, setMatch] = useState<MatchInfo | null>(null)
   const [rom, setRom] = useState<'checking' | 'missing' | 'ready'>('checking')
@@ -117,6 +122,14 @@ export default function App() {
   const startMode = (mode: Screen) => setScreen(lookDone ? mode : 'customize')
 
   if (!ready) return null
+  if (editing) {
+    if (rom === 'checking') return <div className="fullscreen center menu-bg"><div className="panel card"><p className="sub">Checking the game file saved in this browser…</p><ProgressBar indeterminate p={{ text: 'Checking…', frac: 0 }} /></div></div>
+    if (rom === 'missing') return <RomGate onReady={() => setRom('ready')} />
+    if (testWorld) {
+      return <PlayScreen key={testWorld.nextId + testWorld.name} custom={testWorld} username={username} look={look} settings={settings} onSettings={setSettings} onExit={() => setTestWorld(null)} onCustomize={() => {}} />
+    }
+    return <WorldEditor onExit={() => { setEditing(false); history.replaceState(null, '', location.pathname) }} onPlay={setTestWorld} />
+  }
   if (!session && !guest) return <><TitleDragon /><Login onGuest={() => setGuest(true)} /></>
   if (rom === 'checking') return <div className="fullscreen center menu-bg"><div className="panel card"><p className="sub">Checking the game file saved in this browser…</p><ProgressBar indeterminate p={{ text: 'Checking…', frac: 0 }} /></div></div>
   if (rom === 'missing') return <RomGate onReady={() => setRom('ready')} />

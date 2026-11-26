@@ -14,6 +14,7 @@ import {
 } from '../game/world'
 import BattleScreen, { CHAR_MS, TypedText, type BattleKind, type BattleOutcome, type PvpLink } from './BattleScreen'
 import { addExtraGrass, buildMeadowVisuals, prepareMeadow } from '../game/meadow'
+import { buildCustomVisuals, type CustomWorld } from '../world/customWorld'
 import { busyLine, leaderLine, lossLine, preBattleLine } from '../data/npcLines'
 import { BagPanel, PcPanel, TeamPanel } from './MenuPanels'
 import SettingsPanel from './SettingsPanel'
@@ -39,6 +40,8 @@ interface Props {
   onSettings: (patch: Partial<Settings>) => void
   onExit: () => void
   onCustomize: () => void
+  /** a world made in the editor (instead of the normal island) */
+  custom?: CustomWorld | null
 }
 
 interface ActiveBattle { id?: number; kind: BattleKind; foe: Mon[]; name?: string; onWin?: () => void; npcId?: string; pvp?: PvpLink }
@@ -470,14 +473,25 @@ export default function PlayScreen(props: Props) {
       const seed = props.royale ? props.royale.seed : Math.floor(Math.random() * 1e9)
       setProg({ text: 'Making the meadow, paths and forests…', frac: 0.65, step: 3, steps: 5, done: 0, total: 1, unit: 'step' })
       await pause()
-      prepareMeadow(built, seed) // ring 1 = a meadow (lots of tall grass, a ring road and paths, a beach)
-      setProg({ text: 'Placing gyms, trainers and items…', frac: 0.8, step: 4, steps: 5, done: 0, total: 1, unit: 'step' })
-      await pause()
-      const world = generateWorld(seed, built.ground)
-      const extra = addExtraGrass(world, built, seed) // and more tall grass in the inner rings
-      setProg({ text: 'Drawing the island…', frac: 0.9, step: 5, steps: 5, done: 0, total: 1, unit: 'step' })
-      await pause()
-      built.group.add(buildMeadowVisuals(world, built, extra))
+      let world: World
+      if (props.custom) { // a world from the editor: its own ground, heights and models replace the real map
+        setProg({ text: 'Drawing your world…', frac: 0.8, step: 4, steps: 5, done: 0, total: 1, unit: 'step' })
+        await pause()
+        built.group.clear()
+        built.uniforms.uHide.value = 9999
+        const vis = buildCustomVisuals(props.custom, built)
+        world = generateWorld(seed, built.ground, { barriers: props.custom.barriers })
+        built.group.add(vis.group)
+      } else {
+        prepareMeadow(built, seed) // ring 1 = a meadow (lots of tall grass, a ring road and paths, a beach)
+        setProg({ text: 'Placing gyms, trainers and items…', frac: 0.8, step: 4, steps: 5, done: 0, total: 1, unit: 'step' })
+        await pause()
+        world = generateWorld(seed, built.ground)
+        const extra = addExtraGrass(world, built, seed) // and more tall grass in the inner rings
+        setProg({ text: 'Drawing the island…', frac: 0.9, step: 5, steps: 5, done: 0, total: 1, unit: 'step' })
+        await pause()
+        built.group.add(buildMeadowVisuals(world, built, extra))
+      }
       if (import.meta.env.DEV) (globalThis as { __pqWorld?: unknown }).__pqWorld = { world, built } // developer hook
       if (!live) return
       setProg({ text: 'Ready!', frac: 1, step: 5, steps: 5, done: 1, total: 1, unit: 'step' })
