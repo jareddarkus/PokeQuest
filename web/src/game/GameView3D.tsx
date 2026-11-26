@@ -39,6 +39,12 @@ interface Props {
   follower?: { species: string; shiny: boolean } | null
   /** trainers that other players are fighting right now: character id -> name of the player (they stand still and a Poké Ball spins above both) */
   busy?: () => Map<string, string>
+  /** an eliminated player: where the camera looks (a player to watch); null = your own place */
+  spectate?: () => { x: number; y: number } | null
+  /** names of the players that are in a battle right now (a Poké Ball spins above them) */
+  fighting?: () => Set<string>
+  /** the colour of a player's name (the label above the head) */
+  nameColor?: (name: string) => string
   /** false when all your Pokémon have fainted: trainers do not challenge you then, so you can still walk (to find a Revive) */
   canBattle?: boolean
 }
@@ -177,7 +183,7 @@ function labelTexture(text: string, bg: string, fg = '#fff'): THREE.CanvasTextur
   return t
 }
 
-function nameTexture(text: string): THREE.CanvasTexture {
+function nameTexture(text: string, color = '#fff'): THREE.CanvasTexture {
   const c = document.createElement('canvas')
   c.width = 256
   c.height = 48
@@ -186,7 +192,7 @@ function nameTexture(text: string): THREE.CanvasTexture {
   const w = Math.min(250, ctx.measureText(text).width + 22)
   ctx.fillStyle = 'rgba(0,0,0,0.6)'
   ctx.fillRect(128 - w / 2, 6, w, 36)
-  ctx.fillStyle = '#fff'
+  ctx.fillStyle = color
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
   ctx.fillText(text, 128, 25)
@@ -571,6 +577,7 @@ export default function GameView3D(props: Props) {
     const otherSprites = new Map<string, { body: THREE.Sprite; label: THREE.Sprite; shadow: THREE.Mesh }>()
     let busyMap = new Map<string, string>() // trainers other players are fighting (refreshed every frame)
     const busyBalls = new Map<string, THREE.Sprite>() // the spinning Poké Balls above the fighters
+    let specCam: { x: number; y: number } | null = null // (where the camera is while you watch somebody else)
     const busyMoved = new Set<string>() // trainers that were put next to the player who fights them
     const busyMat = ballMaterial()
     let paused = false
@@ -808,10 +815,16 @@ export default function GameView3D(props: Props) {
       const px = me.fromX + (me.x - me.fromX) * me.t
       const py = me.fromY + (me.y - me.fromY) * me.t
       const ph = heightAt(px + 0.5, py + 0.5)
+      // an eliminated player: the camera follows the player being watched (smoothly), your own character is not drawn
+      const watched = p.spectate?.() ?? null
+      if (watched) { if (!specCam) specCam = { x: watched.x, y: watched.y }; else { specCam.x += (watched.x - specCam.x) * 0.15; specCam.y += (watched.y - specCam.y) * 0.15 } } else specCam = null
+      const cxp = specCam ? specCam.x : px, cyp = specCam ? specCam.y : py
+      const chh = specCam ? heightAt(cxp + 0.5, cyp + 0.5) : ph
+      mySprite.visible = !specCam; myShadow.visible = !specCam
       // the camera first (the characters are placed relative to it)
       const dst = CAM_DISTANCE / Math.max(0.3, p.settings.zoom)
-      camera.position.set(px + 0.5, ph + Math.sin(CAM_PITCH) * dst, py + 0.5 + Math.cos(CAM_PITCH) * dst)
-      camera.lookAt(px + 0.5, ph + 0.6, py + 0.5)
+      camera.position.set(cxp + 0.5, chh + Math.sin(CAM_PITCH) * dst, cyp + 0.5 + Math.cos(CAM_PITCH) * dst)
+      camera.lookAt(cxp + 0.5, chh + 0.6, cyp + 0.5)
       // walking: the foot picture for the first half of a tile, standing for the second half; the foot changes with every tile
       // walking: the foot picture for the first half of a tile, standing for the second half. Running changes its picture only once per
       // tile (half as often as before): foot, upright, other foot, upright ...
@@ -905,6 +918,7 @@ export default function GameView3D(props: Props) {
           const o = others.find((q) => q.id === by)
           if (o) want.set(`pl:${by}`, { x: o.x, y: o.y })
         }
+        for (const name of p.fighting?.() ?? []) { const o = others.find((q) => q.id === name); if (o) want.set(`pl:${name}`, { x: o.x, y: o.y }) }
         for (const [k, pos] of want) {
           let sp = busyBalls.get(k)
           if (!sp) { sp = new THREE.Sprite(busyMat); sp.center.set(0.5, 0); sp.renderOrder = 4; scene.add(sp); busyBalls.set(k, sp) }
@@ -944,7 +958,7 @@ export default function GameView3D(props: Props) {
         if (!e) {
           const body = new THREE.Sprite(charMaterial(o.look, o.dir, 0))
           fit(body)
-          const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: nameTexture(o.name), transparent: true, depthWrite: false, depthTest: false })) // (never hidden behind the character, a tree or a building)
+          const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: nameTexture(o.name, p.nameColor?.(o.name)), transparent: true, depthWrite: false, depthTest: false })) // (never hidden behind the character, a tree or a building)
           label.renderOrder = 12
           label.center.set(0.5, 0)
           label.scale.set(2.4, 0.45, 1)

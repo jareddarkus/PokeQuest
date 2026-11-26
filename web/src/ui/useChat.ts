@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '../supabase'
 import { addFriend, listFriends, listenWhispers, myUserId, removeFriend, sendWhisper } from '../net/social'
 
-export interface ChatMessage { id: string; from: string; text: string; at: number; mine: boolean }
+export interface ChatMessage { id: string; from: string; text: string; at: number; mine: boolean; /** an announcement of the match (grey, no name) */ system?: boolean }
 
 /** The tab of the global chat; private chats use the other player's name as their tab. */
 export const GLOBAL = 'Global'
@@ -83,8 +83,10 @@ export function useChat(username: string | null, open: boolean) {
     return true
   }, [username, add])
 
+  /** An announcement of the match: a grey line in the global chat (only on this screen, never stored). */
+  const addSystem = useCallback((text: string) => { const at = Date.now(); add(GLOBAL, { id: `sys-${at}-${Math.random().toString(36).slice(2, 7)}`, from: '', text, at, mine: false, system: true }) }, [add])
   const refreshFriends = useCallback(() => { void listFriends().then(setFriends) }, [])
   const friendAction = useCallback(async (name: string, on: boolean) => { const ok = on ? await addFriend(name) : await removeFriend(name); refreshFriends(); return ok }, [refreshFriends])
   const unread = Object.values(unreadBy).reduce((a, b) => a + b, 0)
-  return { byTab, tabs, active, setActive, openWhisper, closeTab, messages: byTab[GLOBAL] ?? [], status, unread, unreadBy, send, friends, friendAction, refreshFriends }
+  return { byTab, tabs, active, setActive, openWhisper, closeTab, messages: byTab[GLOBAL] ?? [], status, unread, unreadBy, send, addSystem, friends, friendAction, refreshFriends }
 }

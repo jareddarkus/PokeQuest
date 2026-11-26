@@ -4,7 +4,7 @@ import { GLOBAL, type useChat } from './useChat'
 type Chat = ReturnType<typeof useChat>
 
 /** The chat window in the bottom left corner: Global, friends and private chats (tabs). Click a name to whisper to that player. */
-export default function ChatDock({ chat, canChat, open, setOpen }: { chat: Chat; canChat: boolean; open: boolean; setOpen: (o: boolean) => void }) {
+export default function ChatDock({ chat, canChat, open, setOpen, colorOf }: { chat: Chat; canChat: boolean; open: boolean; setOpen: (o: boolean) => void; colorOf?: (name: string) => string }) {
   const [text, setText] = useState('')
   const endRef = useRef<HTMLDivElement>(null)
   const msgs = chat.byTab[chat.active] ?? []
@@ -37,9 +37,11 @@ export default function ChatDock({ chat, canChat, open, setOpen }: { chat: Chat;
             <div className="chat-log">
               {chat.status !== 'on' && <span className="muted">{chat.status === 'error' ? 'No se pudo conectar el chat.' : 'Conectando…'}</span>}
               {msgs.length === 0 && chat.status === 'on' && <span className="muted">{chat.active === GLOBAL ? 'Aún no hay mensajes. ¡Saluda!' : `Chat privado con ${chat.active}. Escribe el primer mensaje.`}</span>}
-              {msgs.map((m) => (
+              {msgs.map((m) => m.system ? (
+                <div key={m.id} className="chat-msg sys">{m.text}</div>
+              ) : (
                 <div key={m.id} className={`chat-msg ${m.mine ? 'mine' : ''}`}>
-                  {m.mine || m.from === '⚠' ? <b>{m.from}</b> : <b className="chat-name" onClick={() => chat.openWhisper(m.from)} title="Susurrar">{m.from}</b>} <span>{m.text}</span>
+                  {m.mine || m.from === '⚠' ? <b style={colorOf && m.from !== '⚠' ? { color: colorOf(m.from) } : undefined}>{m.from}</b> : <b className="chat-name" style={colorOf ? { color: colorOf(m.from) } : undefined} onClick={() => chat.openWhisper(m.from)} title="Susurrar">{m.from}</b>} <span>{m.text}</span>
                 </div>
               ))}
               <div ref={endRef} />

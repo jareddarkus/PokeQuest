@@ -5,6 +5,7 @@ import { buildChunkWorld, type BuiltWorld } from '../rom/chunkWorld'
 import { loadWorldData } from '../rom/store'
 import { randomLook, type Look } from '../game/character'
 import { OW_TO_CLASS } from '../data/trainerClasses'
+import { useLang } from '../i18n'
 import type { Settings } from '../game/settings'
 import { ENCOUNTER_RATE, groupMon, groupTeam, gymTeam, trainerTeam, wildEncounter } from '../game/encounters'
 import { addItems, emptyTrainer, makeStarter, type Trainer } from '../game/state'
@@ -29,6 +30,7 @@ import PartyBar from './PartyBar'
 import { useFrameStyle } from './DsFrame'
 import ChatDock from './ChatPanel'
 import MiniMap, { useIsMobile } from './MiniMap'
+import { announcementText, nameColor, type Announcement } from '../net/announce'
 import { fakeMon, snapshotOf, summarize, type BattleInfo } from '../battle/spectate'
 import type { BattleEvent } from '../battle/engine'
 import { applyBracket, applyLoss, type BracketMsg, isPaired, makeBracket, newTournament, opponentOf, roundDone, winnersOf } from '../game/tournament'
@@ -126,7 +128,16 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
   const [radius, setRadius] = useState(RADIUS)
   const [trainer, setTrainerState] = useState<Trainer>(() => ({ ...emptyTrainer(), bag: { ...STARTING_BAG } }))
   const trainerRef = useRef(trainer)
-  const setTrainer = (t: Trainer) => { trainerRef.current = t; setTrainerState(t) }
+  const langRef = useRef('en')
+  langRef.current = useLang()
+  const announceRef = useRef<(a: Announcement) => void>(() => {})
+  const showAnnRef = useRef<(a: Announcement) => void>(() => {})
+  const setTrainer = (t: Trainer) => {
+    // a Pokémon of the team that became another species (evolved): announced without saying which one
+    const old = trainerRef.current
+    if (old.team.some((m) => t.team.some((n) => n.uid === m.uid && n.species !== m.species))) announceRef.current({ k: 'evolve', a: username ?? '' })
+    trainerRef.current = t; setTrainerState(t)
+  }
   const [battle, setBattle] = useState<ActiveBattle | null>(null)
   const battleRef = useRef<ActiveBattle | null>(null)
   battleRef.current = battle
@@ -140,6 +151,11 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
   const [chatOpen, setChatOpen] = useState(false)
   const chatUser = username ?? (import.meta.env.DEV && new URLSearchParams(location.search).has('devuser') ? 'DevUser' : null) // (developer test without an account: ?devuser)
   const chat = useChat(chatUser, chatOpen)
+  // announcements of the match (grey lines in the chat): shown here and told to the others (only in a match with other players)
+  showAnnRef.current = (a) => chat.addSystem(announcementText(a, langRef.current === 'es'))
+  announceRef.current = (a) => { if (!royale) return; showAnnRef.current(a); busySender.current?.duel({ type: 'ann', data: a }) }
+  const matchId = royale?.id ?? ''
+  const colorOf = (name: string) => nameColor(name, matchId)
   // clicking players: a menu for another player (friend, whisper, trade), reactions for yourself; trading with a player
   const [pmenu, setPmenu] = useState<null | { name: string | null; x: number; y: number }>(null)
   const [trade, setTradeState] = useState<TradeState | null>(null)
@@ -161,6 +177,10 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
   // online duels at the peak
   const [eliminated, setEliminated] = useState(false)
   const eliminatedRef = useRef(false)
+  const capturedCount = useRef(0)
+  const pushedAt = useRef(0)
+  const prevRing = useRef(0)
+  const goneRings = useRef(new Set<number>())
   const outPlayers = useRef(new Set<string>()) // players that are out of the match
   const duelPending = useRef<string | null>(null)
   // the tournament after the last 5 minutes at the peak (state shared by everybody through messages)
@@ -184,6 +204,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
     onAllPicked: () => { const nt = Date.now() + 1500; if (nt < t0Ref.current) { startRef.current = nt; t0Ref.current = nt; setT0(nt) } }, // everybody is ready: start right away
     onBusy: (npc, by, on) => { if (on) busyNpcs.current.set(npc, { by, until: Date.now() + 9000 }); else busyNpcs.current.delete(npc) },
     onDuel: (m) => {
+      if (m.type === 'ann') { const a = m.data as Announcement; if (a && typeof a.k === 'string') showAnnRef.current(a); return }
       if (m.type === 'eliminated') { outPlayers.current.add(m.from); applyLoss(tour.current, m.from); return }
       if (m.type === 'telim') { const l = (m.data as { loser?: string } | undefined)?.loser; if (typeof l === 'string') { outPlayers.current.add(l); applyLoss(tour.current, l) } return }
       if (m.type === 'bat') { const info = m.data as BattleInfo; if (info && typeof info.host === 'string') batInfo.current.set(m.from, { info, until: Date.now() + 9000 }); return }
@@ -193,7 +214,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
       if (m.type === 'bhist') { if (watching.current === m.from && !battleRef.current) { const d = m.data as { events: BattleEvent[]; info: BattleInfo }; beginSpectate(m.from, d.info, d.events) } return }
       if (m.type === 'bev') { if (watching.current === m.from && Array.isArray(m.data)) { const evs = m.data as BattleEvent[]; specBuf.current.push(...evs); for (const cb of specListeners.current) cb(evs) } return }
       if (m.type === 'tbracket') { gotBracket(m.data as BracketMsg); return }
-      if (m.type === 'tdone') { const c = (m.data as { champion?: string } | undefined)?.champion; if (typeof c === 'string') setChampion(c); return }
+      if (m.type === 'tdone') { const c = (m.data as { champion?: string } | undefined)?.champion; if (typeof c === 'string') { setChampion(c); showAnnRef.current({ k: 'champ', a: c }) } return }
       if (m.type === 'react') { const idx = (m.data as { idx?: number } | undefined)?.idx; if (typeof idx === 'number') handleRef.current?.showEmote(m.from, idx); return }
       if (m.type === 'trade-req') { if (!battleRef.current && !tradeRef.current && !tradeAskRef.current) setTradeAsk(m.from); else busySender.current?.duel({ to: m.from, type: 'trade-no' }); return }
       if (m.type === 'trade-ok') { if (tradeRef.current?.partner === m.from || !tradeRef.current) setTrade({ partner: m.from, mine: null, theirs: null, myAccept: false, theirAccept: false }); return }
@@ -217,6 +238,23 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
   const fakePlayers = useRef<ReturnType<typeof players>>([]) // developer hook: pretend players, to look at their names and fights without a second account
   if (import.meta.env.DEV) (globalThis as { __pqFakePlayers?: unknown; __pqFakeBusy?: unknown }).__pqFakePlayers = fakePlayers
   const playersVisible = () => [...players().filter((o) => !outPlayers.current.has(o.id)), ...fakePlayers.current]
+  // an eliminated player watches the others: the camera follows one of them (arrows to change); only where they are and whether they fight (the spinning ball) can be seen
+  const [watch, setWatch] = useState<string | null>(null)
+  const watchRef = useRef<string | null>(null)
+  const spectatePos = () => {
+    const list = playersVisible()
+    let t = list.find((o) => o.id === watchRef.current)
+    if (!t) { t = list[0]; const id = t?.id ?? null; if (id !== watchRef.current) { watchRef.current = id; setWatch(id) } }
+    return t ? { x: t.x, y: t.y } : null
+  }
+  const stepWatch = (d: 1 | -1) => {
+    const names = playersVisible().map((o) => o.id).sort()
+    if (!names.length) return
+    const i = Math.max(0, names.indexOf(watchRef.current ?? ''))
+    const n = names[(i + d + names.length) % names.length]
+    watchRef.current = n; setWatch(n)
+  }
+  const fightingNow = () => { const set = new Set<string>(); const now = Date.now(); for (const [k, v] of batInfo.current) if (v.until > now) set.add(k); return set }
   const busyMapFn = () => { const m = new Map<string, string>(); const now = Date.now(); if (import.meta.env.DEV) { const fb = (globalThis as { __pqFakeBusyMap?: Map<string, string> }).__pqFakeBusyMap; if (fb) for (const [k, v] of fb) m.set(k, v) }; for (const [k, v] of busyNpcs.current) { if (v.until < now) busyNpcs.current.delete(k); else m.set(k, v.by) } return m }
   // while I fight a trainer, the others see it as busy (repeated, so that late arrivals know too)
   useEffect(() => {
@@ -252,6 +290,12 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
       const pos = handleRef.current?.getPos()
       if (pos) setRing(ringAt(pos.x, pos.y))
       const el = (Date.now() - startRef.current) / 1000
+      if (royale && Date.now() >= t0Ref.current) for (let k = 1; k <= 3; k++) if (el >= k * RULES.ringSeconds + Math.max(1, RULES.fallSeconds) && !goneRings.current.has(k)) { goneRings.current.add(k); showAnnRef.current({ k: 'gone', n: k }) }
+      if (pos && royale && !eliminatedRef.current) { // walking into a ring nearer the peak (higher number): announced (being pushed there by the storm is announced on its own)
+        const rr = ringAt(pos.x, pos.y)
+        if (prevRing.current && rr && rr > prevRing.current && Date.now() - pushedAt.current > 3000 && Date.now() >= t0Ref.current) announceRef.current({ k: 'ring', a: username ?? '', n: rr })
+        if (rr) prevRing.current = rr
+      }
       setClock(collapseInfo(el))
       setRadius(collapseRadius(el))
     }, 250)
@@ -276,12 +320,13 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
     return { x: C, y: C }
   }
 
-  const [elimWhy, setElimWhy] = useState<'duel' | 'wipe'>('duel')
+  const [, setElimWhy] = useState<'duel' | 'wipe'>('duel')
   /** You are out of the match (everybody else is told). */
   const eliminateMe = (why: 'duel' | 'wipe') => {
     eliminatedRef.current = true; setElimWhy(why); setEliminated(true)
     applyLoss(tour.current, username ?? '')
     busySender.current?.duel({ type: 'eliminated' })
+    if (why === 'wipe') announceRef.current({ k: 'elim', a: username ?? '' }) // (a lost duel is announced by the winner, with the score)
   }
   /** Your team fainted. There are no Pokémon Centers: with no Pokémon left that can fight (team and PC) you are out of the match. */
   const blackOut = () => {
@@ -291,6 +336,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
     eliminateMe('wipe')
   }
 
+  if (import.meta.env.DEV) { (globalThis as { __pqElim?: unknown }).__pqElim = () => { eliminatedRef.current = true; setElimWhy('wipe'); setEliminated(true) }; (globalThis as { __pqAnn?: unknown }).__pqAnn = (a: Announcement) => showAnnRef.current(a) } // developer hooks
   if (import.meta.env.DEV) (globalThis as { __pqBlackOut?: unknown }).__pqBlackOut = blackOut // developer hook
 
   /** A Pokémon with all its HP and PP back. */
@@ -325,6 +371,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
       send: (type, data) => busySender.current?.duel({ to: opp, type: 'pvp', data: { t: type, d: data } }),
       listen: (cb) => { pvpListeners.current.add(cb); return () => { pvpListeners.current.delete(cb) } },
     }
+    if (role === 'host') announceRef.current({ k: 'duel', a: username ?? '', b: opp })
     startBattle({ kind: 'trainer', foe: team, name: opp, pvp: link })
   }
   startDuelRef.current = startDuel
@@ -348,6 +395,8 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
       b.onWin?.()
     }
     if (outcome === 'caught') {
+      capturedCount.current += 1
+      announceRef.current({ k: 'catch', a: username ?? '', first: capturedCount.current === 1 })
       say('Gotcha! The Pokémon joined you (see Team or PC).')
       const had = new Set([...before.team, ...before.pc].map((m) => m.uid))
       const c = [...t.team, ...t.pc].find((m) => !had.has(m.uid))
@@ -356,7 +405,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
     if (b?.pvp) { // a duel against another player: the loser is out of the match
       duelPending.current = null
       if (outcome === 'lose') eliminateMe('duel')
-      else if (outcome === 'win') { outPlayers.current.add(b.name ?? ''); applyLoss(tour.current, b.name ?? ''); say(`You beat ${b.name}! They are out of the match.`) }
+      else if (outcome === 'win') { outPlayers.current.add(b.name ?? ''); applyLoss(tour.current, b.name ?? ''); announceRef.current({ k: 'beat', a: username ?? '', b: b.name ?? '', s: t.team.filter((m) => m.hp > 0).length }); say(`You beat ${b.name}! They are out of the match.`) }
       return
     }
     if (outcome === 'lose') blackOut()
@@ -440,6 +489,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
   const gotBracket = (m: BracketMsg) => {
     if (!m || !Array.isArray(m.pairs) || !applyBracket(tour.current, m)) return
     setTourRound(m.round)
+    showAnnRef.current({ k: 'round', n: m.round })
     const me = username ?? ''
     const pair = m.pairs.find(([a, b]) => a === me || b === me)
     if (m.bye === me) say(`Tournament · round ${m.round}: you have no opponent this round, wait for the next one.`)
@@ -457,7 +507,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
       const present = everyone.filter((n) => seen.has(n))
       const iAmBoss = present.length > 0 && [...present].sort()[0] === me
       const announce = (m: BracketMsg) => { busySender.current?.duel({ type: 'tbracket', data: m }); gotBracket(m) }
-      const finish = (c: string) => { T.champion = c; busySender.current?.duel({ type: 'tdone', data: { champion: c } }); setChampion(c) }
+      const finish = (c: string) => { T.champion = c; busySender.current?.duel({ type: 'tdone', data: { champion: c } }); setChampion(c); showAnnRef.current({ k: 'champ', a: c }) }
       if (iAmBoss) {
         if (T.round === 0) { if (present.length >= 2) announce(makeBracket(1, present, T.hadBye)); else finish(present[0]) }
         else if (roundDone(T)) {
@@ -528,6 +578,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
         }
       },
       onGym: (id) => {
+        if (eliminatedRef.current) return
         const g = world.gyms.find((q) => q.id === id)
         if (!g) return
         if (g.center) { // a Pokémon Center: the whole team is healed
@@ -561,6 +612,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
         ))
       },
       onPickup: (id) => {
+        if (eliminatedRef.current) return
         void music.itemGet() // the game's "item found" jingle
         const pos = handleRef.current?.getPos()
         const r = pos ? ringAt(pos.x, pos.y) : 1
@@ -569,17 +621,19 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
         setTrainer({ ...trainerRef.current, bag: addItems(trainerRef.current.bag, items) })
         setToastItems(items); setToast('You found:' + Date.now()) // (the text is drawn from the items; the stamp makes every pick-up a new message)
       },
-      onPlayerClick: (name, x, y) => { if (!battleRef.current && !talking.current) setPmenu({ name, x, y }) },
-      onPushed: (_x, _y, r) => say(`The ground crumbled — you were pushed to ring ${r}!`),
+      onPlayerClick: (name, x, y) => { if (!battleRef.current && !talking.current && !eliminatedRef.current) setPmenu({ name, x, y }) },
+      onPushed: (_x, _y, r) => { pushedAt.current = Date.now(); announceRef.current({ k: 'pushed', a: username ?? '', n: r }); say(`The ground crumbled — you were pushed to ring ${r}!`) },
       onAlert: () => { void music.playSfx('fld:07') }, // a trainer noticed you
       onBump: () => { void music.playSfx('fld:WALL_HIT') },
       onNpcSpotted: (npcId) => {
+        if (eliminatedRef.current) return
         if (defeatedNpcs.current.has(npcId) || busy.current || talking.current || busyNpcs.current.has(npcId)) return
         const npc = world.npcs.find((n) => n.id === npcId)
         if (!npc || npc.custom?.fights === false) return
         npcFight(npc, npcId)
       },
       onNpcTalk: (npcId) => {
+        if (eliminatedRef.current) return
         if (busy.current || talking.current) return
         const npc = world.npcs.find((n) => n.id === npcId)
         if (!npc) return
@@ -634,9 +688,12 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
         busy={busyMapFn}
         events={events}
         handleRef={handleRef}
-        paused={panel !== null || battle !== null || waiting || speech !== null}
+        paused={panel !== null || battle !== null || waiting || speech !== null || eliminated}
+        spectate={eliminated && !champion ? spectatePos : undefined}
+        fighting={fightingNow}
+        nameColor={colorOf}
         canBattle={trainer.team.some((m) => m.hp > 0)}
-        follower={trainer.team[0] && trainer.team[0].hp > 0 ? { species: trainer.team[0].species, shiny: !!trainer.team[0].shiny } : null}
+        follower={!eliminated && trainer.team[0] && trainer.team[0].hp > 0 ? { species: trainer.team[0].species, shiny: !!trainer.team[0].shiny } : null}
       />
 
       <div className="hud-top-left panel" style={hudFrame ?? undefined}>
@@ -700,7 +757,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
         </div>
       )}
       {!battle && <MiniMap world={world} getMe={() => handleRef.current?.getPos() ?? null} others={playersVisible} radius={radius} collapseOn={collapseOn} mobile={mobile} />}
-      {!battle && <ChatDock chat={chat} canChat={!!chatUser} open={chatOpen} setOpen={setChatOpen} />}
+      {!battle && <ChatDock chat={chat} canChat={!!chatUser} open={chatOpen} setOpen={setChatOpen} colorOf={royale ? colorOf : undefined} />}
       {panel === 'settings' && <SettingsPanel settings={settings} onChange={onSettings} onClose={() => setPanel(null)} onCustomize={onCustomize} />}
       {panel === 'team' && <TeamPanel initial={teamSel} trainer={trainer} setTrainer={setTrainer} onClose={() => setPanel(null)} onMessage={say} />}
       {panel === 'bag' && <BagPanel trainer={trainer} setTrainer={setTrainer} onClose={() => setPanel(null)} onMessage={say} />}
@@ -750,9 +807,13 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
       )}
       {eliminated && !champion && !battle && (
         <div className="hud-out panel">
-          <b>You were eliminated</b>
-          <span>{elimWhy === 'wipe' ? 'All your Pokémon fainted and there are no Pokémon Centers. ' : 'You lost a duel. '}You can still watch: click a player that is fighting.</span>
-          <button className="primary" onClick={onExit}>Back to the menu</button>
+          <b>{langRef.current === 'es' ? 'Has sido eliminado' : 'You were eliminated'}</b>
+          <span className="hud-watch">
+            <button onClick={() => stepWatch(-1)} aria-label="Previous player">◀</button>
+            <span>{watch ? <b style={{ color: colorOf(watch) }}>{watch}</b> : (langRef.current === 'es' ? 'Nadie a quien mirar' : 'Nobody to watch')}</span>
+            <button onClick={() => stepWatch(1)} aria-label="Next player">▶</button>
+          </span>
+          <button className="primary" onClick={onExit}>{langRef.current === 'es' ? 'Salir de la partida' : 'Leave the game'}</button>
         </div>
       )}
       {battle && (

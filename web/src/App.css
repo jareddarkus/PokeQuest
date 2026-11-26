@@ -634,3 +634,14 @@ img, canvas, svg { -webkit-user-drag: none; }
 .sc > span { display: block; transform: skewX(14deg); white-space: nowrap; }
 .sc.up { background: #1f9d55; }
 .sc.dn { background: #c0392b; }
+
+/* announcements of the match in the chat: grey, no name */
+.chat-msg.sys { color: #9aa0aa; font-style: normal; }
+
+/* the eliminated player's bar: who is being watched, arrows to change, a button to leave */
+.hud-out { gap: 14px; }
+.hud-watch { display: inline-flex; align-items: center; gap: 10px; }
+.hud-watch > button { padding: 4px 12px; }
+.hud-watch > span { min-width: 110px; text-align: center; }
+.hud-out { bottom: auto; top: 12px; }
+@media (max-width: 640px) { .hud-out { top: 150px; flex-direction: column; gap: 8px; } }
