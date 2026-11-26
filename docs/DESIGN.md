@@ -369,3 +369,11 @@ Seen in the recording but NOT done: the trainers' battle sprites (the foe traine
 - Move info card: a grid (category / power / accuracy / PP), then what the move does, then the game's text. Type plates are cached so the card shows at once.
 - Spanish is Spain Spanish: names come from PokeAPI's es table as it was before its names were mixed with Latin American ones (Látigo, Rapidez, Amortiguador...); the live Showdown names only add what the table lacks.
 - Send-out (ball) follows the game's scripts (effect 0x234 for your Pokémon, 0x239 for a trainer's): ball picture = effect file 60 (Poké Ball), burst = effect file 6, landing = 325; sounds 1382 (throw), 1383 (opens), 1400 (landing); timings in frames (60/s). Not verified at full speed: the test pane runs animations slowly.
+
+## Round 12
+- Tall grass / paths vanished while the island collapses: the clip shader used the wrong position for pictures drawn as many copies (instanced). Fixed in rom/mapModel.ts.
+- Grass cover over a character in tall grass: the stacked leaf pictures (same as the map grass); the game's tuft effect only while stepping in.
+- Meadow paths: outer corners are rounded (the grass edge turns the corner in a curve).
+- Catch: the ball is drawn from the eight pictures of the ball's effect file (48 + 4 per ball kind), timings/sounds from the game's script 0x23a (throw 35 frames, open, pulled in, falls and bounces, shakes with 65/70/75 frame pauses, click or break free).
+- Dev tools: ?blocked paints the tiles you cannot walk on red; window.__pqWorld, __pqTp(x, y).
+- Open: floating houses / unwalkable places / battle shadows (need examples).

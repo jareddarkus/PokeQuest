@@ -315,12 +315,15 @@ export default function GameView3D(props: Props) {
       sp.visible = on
       if (!on) return
       sp.renderOrder = 3 + z * 0.001 + 0.0005 // right above its character, below the characters further south
-      if (tuftTex) {
-        const m = sp.material as THREE.SpriteMaterial
-        const t = tuftTex[Math.max(0, Math.min(3, frame))]
+      const m = sp.material as THREE.SpriteMaterial
+      if (tuftTex && frame < 3) { // just stepped in: the game's own tuft effect (leaves fly up), then the grass settles
+        const t = tuftTex[Math.max(0, frame)]
         if (m.map !== t) { m.map = t; m.color.set(0xffffff); m.needsUpdate = true }
         sp.scale.set(2 * wide, 2 * wide, 1) // 32 picture pixels = 2 tiles
-      } else sp.scale.set(wide, 0.78 * wide, 1)
+      } else { // standing in it: the same leaf pictures as the grass of the map, stacked, in front of the lower body
+        if (coverTex && m.map !== coverTex) { m.map = coverTex; m.color.set(0xffffff); m.needsUpdate = true }
+        sp.scale.set(1.15 * wide, 0.9 * wide, 1)
+      }
       place(sp, camera, x, ground, z, PUSH + 0.04)
     }
     const myCover = makeCover(), folCover = makeCover()

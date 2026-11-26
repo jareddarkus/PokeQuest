@@ -62,6 +62,12 @@ export class SplFx {
   /** Makes sure an effect file is parsed (the scripts load them before use). */
   preload(id: number) { if (this.ready) this.file(id) }
 
+  /** The eight pictures of a Poké Ball in an effect file (turning, opening, closed again), as image addresses; null when the file is not there. */
+  ballFrames(id: number): string[] | null {
+    const f = this.ready ? this.file(id) : null
+    return f && f.textures.length >= 8 ? f.textures.slice(0, 8).map((t) => t.canvas.toDataURL()) : null
+  }
+
   moveEffects(move: number): number[] { return this.ready && this.moveScripts?.[move] ? particleIds(this.moveScripts[move], this.effects!) : [] }
   effectEffects(index: number): number[] { return this.ready && this.effectScripts?.[index] ? particleIds(this.effectScripts[index], this.effects!) : [] }
 

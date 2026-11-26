@@ -51,6 +51,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
   // the match begins 30 seconds after the start at the latest (time to pick a starter), or at once when everybody has picked
   const [t0, setT0] = useState(royale ? royale.startsAt + 30_000 : 0)
   const handleRef = useRef<GameHandle | null>(null)
+  if (import.meta.env.DEV) (globalThis as { __pqTp?: unknown }).__pqTp = (x: number, y: number) => handleRef.current?.teleport(x, y) // developer hook
   const startRef = useRef(royale ? t0 : Date.now())
   const t0Ref = useRef(t0)
   t0Ref.current = t0
@@ -477,6 +478,7 @@ export default function PlayScreen(props: Props) {
       setProg({ text: 'Drawing the island…', frac: 0.9, step: 5, steps: 5, done: 0, total: 1, unit: 'step' })
       await pause()
       built.group.add(buildMeadowVisuals(world, built, extra))
+      if (import.meta.env.DEV) (globalThis as { __pqWorld?: unknown }).__pqWorld = { world, built } // developer hook
       if (!live) return
       setProg({ text: 'Ready!', frac: 1, step: 5, steps: 5, done: 1, total: 1, unit: 'step' })
       setLoaded({ built, world })

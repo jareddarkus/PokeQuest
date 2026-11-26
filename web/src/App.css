@@ -501,3 +501,6 @@ button.big small { opacity: .7; font-size: .75rem; }
 @keyframes pq-indet { from { left: 0; } to { left: 65%; } }
 .pq-progress-line { display: flex; justify-content: space-between; gap: 12px; margin-top: 7px; font-size: 14px; }
 .pq-progress-count { margin-top: 3px; font-size: 14px; opacity: .85; font-variant-numeric: tabular-nums; }
+
+/* the ball of a catch: one of the eight pictures of the game's ball, moved by the page */
+.catch-ball { position: absolute; left: 0; top: 0; display: none; image-rendering: pixelated; pointer-events: none; z-index: 6; }

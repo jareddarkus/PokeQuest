@@ -258,6 +258,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
   const [trOut, setTrOut] = useState({ foe: false, me: false }) // sliding away
   const [trGone, setTrGone] = useState({ foe: false, me: false }) // gone
   const [throwKey, setThrowKey] = useState(0)
+  const catchRef = useRef<HTMLImageElement>(null)
   const trSent = useRef({ foe: false, me: false })
   const [hpOn, setHpOn] = useState({ foe: false, me: false }) // the HP boxes show once the Pokémon stand on their platform
   const [showScene, setShowScene] = useState(false) // the battle picture is hidden while the way in (flash, bars) plays over the map
@@ -776,6 +777,92 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
     }
   }
 
+  /**
+   * Catching, like the game's own script (effect 0x23a): the ball flies in an arc (35 frames) to the Pokémon, opens, the Pokémon turns white and is pulled in,
+   * the ball closes, falls and bounces (thud sounds 127 / 96 / 64), shakes once per shake with a pause of 65 / 70 / 75 frames, then clicks (caught) or opens again (broke free).
+   * The ball pictures are the eight pictures of the ball's effect file. Returns false when the game file's pictures are not there (the old simple ball is used then).
+   */
+  const catchScene = async (ballId: number, shakes: number, caught: boolean, onShake: (i: number) => void): Promise<boolean> => {
+    const L = layoutRef.current, spl = splRef.current, el = catchRef.current
+    const frames = spl?.ready ? spl.ballFrames(ballId) : null
+    if (!L || !spl || !el || !frames) return false
+    const F = 1000 / 60
+    const sc = Math.max(1, L.frame.w / 256)
+    const wait = (n: number) => sleep(n * F)
+    const tween = (n: number, fn: (k: number) => void) => new Promise<void>((res) => {
+      const t0 = performance.now()
+      const tick = (now: number) => { const k = Math.min(1, (now - t0) / (n * F)); fn(k); if (k < 1) requestAnimationFrame(tick); else res() }
+      requestAnimationFrame(tick)
+    })
+    const feetNow = () => { const L2 = layoutRef.current ?? L; const k = Math.max(1, L2.frame.w / 256); return { x: L2.foe.x / k, y: (L2.foe.y + L2.foe.w * 0.1) / k } }
+    const draw = (x: number, y: number, frame: number, rot = 0, dark = 1, size = 18) => {
+      el.src = frames[frame]; el.style.display = 'block'
+      el.style.width = `${size * sc}px`
+      el.style.filter = dark < 1 ? `brightness(${dark})` : ''
+      el.style.transform = `translate(${x * sc - (size * sc) / 2}px, ${y * sc - (size * sc) / 2}px) rotate(${rot}deg)`
+    }
+    const foeEl = document.querySelector<HTMLElement>('.stage-sprite[data-mon="foe"]')
+    const f0 = feetNow()
+    const top = { x: f0.x, y: f0.y - 2.4 * 16 } // where the ball meets the Pokémon
+    const cx = (L.frame.l + L.frame.w / 2) / sc, cy = (L.frame.t + L.frame.h / 2) / sc
+    // 1. the throw: 35 frames, an arc 5 units high, the ball turns
+    void music.playSeq(1382)
+    await tween(35, (k) => { const y = cy + 32 + (top.y - cy - 32) * k - Math.sin(k * Math.PI) * 5 * 16 * 0.55; draw(cx + (top.x - cx) * k, y, [0, 1, 2, 1][Math.floor(k * 35 / 4) % 4]) })
+    // 2. it opens, the Pokémon turns white and is pulled in
+    void music.playSeq(1383)
+    void spl.emit(29, null, top, null, 16, { radius: 1, life: 1, size: 1 })
+    draw(top.x, top.y, 3); await wait(3); draw(top.x, top.y, 4)
+    if (foeEl) {
+      foeEl.style.transformOrigin = '50% 50%'
+      const a = foeEl.animate([{ transform: 'translate(0,0) scale(1)', filter: 'brightness(0) invert(1)', opacity: 1 }, { transform: `translate(0,${-2 * 16 * sc}px) scale(0.02)`, filter: 'brightness(0) invert(1)', opacity: 1 }], { duration: 20 * F, fill: 'forwards', easing: 'linear', composite: 'add' })
+      void a.finished.catch(() => undefined)
+    }
+    await wait(20)
+    foeEl?.style && (foeEl.style.visibility = 'hidden')
+    draw(top.x, top.y, 3); await wait(3); draw(top.x, top.y, 0)
+    await wait(8)
+    // 3. it falls and bounces
+    const ground = { x: f0.x, y: f0.y - 4 }
+    await tween(20, (k) => draw(top.x, top.y + (ground.y - top.y) * k * k, 0))
+    for (const [h, n, vol] of [[22, 16, 127], [8, 10, 96]] as Array<[number, number, number]>) {
+      void music.playSeq(1387)
+      void vol
+      await tween(n, (k) => draw(ground.x, ground.y - Math.sin(k * Math.PI) * h, 0))
+    }
+    void music.playSeq(1387)
+    draw(ground.x, ground.y, 0)
+    await wait(40)
+    // 4. the shakes
+    for (let i = 0; i < shakes; i++) {
+      onShake(i)
+      void music.playSeq(1384)
+      await tween(34, (k) => draw(ground.x, ground.y, 0, Math.sin(k * Math.PI * 2) * -26 * (k < 0.5 ? 1 : 1)))
+      await wait(i === 0 ? 31 : i === 1 ? 36 : 41)
+    }
+    if (caught) { // click: the ball darkens and stars fly out
+      void music.playSeq(1396)
+      draw(ground.x, ground.y, 0, 0, 0.55)
+      void spl.emit(28, null, { x: ground.x, y: ground.y - 10 }, null, 16, { radius: 1, life: 1, size: 1 })
+      await wait(70)
+      el.style.display = 'none'
+      return true
+    }
+    // it breaks free: the ball opens, the Pokémon comes out of the light
+    void music.playSeq(1383)
+    draw(ground.x, ground.y, 3); await wait(3); draw(ground.x, ground.y, 4)
+    void spl.emit(6, null, { x: ground.x, y: ground.y - 10 }, null, 16, { radius: 0.5, life: 1, size: 0.5 })
+    if (foeEl) {
+      foeEl.getAnimations().forEach((x) => x.cancel())
+      foeEl.style.visibility = ''
+      const a = foeEl.animate([{ transform: 'scale(0.02)', filter: 'brightness(0) invert(1)' }, { transform: 'scale(1)', filter: 'brightness(0) invert(1)', offset: 0.6 }, { transform: 'scale(1)', filter: 'none' }], { duration: 24 * F, easing: 'linear', composite: 'add' })
+      void a.finished.catch(() => undefined)
+    }
+    el.style.display = 'none'
+    await wait(26)
+    foeEl && (foeEl.style.transformOrigin = '')
+    return true
+  }
+
   const throwBall = (id: string) => {
     const def = ITEMS[id]
     const foeMon = foeCopies[0]
@@ -787,14 +874,18 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
     const isLeg = legendaryNames.has(foeMon.species)
     const res = rollCatch(target, def.ballBonus ?? 1, isLeg, Math.random)
     void (async () => {
-      void music.playSfx('se:throw')
-      setBall({ shakes: 0 })
       await say(`You threw a ${def.name}!`, 500)
-      for (let i = 0; i < res.shakes; i++) {
-        setBall({ shakes: i + 1 })
-        void music.playSfx('se:shake')
-        setText('.'.repeat(i + 1))
-        await sleep(800)
+      const ballFile = id === 'Master Ball' ? 48 : id === 'Ultra Ball' ? 52 : id === 'Great Ball' ? 56 : 60 // (the game's ball pictures: 48 + 4 for every kind)
+      const played = await catchScene(ballFile, res.shakes, res.caught, (i) => setText('.'.repeat(i + 1)))
+      if (!played) { // (without the game's pictures: the simple ball)
+        void music.playSfx('se:throw')
+        setBall({ shakes: 0 })
+        for (let i = 0; i < res.shakes; i++) {
+          setBall({ shakes: i + 1 })
+          void music.playSfx('se:shake')
+          setText('.'.repeat(i + 1))
+          await sleep(800)
+        }
       }
       if (res.caught) {
         setBall(null)
@@ -838,6 +929,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
       <canvas ref={fxCanvas} className="fx-canvas" />
       <canvas ref={splCanvas} className="spl-layer" />
       <div ref={dimRef} className="eff-dim" />
+      <img ref={catchRef} className="catch-ball" alt="" draggable={false} />
 
 
       {layout && foePic && !trGone.foe && (

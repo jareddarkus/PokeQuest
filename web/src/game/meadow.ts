@@ -4,7 +4,7 @@
 import * as THREE from 'three'
 import { applyClip } from '../rom/mapModel'
 import type { BuiltWorld } from '../rom/chunkWorld'
-import { C, RADIUS, RING_INNER, SIZE, T, dist, ringAt, type World } from './world'
+import { C, RADIUS, RING_INNER, SIZE, T, dist, isWalkable, ringAt, type World } from './world'
 import { hash2, valueNoise } from './rng'
 
 /** How much higher each ring is than the ring outside it (tiles). */
@@ -193,6 +193,33 @@ function roadTile(sand: THREE.DataTexture | null, fringe: THREE.DataTexture | nu
       ctx.restore()
     }
   }
+  if (fringe) {
+    // outer corners (the road ends on two sides at once): the grass edge turns round the corner in a curve, like the game's paths, instead of two straight strips meeting at a right angle
+    const src = toCanvas(fringe)
+    const sd = src.getContext('2d')!.getImageData(variant ? 16 : 0, 0, 16, 6).data
+    const D = 6
+    const piece = document.createElement('canvas'); piece.width = D; piece.height = D
+    const pctx = piece.getContext('2d')!
+    const img = pctx.createImageData(D, D)
+    for (let y = 0; y < D; y++) {
+      for (let x = 0; x < D; x++) {
+        const dist = Math.hypot(D - x - 0.5, D - y - 0.5) - 0.5 // how far this pixel is from the sand, along the curve
+        const row = Math.max(0, Math.min(D - 1, Math.round(D - dist)))
+        const col = (x * 5 + y * 3 + variant * 7) % 16
+        const o = (row * 16 + col) * 4
+        const q = (y * D + x) * 4
+        img.data[q] = sd[o]; img.data[q + 1] = sd[o + 1]; img.data[q + 2] = sd[o + 2]; img.data[q + 3] = 255
+      }
+    }
+    pctx.putImageData(img, 0, 0)
+    for (const [bits, rot] of [[1 | 8, 0], [1 | 2, 1], [2 | 4, 2], [4 | 8, 3]] as Array<[number, number]>) {
+      if ((mask & bits) !== bits) continue
+      ctx.save()
+      ctx.translate(8, 8); ctx.rotate((rot * Math.PI) / 2); ctx.translate(-8, -8)
+      ctx.drawImage(piece, 0, 0)
+      ctx.restore()
+    }
+  }
   const t = new THREE.CanvasTexture(c)
   t.magFilter = THREE.NearestFilter; t.minFilter = THREE.NearestFilter; t.colorSpace = THREE.SRGBColorSpace
   return t
@@ -252,6 +279,15 @@ export function buildMeadowVisuals(world: World, built: BuiltWorld, extra: numbe
   grassLayers(tuftsA, () => hm)
   const ex = extra.filter((i) => dist(i % SIZE, (i / SIZE) | 0) < RING_INNER[0])
   grassLayers(ex, (i) => built.height[i])
+
+  // developer view (?blocked): the tiles you cannot walk on are painted red
+  if (import.meta.env.DEV && new URLSearchParams(location.search).has('blocked')) {
+    const bad: number[] = []
+    for (let i = 0; i < SIZE * SIZE; i++) { const x = i % SIZE, y = (i / SIZE) | 0; if (dist(x, y) < RADIUS - 1 && !isWalkable(world, x, y)) bad.push(i) }
+    const nb = g.children.length
+    flat(bad, new THREE.MeshBasicMaterial({ color: 0xff2020, transparent: true, opacity: 0.4, depthTest: false }), 0.6, (i) => built.height[i])
+    for (let k = nb; k < g.children.length; k++) g.children[k].renderOrder = 9999
+  }
 
   // the pine forests of ring 1, built like the game's own (a pine is 2 x 2 tiles: the side picture on two crossing upright planes, plus three flat layers seen from above: base, crown, tip)
   if (import.meta.env.DEV) (globalThis as { __pqForest?: number[] }).__pqForest = forestCells
