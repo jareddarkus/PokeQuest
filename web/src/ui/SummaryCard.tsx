@@ -326,10 +326,6 @@ export default function SummaryCard({ mon, onChange, onBack, onClose, footer }: 
               <span className="v"><GT t={String(st[s])} k={3} font={0} /></span>
             </div>
           ))}
-          <div className="sx-legend">
-            <span><i><b><GT t="1" k={1} color="#ffffff" /></b></i><GT t={es ? 'Especie' : 'Species'} k={1} color={MUTED} /></span>
-            <span><i><b><GT t="2" k={1} color="#ffffff" /></b></i><GT t={es ? 'IV + EV + Naturaleza + Objeto' : 'IV + EV + Nature + Item'} k={1} color={MUTED} /></span>
-          </div>
         </div>
       )}
       {tab === 'ev' && (

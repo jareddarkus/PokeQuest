@@ -234,3 +234,11 @@
 @media (min-width: 861px) { .sx { grid-template-columns: minmax(0, 6fr) minmax(0, 5fr); column-gap: 64px; } }
 .sx-bar-s { width: 150px; }
 .sx-col .sx-hp { min-width: 190px; }
+
+/* no legend under the stats: more room before the moves; empty move slots are as tall as the others; a little narrower picture panel; the number has no card */
+.sx-moves { margin-top: 18px; grid-auto-rows: 1fr; }
+.sx-mv { min-height: 70px; }
+.sx-mv.empty { min-height: 70px; display: flex; align-items: center; }
+@media (min-width: 861px) { .sx { grid-template-columns: minmax(0, 11fr) minmax(0, 10fr); } }
+.sx-id { background: transparent; box-shadow: none; }
+.sx-id > .sx-un { padding: 12px 6px 12px 2px; }
