@@ -436,3 +436,7 @@ Seen in the recording but NOT done: the trainers' battle sprites (the foe traine
 - Burn (damage at the end of the turn): first the flame animation (effect script 39, ~41 frames visible on the Pokémon), 8 frames later the HP drains one per frame while the HP box flashes red in two sharp pulses (`BURN_BOX`: 2 weak frames, 6 strong, 2 off, ...). The Pokémon does NOT flicker. The sentence ("... was hurt by its burn!") is typed only AFTER the drain (about 8 frames later). Poison uses the same order with effect 38 (assumed: only burn was filmed).
 - Also seen: the target keeps a red tint from the fire move that fades slowly (about 200 frames).
 - Not verified: Spanish wording of the burn / poison sentences (written from memory: "se resiente de la quemadura" / "del envenenamiento"); the drain speed was measured only at 164 max HP; dev hook `__pqSlow` slows the flicker for screenshots.
+
+## Round 23 — no Pokémon Centers, bigger starting bag
+- You start with 5 Poké Balls + 5 Great Balls (Super Balls), 3 Potions, 5 Revives.
+- The Pokémon Centers of the rings were removed (`world.ts` no longer makes them). When a battle against a trainer or a wild Pokémon is lost and no Pokémon of the team or the PC can fight, you are eliminated (`eliminateMe('wipe')` in `PlayScreen.tsx`, same message to the others as a lost duel: you can then watch). If a healthy Pokémon is in the PC you stay in and must take it out. Practice mode (no match) just heals. Healing tiles placed by hand in the world editor (event "Heal") still work; the generated centers are gone.

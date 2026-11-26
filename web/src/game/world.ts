@@ -227,22 +227,7 @@ export function generateWorld(seed: number, ground: Uint8Array, opts: { barriers
     }
   }
 
-  // a Pokémon Center in each ring (1 - 3), on the north-east: it heals your team, and it is where you wake up when your whole team has fainted in that ring
-  for (let ring = 1; ring <= 3; ring++) {
-    let spot: { x: number; y: number } | null = null
-    // the north-east first, then around the ring (the walkable ground of a ring is not everywhere)
-    for (const deg of [0, 12, -12, 24, -24, 36, -36, 48, -48, 60, -60, 90, -90, 120, -120, 150, -150, 180]) {
-      const ang = ((-45 + deg) * Math.PI) / 180
-      for (let r = RING_INNER[ring - 1] + 6; r < RING_INNER[ring - 1] + 17 && !spot; r++) {
-        const x = Math.round(C + Math.cos(ang) * r - 0.5), y = Math.round(C + Math.sin(ang) * r - 0.5)
-        if (inBounds(x, y) && walkable(x, y) && walkable(x, y + 1) && !gyms.some((g) => Math.abs(g.x - x) < 6 && Math.abs(g.y - y) < 6)) spot = { x, y }
-      }
-      if (spot) break
-    }
-    if (!spot) continue
-    tiles[spot.y * SIZE + spot.x] = T.GymDoor
-    gyms.push({ id: `c${ring}`, ring, side: 'N', x: spot.x, y: spot.y, doorX: spot.x, doorY: spot.y, type: 'Normal', leader: 'Enfermera Joy', center: true })
-  }
+  // (no Pokémon Centers: in a battle royale you manage what you have; a team that has fainted is out of the match)
 
   const spawns: { x: number; y: number }[] = []
   for (let i = 0; i < 16; i++) {

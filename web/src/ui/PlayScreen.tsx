@@ -274,20 +274,19 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
     return { x: C, y: C }
   }
 
-  /** Your whole team fainted: you wake up, healed, at the Pokémon Center of the ring you are in (in the peak, where there is none, right where you are). */
+  const [elimWhy, setElimWhy] = useState<'duel' | 'wipe'>('duel')
+  /** You are out of the match (everybody else is told). */
+  const eliminateMe = (why: 'duel' | 'wipe') => {
+    eliminatedRef.current = true; setElimWhy(why); setEliminated(true)
+    applyLoss(tour.current, username ?? '')
+    busySender.current?.duel({ type: 'eliminated' })
+  }
+  /** Your team fainted. There are no Pokémon Centers: with no Pokémon left that can fight (team and PC) you are out of the match. */
   const blackOut = () => {
     const t = trainerRef.current
-    setTrainer({ ...t, team: t.team.map(healedCopy) })
-    const pos = handleRef.current?.getPos()
-    const ring = pos ? ringAt(pos.x, pos.y) : 0
-    let target: { x: number; y: number } | null = null
-    const center = world.gyms.find((g) => g.center && g.ring === ring)
-    if (center) target = { x: center.doorX, y: center.doorY + 1 }
-    else if (world.triggers) { // (a world of the editor: its healing tiles are the centers)
-      for (const [key, v] of world.triggers) { if (v.type !== 6) continue; const hx = key % SIZE, hy = Math.floor(key / SIZE); if (ringAt(hx, hy) === ring) { target = { x: hx, y: hy + 1 }; break } }
-    }
-    if (target) { handleRef.current?.teleport(target.x, target.y); say(`You blacked out! You woke up at the Pokémon Center of ring ${ring}.`) }
-    else say('You blacked out! Your Pokémon were healed.')
+    if (!royale) { setTrainer({ ...t, team: t.team.map(healedCopy) }); say('Practice: your Pokémon were healed.'); return } // (practice has no match to be out of)
+    if ([...t.team, ...t.pc].some((m) => m.hp > 0)) { say('Your whole team fainted! A healthy Pokémon is waiting in your PC: take it out.'); return }
+    eliminateMe('wipe')
   }
 
   if (import.meta.env.DEV) (globalThis as { __pqBlackOut?: unknown }).__pqBlackOut = blackOut // developer hook
@@ -354,7 +353,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
     }
     if (b?.pvp) { // a duel against another player: the loser is out of the match
       duelPending.current = null
-      if (outcome === 'lose') { eliminatedRef.current = true; setEliminated(true); applyLoss(tour.current, username ?? ''); busySender.current?.duel({ type: 'eliminated' }) }
+      if (outcome === 'lose') eliminateMe('duel')
       else if (outcome === 'win') { outPlayers.current.add(b.name ?? ''); applyLoss(tour.current, b.name ?? ''); say(`You beat ${b.name}! They are out of the match.`) }
       return
     }
@@ -750,7 +749,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
       {eliminated && !champion && !battle && (
         <div className="hud-out panel">
           <b>You were eliminated</b>
-          <span>You can still watch: click a player that is fighting.</span>
+          <span>{elimWhy === 'wipe' ? 'All your Pokémon fainted and there are no Pokémon Centers. ' : 'You lost a duel. '}You can still watch: click a player that is fighting.</span>
           <button className="primary" onClick={onExit}>Back to the menu</button>
         </div>
       )}

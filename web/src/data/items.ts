@@ -90,4 +90,4 @@ export function rollPickup(ring: number, rng: () => number): Record<string, numb
 }
 
 /** What every player starts a match with. */
-export const STARTING_BAG: Record<string, number> = { 'Poke Ball': 5, Potion: 3, Revive: 5 }
+export const STARTING_BAG: Record<string, number> = { 'Poke Ball': 5, 'Great Ball': 5, Potion: 3, Revive: 5 }
