@@ -214,8 +214,10 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
       } else if (m.type === 'decline') { if (duelPending.current === m.from) duelPending.current = null }
     },
   } : undefined, busySender)
-  const playersVisible = () => players().filter((o) => !outPlayers.current.has(o.id))
-  const busyMapFn = () => { const m = new Map<string, string>(); const now = Date.now(); for (const [k, v] of busyNpcs.current) { if (v.until < now) busyNpcs.current.delete(k); else m.set(k, v.by) } return m }
+  const fakePlayers = useRef<ReturnType<typeof players>>([]) // developer hook: pretend players, to look at their names and fights without a second account
+  if (import.meta.env.DEV) (globalThis as { __pqFakePlayers?: unknown; __pqFakeBusy?: unknown }).__pqFakePlayers = fakePlayers
+  const playersVisible = () => [...players().filter((o) => !outPlayers.current.has(o.id)), ...fakePlayers.current]
+  const busyMapFn = () => { const m = new Map<string, string>(); const now = Date.now(); if (import.meta.env.DEV) { const fb = (globalThis as { __pqFakeBusyMap?: Map<string, string> }).__pqFakeBusyMap; if (fb) for (const [k, v] of fb) m.set(k, v) }; for (const [k, v] of busyNpcs.current) { if (v.until < now) busyNpcs.current.delete(k); else m.set(k, v.by) } return m }
   // while I fight a trainer, the others see it as busy (repeated, so that late arrivals know too)
   useEffect(() => {
     const id = battle?.npcId

@@ -571,6 +571,7 @@ export default function GameView3D(props: Props) {
     const otherSprites = new Map<string, { body: THREE.Sprite; label: THREE.Sprite; shadow: THREE.Mesh }>()
     let busyMap = new Map<string, string>() // trainers other players are fighting (refreshed every frame)
     const busyBalls = new Map<string, THREE.Sprite>() // the spinning Poké Balls above the fighters
+    const busyMoved = new Set<string>() // trainers that were put next to the player who fights them
     const busyMat = ballMaterial()
     let paused = false
     const held = new Set<string>()
@@ -913,6 +914,27 @@ export default function GameView3D(props: Props) {
           sp.position.set(pos.x + 0.5, bh + 1.9 + Math.sin(now / 300) * 0.05, pos.y + 0.5)
         }
         for (const [k, sp] of busyBalls) if (!want.has(k)) { scene.remove(sp); busyBalls.delete(k) }
+        // a trainer that another player is fighting stands next to that player on your screen too (its walk to the player is not sent over the network)
+        for (const [npcId, by] of busyMap) {
+          const n = npcs.find((q) => q.spec.id === npcId), o = others.find((q) => q.id === by)
+          if (!n || !o || busyMoved.has(npcId)) continue
+          if (Math.hypot(n.fx - o.x, n.fy - o.y) <= 1.6) { busyMoved.add(npcId); continue }
+          const px = Math.round(o.x), py = Math.round(o.y)
+          const dirs = [o.dir, 0, 1, 2, 3]
+          for (const d of dirs) {
+            const tx = px + DX[d], ty = py + DY[d]
+            if (!walkableFor(world, tx, ty, null) || npcs.some((q) => q !== n && Math.round(q.fx) === tx && Math.round(q.fy) === ty) || (tx === me.x && ty === me.y)) continue
+            n.x = n.fx = n.fromX = tx; n.y = n.fy = n.fromY = ty; n.moving = 0
+            n.dir = [3, 2, 1, 0][d] as Dir
+            busyMoved.add(npcId)
+            break
+          }
+        }
+        for (const id of [...busyMoved]) if (!busyMap.has(id)) { // the fight is over: the trainer goes back to where it stood
+          busyMoved.delete(id)
+          const n = npcs.find((q) => q.spec.id === id)
+          if (n && !n.defeated) { n.x = n.fx = n.fromX = n.spec.x; n.y = n.fy = n.fromY = n.spec.y; n.moving = 0 }
+        }
       }
       // other players (named, never yourself)
       const seen = new Set<string>()
@@ -922,7 +944,8 @@ export default function GameView3D(props: Props) {
         if (!e) {
           const body = new THREE.Sprite(charMaterial(o.look, o.dir, 0))
           fit(body)
-          const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: nameTexture(o.name), transparent: true, depthWrite: false }))
+          const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: nameTexture(o.name), transparent: true, depthWrite: false, depthTest: false })) // (never hidden behind the character, a tree or a building)
+          label.renderOrder = 12
           label.center.set(0.5, 0)
           label.scale.set(2.4, 0.45, 1)
           scene.add(body, label)
@@ -937,7 +960,7 @@ export default function GameView3D(props: Props) {
         { let oc = otherCovers.get(o.id); if (!oc) { oc = makeCover(); otherCovers.set(o.id, oc) }
           cover(oc, tallAt(o.x, o.y), o.x + 0.5, h, o.y + 0.5, 1.0, grassFrame(`pl:${o.id}`, o.x, o.y, now)) }
         e.shadow.position.set(o.x + 0.5, h + 0.03, o.y + 0.5)
-        e.label.position.set(o.x + 0.5, h + 1.5, o.y + 0.5)
+        e.label.position.set(o.x + 0.5, h + 2.3, o.y + 0.5)
       }
       for (const [id, e] of otherSprites) if (!seen.has(id)) { scene.remove(e.body, e.label, e.shadow); otherSprites.delete(id); const oc = otherCovers.get(id); if (oc) { scene.remove(oc); otherCovers.delete(id) } }
 
