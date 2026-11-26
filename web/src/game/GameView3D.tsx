@@ -579,6 +579,15 @@ export default function GameView3D(props: Props) {
       teleport: (x, y) => { me.x = x; me.y = y; me.fromX = x; me.fromY = y; me.t = 1; const f1 = followerSpot(x, y, me.dir); fol.x = f1.x; fol.y = f1.y; fol.fromX = f1.x; fol.fromY = f1.y; fol.t = 1 },
       getPos: () => ({ x: me.x, y: me.y, dir: me.dir }),
       showEmote,
+      screenOf: (npc, tx, ty) => {
+        let wx: number, wy: number, wz: number
+        if (npc) { const n = npcs.find((q) => q.spec.id === npc); if (!n) return null; wx = n.fx + 0.5; wz = n.fy + 0.5; wy = heightAt(wx, wz) + 1.9 }
+        else { wx = (tx ?? 0) + 0.5; wz = (ty ?? 0) + 0.5; wy = heightAt(wx, wz) + 2.2 }
+        const v = new THREE.Vector3(wx, wy, wz).project(camera)
+        if (v.z > 1) return null
+        const rect = renderer.domElement.getBoundingClientRect()
+        return { x: (v.x * 0.5 + 0.5) * rect.width + rect.left, y: (-v.y * 0.5 + 0.5) * rect.height + rect.top }
+      },
       removePickup: (id) => { removed.add(id); const s = pickupSprites.get(id); if (s) s.visible = false; const h = pickupShadows.get(id); if (h) h.visible = false },
       defeatNpc: (id) => { const n = npcs.find((q) => q.spec.id === id); if (n) n.defeated = true },
       setPaused: (p) => { paused = p },

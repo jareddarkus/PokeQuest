@@ -1,5 +1,6 @@
 // The real walking characters from the player's game file, kept in memory once loaded (see rom/overworld.ts).
 import { OW_FRAME } from '../rom/overworld'
+import { OW_TO_CLASS } from '../data/trainerClasses'
 
 const strips = new Map<number, HTMLImageElement>()
 export const owList: number[] = []
@@ -25,8 +26,8 @@ export const owPeople = (): number[] => owList.filter((i) => !NOT_PEOPLE.has(i))
  */
 const NOT_NPC_TRAINERS = new Set([76, 77, 78, 79, 80, 92, 94, 95, 96, 97, 98, 99, 100, 102])
 export const owTrainers = (): number[] => {
-  const t = owPeople().filter((i) => i >= 14 && i <= 145 && !NOT_NPC_TRAINERS.has(i))
-  return t.length ? t : owPeople()
+  const t = owPeople().filter((i) => i in OW_TO_CLASS) // only the characters that have a battle picture of the same kind of trainer
+  return t.length ? t : owPeople().filter((i) => i >= 14 && i <= 145 && !NOT_NPC_TRAINERS.has(i))
 }
 export const hasOw = (idx: number | undefined) => idx !== undefined && strips.has(idx)
 

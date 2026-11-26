@@ -3,7 +3,8 @@ import { type GameEvents, type GameHandle } from '../game/GameView'
 import GameView3D from '../game/GameView3D'
 import { buildChunkWorld, type BuiltWorld } from '../rom/chunkWorld'
 import { loadWorldData } from '../rom/store'
-import type { Look } from '../game/character'
+import { randomLook, type Look } from '../game/character'
+import { OW_TO_CLASS } from '../data/trainerClasses'
 import type { Settings } from '../game/settings'
 import { ENCOUNTER_RATE, groupMon, groupTeam, gymTeam, trainerTeam, wildEncounter } from '../game/encounters'
 import { addItems, emptyTrainer, makeStarter, type Trainer } from '../game/state'
@@ -53,7 +54,7 @@ interface Props {
   custom?: CustomWorld | null
 }
 
-interface ActiveBattle { id?: number; kind: BattleKind; foe: Mon[]; name?: string; onWin?: () => void; npcId?: string; pvp?: PvpLink; foeSeed?: string; spectate?: { who: string; girl: boolean; mine: Mon[]; listen: (cb: (evs: BattleEvent[]) => void) => () => void } }
+interface ActiveBattle { id?: number; kind: BattleKind; foe: Mon[]; name?: string; onWin?: () => void; npcId?: string; pvp?: PvpLink; foeSeed?: string; foeClass?: number; spectate?: { who: string; girl: boolean; mine: Mon[]; listen: (cb: (evs: BattleEvent[]) => void) => () => void } }
 let battleCounter = 0
 
 function PlayInner({ royale, username, look, settings, onSettings, onExit, onCustomize, world, built }: Props & { world: World; built: BuiltWorld }) {
@@ -80,17 +81,31 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
   const [toast, setToast] = useState<string | null>(null)
   const [toastItems, setToastItems] = useState<Record<string, number> | null>(null) // the things you took from a ball (shown with their icons)
   // a trainer (or gym leader) talks before the battle: { who, line, then }
-  const [speech, setSpeech] = useState<null | { who: string; line: string; then: () => void }>(null)
+  type SpeechAt = { npc: string } | { x: number; y: number }
+  const [speech, setSpeech] = useState<null | { who: string; line: string; then: () => void; at?: SpeechAt }>(null)
+  const [bubble, setBubble] = useState<{ x: number; y: number } | null>(null) // where the speech bubble is (above the one who talks)
   const [speechSkip, setSpeechSkip] = useState(0)
   const speechTyping = useRef(0) // until when (ms since 1970) the sentence is still being typed
   const talking = useRef(false)
-  const speakThen = (who: string, line: string, then: () => void) => {
+  const nextAt = useRef<SpeechAt | undefined>(undefined) // who talks next (set just before speakThen)
+  const speakThen = (who: string, line: string, then: () => void, at0?: SpeechAt) => {
     if (talking.current) return
+    const at = at0 ?? nextAt.current
+    nextAt.current = undefined
     talking.current = true
     speechTyping.current = Date.now() + line.length * CHAR_MS[settings.textSpeed ?? 'normal']
     setSpeechSkip(0)
-    setSpeech({ who, line, then })
+    setSpeech({ who, line, then, at })
   }
+  // the bubble follows the one who talks (it moves with the camera)
+  useEffect(() => {
+    const at = speech?.at
+    if (!at) { setBubble(null); return }
+    const upd = () => { const h = handleRef.current; setBubble(h ? h.screenOf('npc' in at ? at.npc : null, 'x' in at ? at.x : undefined, 'y' in at ? at.y : undefined) : null) }
+    upd()
+    const id = window.setInterval(upd, 40)
+    return () => window.clearInterval(id)
+  }, [speech])
   const closeSpeech = () => {
     const sp = speech
     if (!sp) return
@@ -388,7 +403,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
     specBuf.current = [...events, ...specBuf.current]
     const girl = players().find((o) => o.id === host)?.look.sprite === 10
     const listen = (cb: (evs: BattleEvent[]) => void) => { cb(specBuf.current.slice()); specListeners.current.add(cb); return () => { specListeners.current.delete(cb) } }
-    setBattle({ id: ++battleCounter, kind: info.kind, foe: info.foe.map(fakeMon), name: info.foeName, foeSeed: info.foeSeed, spectate: { who: host, girl, mine: info.mine.map(fakeMon), listen } })
+    setBattle({ id: ++battleCounter, kind: info.kind, foe: info.foe.map(fakeMon), name: info.foeName, foeSeed: info.foeSeed, foeClass: info.foeClass, spectate: { who: host, girl, mine: info.mine.map(fakeMon), listen } })
   }
   const stopSpectate = () => { const b = battleRef.current; if (b?.spectate) endBattle('ran', trainerRef.current) }
   // developer hook: watch a made-up battle (Oshawott vs Lillipup) to see the spectator screen; __pqSpecEv(events) sends more events to it
@@ -410,7 +425,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
     const guest = b.pvp?.role === 'guest'
     const mine = trainerRef.current.team.filter((m) => m.hp > 0)
     const info: BattleInfo = {
-      kind: b.kind, foeName: guest ? username : b.name ?? '', foeSeed: b.npcId ?? b.name ?? '', host: guest ? b.pvp!.hostName : username,
+      kind: b.kind, foeName: guest ? username : b.name ?? '', foeSeed: b.npcId ?? b.name ?? '', foeClass: b.foeClass, host: guest ? b.pvp!.hostName : username,
       mine: summarize(guest ? b.foe : mine), foe: summarize(guest ? mine : b.foe),
     }
     if (!guest) myBat.current = info
@@ -484,8 +499,10 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
   const npcFight = (npc: (typeof world.npcs)[number], npcId: string) => {
     const line = npc.custom ? npc.custom.lines[Math.floor(Math.random() * npc.custom.lines.length)] : preBattleLine(npc.id)
     const grp = npc.custom?.group ? world.groups?.get(npc.custom.group) : undefined
-    speakThen(`Trainer ${npc.name}`, line, () => void (grp && grp.entries.length ? groupTeam(grp) : trainerTeam(npc.ring)).then((team) => startBattle({ kind: 'trainer', foe: team, name: `Trainer ${npc.name}`, npcId })))
+    nextAt.current = { npc: npcId }
+    speakThen(`Trainer ${npc.name}`, line, () => void (grp && grp.entries.length ? groupTeam(grp) : trainerTeam(npc.ring)).then((team) => startBattle({ kind: 'trainer', foe: team, name: `Trainer ${npc.name}`, npcId, foeClass: OW_TO_CLASS[randomLook(npc.look, true).sprite ?? -1] })))
   }
+  if (import.meta.env.DEV) (globalThis as { __pqTalk?: unknown }).__pqTalk = (id: string) => { const n = world.npcs.find((q) => q.id === id); if (n) npcFight(n, id) } // developer hook
   const events: GameEvents = useMemo(
     () => ({
       onMenuKey: () => setMenuOpen((o) => !o),
@@ -522,6 +539,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
         if (beatenGyms.current.has(id)) { say(`${g.leader} nods: you already beat this gym.`); return }
         const cgrp = g.custom?.group ? world.groups?.get(g.custom.group) : undefined
         const gline = g.custom ? g.custom.lines[Math.floor(Math.random() * g.custom.lines.length)] : leaderLine(g.id)
+        nextAt.current = { x: g.doorX, y: g.doorY }
         speakThen(`Gym Leader ${g.leader}`, gline, () => void (cgrp && cgrp.entries.length ? groupTeam(cgrp) : gymTeam(g.type, g.ring)).then((team) =>
           startBattle({
             kind: 'gym', foe: team, name: `Gym Leader ${g.leader}`,
@@ -565,6 +583,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
         const npc = world.npcs.find((n) => n.id === npcId)
         if (!npc) return
         const who = npc.custom && !npc.custom.fights ? npc.name : `Trainer ${npc.name}`
+        nextAt.current = { npc: npcId }
         if (npc.custom && !npc.custom.fights) { speakThen(who, npc.custom.lines[Math.floor(Math.random() * npc.custom.lines.length)], () => {}); return } // a person: only talks
         if (busyNpcs.current.has(npcId)) { speakThen(who, busyLine(), () => {}); return } // somebody else is fighting it
         if (defeatedNpcs.current.has(npcId)) { speakThen(who, npc.custom ? npc.custom.after[Math.floor(Math.random() * npc.custom.after.length)] : lossLine(npcId), () => {}); return }
@@ -658,7 +677,11 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
       )}
 
       {speech && (
-        <div className="npc-speech panel" style={hudFrame2 ?? undefined} onClick={() => { if (Date.now() < speechTyping.current) { speechTyping.current = 0; setSpeechSkip((k) => k + 1) } else closeSpeech() }}>
+        <div
+          className={`npc-speech ${bubble ? 'bubble' : 'panel'}`}
+          style={bubble ? { left: Math.min(Math.max(bubble.x, 150), window.innerWidth - 150), top: Math.max(bubble.y, 90) } : hudFrame2 ?? undefined}
+          onClick={() => { if (Date.now() < speechTyping.current) { speechTyping.current = 0; setSpeechSkip((k) => k + 1) } else closeSpeech() }}
+        >
           <b>{speech.who}</b>
           <span><TypedText text={speech.line} ms={CHAR_MS[settings.textSpeed ?? 'normal']} skip={speechSkip} /></span>
         </div>
@@ -739,6 +762,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
           kind={battle.kind}
           foeName={battle.name}
           foeSeed={battle.foeSeed ?? battle.npcId ?? battle.name}
+          foeClass={battle.foeClass}
           pvp={battle.pvp}
           spectate={battle.spectate ? { who: battle.spectate.who, listen: battle.spectate.listen } : undefined}
           stream={streamEvents}

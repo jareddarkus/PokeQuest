@@ -4,7 +4,7 @@ import type { BattleEvent } from './engine'
 
 /** What a spectator needs to know about the two teams (the species and levels only). */
 export interface TeamSummary { species: string; level: number; shiny: boolean }
-export interface BattleInfo { kind: 'wild' | 'trainer' | 'gym'; foeName: string; foeSeed: string; host: string; mine: TeamSummary[]; foe: TeamSummary[] }
+export interface BattleInfo { kind: 'wild' | 'trainer' | 'gym'; foeName: string; foeSeed: string; foeClass?: number; host: string; mine: TeamSummary[]; foe: TeamSummary[] }
 
 export const summarize = (team: Mon[]): TeamSummary[] => team.map((m) => ({ species: m.species, level: m.level, shiny: !!m.shiny }))
 

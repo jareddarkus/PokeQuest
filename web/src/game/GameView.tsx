@@ -48,6 +48,8 @@ export interface GameHandle {
   setNpcFreeze: (id: string | null) => void
   /** a speech bubble (a picture of the game's emotes) above a player's head for a moment; id null = you */
   showEmote: (id: string | null, idx: number) => void
+  /** where, in pixels of the game picture, the top of a trainer (or of a tile: `npc` = null) is right now, or null when it is out of view */
+  screenOf: (npc: string | null, tx?: number, ty?: number) => { x: number; y: number } | null
 }
 
 interface Props {
@@ -130,6 +132,7 @@ export default function GameView(props: Props) {
 
     const handle: GameHandle = {
       showEmote: () => {},
+      screenOf: () => null,
       teleport: (x, y) => {
         me.x = x; me.y = y; me.fromX = x; me.fromY = y; me.t = 1
       },

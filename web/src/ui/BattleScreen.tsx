@@ -51,6 +51,8 @@ interface Props {
   foeName?: string
   /** identifies the trainer (its picture is chosen from it) */
   foeSeed?: string
+  /** the battle picture (class number) of the same kind of trainer as the character that walked up to you */
+  foeClass?: number
   /** set for a duel against another player */
   pvp?: PvpLink
   /** set when you are only watching another player's battle: the events come from them and nothing can be chosen */
@@ -303,7 +305,7 @@ function ModernHpBox({ side, mine, exp, gender, k }: { side: Side; mine: boolean
 export function HpBox(props: Parameters<typeof ClassicHpBox>[0]) {
   return useTheme() === 'modern' ? <ModernHpBox side={props.side} mine={props.mine} exp={props.exp} gender={props.gender} k={props.k} /> : <ClassicHpBox {...props} />
 }
-export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed, pvp, spectate, stream, playerGirl, textSpeed = 'normal', onEnd }: Props) {
+export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed, foeClass, pvp, spectate, stream, playerGirl, textSpeed = 'normal', onEnd }: Props) {
   // the battle always looks classic (the game's own HP boxes, command and move screens), whatever the theme is; the theme comes back when the battle ends
   useEffect(() => { const prev = getTheme(); setTheme('classic'); return () => setTheme(prev) }, [])
   const playerTeam = useMemo(() => trainer.team.filter((m) => m.hp > 0).map((m) => ({ ...m, evs: { ...m.evs }, ivs: { ...m.ivs }, moves: [...m.moves] })), [])
@@ -707,7 +709,8 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
     const T = (t: number) => t / total
     const tf = (y: number, k: number) => `translateY(${-y * u}px) scale(${k})`
     const keys: Keyframe[] = [
-      { offset: 0, transform: tf(4, 0.001), opacity: 1 },
+      { offset: 0, transform: tf(4, big), opacity: 0 }, // (it appears at its real size: no growing from a dot)
+      { offset: T(6 * F), transform: tf(4, big), opacity: 1 },
       { offset: T(A), transform: tf(4, big), opacity: 1 },
       { offset: T(A + 16 * F), transform: tf(3, mid), opacity: 1 },
       { offset: T(A + B), transform: tf(3, mid), opacity: 1 },
@@ -752,7 +755,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
     show()
     void music.cryOf(s.species, dexNum(s.species))
     await new Promise<void>((r) => requestAnimationFrame(() => r()))
-    const total = playMon(side, side === 'me' ? 0.7 : 1.2, side === 'me' ? 0.5 : 1.0, sc)
+    const total = playMon(side, 1.0, 1.0, sc) // (your Pokémon used to land at half size and then grow: now it lands at its real size, like the foe's)
     window.setTimeout(() => { void music.playSeq(1400); const f = feetPx(side); void spl.emit(325, 2, { x: f.x, y: f.y }, null, 16, { maxFrames: 60 }) }, 32 * F + 32 * F + 10 * F)
     return total + 100
   }
@@ -777,7 +780,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
       }
       for (const m of foeCopies.slice(1)) { const d = dexNum(m.species); if (d > 649) preloadPixel(m.species, false, !!m.shiny) }
       jobs.push(trainerBackPic(playerBackClass(!!playerGirl)).then(setMyPic))
-      if (kind !== 'wild') jobs.push(trainerFrontPic(trainerClassFor(kind === 'gym' ? 'gym' : 'trainer', foeSeed ?? foeName ?? 'trainer'), [2, 3, 4, 5]).then((r) => setFoePic(r?.canvas ?? null)))
+      if (kind !== 'wild') jobs.push(trainerFrontPic(foeClass ?? trainerClassFor(kind === 'gym' ? 'gym' : 'trainer', foeSeed ?? foeName ?? 'trainer'), [2, 3, 4, 5]).then((r) => setFoePic(r?.canvas ?? null)))
       await Promise.race([Promise.all(jobs), sleep(3000)])
     }
     // online duel: the other player's messages (the host waits until the guest is ready; the guest hands what it hears to its session)
