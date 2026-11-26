@@ -334,7 +334,6 @@ function MoveInfoCard({ mv, S, foeTypes }: { mv: MoveView; S: number; foeTypes?:
   const m = Dex.moves.get(mv.id)
   const facts = moveFacts(mv.name, lang)
   const game = moveGameText(mv.name, lang)
-  const W = Math.floor((256 * S - 16 * S) / S)
   const eff = effectOf(mv.type, m as never, foeTypes ?? [])
   const cells: Array<[string, string | ReactNode]> = [
     [es ? 'Categoría' : 'Category', <TypePlate type={m.category} scale={S} />], // (the icon of physical / special / status, not the word)
@@ -343,26 +342,29 @@ function MoveInfoCard({ mv, S, foeTypes }: { mv: MoveView; S: number; foeTypes?:
     ['PP', `${mv.pp}/${mv.maxpp}`],
   ]
   const line = '1px solid rgba(255,255,255,.18)'
+  const LEX = "'Lexend', system-ui, sans-serif"
+  const GRAY = '#9aa0b4'
+  const t = (size: number, color: string): React.CSSProperties => ({ fontFamily: LEX, fontWeight: 400, fontSize: size * S, lineHeight: 1.25, color })
   return (
     <div style={{ position: 'absolute', left: 0, bottom: '100%', width: 256 * S + 6, boxSizing: 'border-box', background: 'rgba(14,16,24,.97)', border: '2px solid rgba(255,255,255,.55)', color: '#fff', zIndex: 40, pointerEvents: 'none' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: `${4 * S}px ${6 * S}px`, borderBottom: line }}>
-        <FontText text={nameOf(mv.name)} font={0} k={S} color="#ffffff" shadow={MOVE_SHADOW} />
+        <span style={t(8.4, '#ffffff')}>{nameOf(mv.name)}</span>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 * S }}>
-          {eff && <FontText text={EFFECT_LABEL[es ? 'es' : 'en'][eff]} font={1} k={S} color={EFFECT_COLOR[eff]} shadow="#30343c" />}
+          {eff && <span style={t(6.2, EFFECT_COLOR[eff])}>{EFFECT_LABEL[es ? 'es' : 'en'][eff]}</span>}
           <TypePlate type={mv.type} scale={S} />
         </span>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', borderBottom: line }}>
         {cells.map(([label, value], i) => (
-          <div key={label} style={{ padding: `${3 * S}px ${5 * S}px`, borderLeft: i ? line : 'none', display: 'flex', flexDirection: 'column', gap: S }}>
-            <FontText text={label} font={1} k={S} color="#a8b0c8" shadow="#30343c" />
-            {typeof value === 'string' ? <FontText text={value} font={0} k={S} color="#ffffff" shadow={MOVE_SHADOW} /> : value}
+          <div key={label} style={{ padding: `${3 * S}px ${5 * S}px`, borderLeft: i ? line : 'none', display: 'flex', flexDirection: 'column', gap: S * 1.5 }}>
+            <span style={t(5.6, GRAY)}>{label}</span>
+            {typeof value === 'string' ? <span style={t(7.4, '#ffffff')}>{value}</span> : value}
           </div>
         ))}
       </div>
       <div style={{ padding: `${4 * S}px ${6 * S}px`, display: 'flex', flexDirection: 'column', gap: 3 * S }}>
-        {facts && <FontText text={facts} font={2} k={S} maxWidth={W} color="#ffffff" shadow={MOVE_SHADOW} />}
-        {game && <div style={{ borderTop: line, paddingTop: 3 * S }}><FontText text={game} font={1} k={S} maxWidth={W} color="#b8b8c8" shadow="#40404c" /></div>}
+        {facts && <span style={t(6.4, '#ffffff')}>{facts}</span>}
+        {game && <div style={{ borderTop: line, paddingTop: 3 * S, ...t(6, GRAY) }}>{game}</div>}
       </div>
     </div>
   )
