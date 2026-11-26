@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { snap } from './pixel'
 import { Dex } from '@pkmn/sim'
-import { CATEGORY, nameOf, useLang } from '../i18n'
+import { nameOf, useLang } from '../i18n'
 import FontText from './FontText'
 import { moveFacts, moveGameText } from '../data/moveText'
 import { TYPE_COLOR, type PType } from '../game/world'
@@ -290,7 +290,7 @@ function ClassicCommand({ S, onFight, onBag, onPokemon, onRun, closing, party, f
 
 /** The move screen: four coloured move buttons with the red corners on the chosen one, the row of party balls and the back button (bottom right). */
 let lastMoveSlot = 0
-function ClassicMoves({ S, moves, party, onMove, onBack }: { S: number; moves: MoveView[]; party?: Array<'ok' | 'fnt' | 'none'>; onMove: (i: number) => void; onBack: () => void }) {
+function ClassicMoves({ S, moves, party, onMove, onBack, foeTypes }: { S: number; moves: MoveView[]; party?: Array<'ok' | 'fnt' | 'none'>; onMove: (i: number) => void; onBack: () => void; foeTypes?: string[] }) {
   const bg = useUiUrl('moves:bg')
   const back = useUiUrl('cmd:back')
   const pos: Array<[number, number]> = [[0, 34], [129, 34], [0, 82], [129, 82]]
@@ -308,21 +308,36 @@ function ClassicMoves({ S, moves, party, onMove, onBack }: { S: number; moves: M
           </button>
         </div>
       </Lower>
-      {info && <MoveInfoCard mv={info} S={S} />}
+      {info && <MoveInfoCard mv={info} S={S} foeTypes={foeTypes} />}
     </div>
   )
 }
 
 /** What a move does, in a clean grid: name + type, then category / power / accuracy / PP, then what it does and what the game says about it. */
-function MoveInfoCard({ mv, S }: { mv: MoveView; S: number }) {
+/** How a move fares against the foe's type(s): by the type chart only (the words of the game's own battle messages). */
+function effectOf(moveType: string, m: { category: string; damage?: unknown }, foeTypes: string[]): 'none' | 'weak' | 'normal' | 'strong' | null {
+  if (m.category === 'Status' || !foeTypes.length) return null
+  if (!Dex.getImmunity(moveType, foeTypes)) return 'none'
+  if (m.damage) return 'normal' // (a move of fixed damage ignores weaknesses)
+  const e = foeTypes.reduce((sum, t) => sum + Dex.getEffectiveness(moveType, t), 0)
+  return e > 0 ? 'strong' : e < 0 ? 'weak' : 'normal'
+}
+const EFFECT_LABEL = {
+  en: { none: 'No effect', weak: 'Not very effective', normal: 'Effective', strong: 'Super effective' },
+  es: { none: 'No afecta', weak: 'Poco eficaz', normal: 'Eficaz', strong: 'Muy eficaz' },
+} as const
+const EFFECT_COLOR = { none: '#b8b8c8', weak: '#ff9a7a', normal: '#ffffff', strong: '#7dff9a' } as const
+
+function MoveInfoCard({ mv, S, foeTypes }: { mv: MoveView; S: number; foeTypes?: string[] }) {
   const lang = useLang()
   const es = lang === 'es'
   const m = Dex.moves.get(mv.id)
   const facts = moveFacts(mv.name, lang)
   const game = moveGameText(mv.name, lang)
   const W = Math.floor((256 * S - 16 * S) / S)
-  const cells: Array<[string, string]> = [
-    [es ? 'Categoría' : 'Category', es ? CATEGORY[m.category] ?? m.category : m.category],
+  const eff = effectOf(mv.type, m as never, foeTypes ?? [])
+  const cells: Array<[string, string | ReactNode]> = [
+    [es ? 'Categoría' : 'Category', <TypePlate type={m.category} scale={S} />], // (the icon of physical / special / status, not the word)
     [es ? 'Potencia' : 'Power', m.basePower ? String(m.basePower) : '—'],
     [es ? 'Precisión' : 'Accuracy', m.accuracy === true ? '—' : `${m.accuracy}%`],
     ['PP', `${mv.pp}/${mv.maxpp}`],
@@ -332,13 +347,16 @@ function MoveInfoCard({ mv, S }: { mv: MoveView; S: number }) {
     <div style={{ position: 'absolute', left: 0, bottom: '100%', width: 256 * S + 6, boxSizing: 'border-box', background: 'rgba(14,16,24,.97)', border: '2px solid rgba(255,255,255,.55)', color: '#fff', zIndex: 40, pointerEvents: 'none' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: `${4 * S}px ${6 * S}px`, borderBottom: line }}>
         <FontText text={nameOf(mv.name)} font={0} k={S} color="#ffffff" shadow={MOVE_SHADOW} />
-        <TypePlate type={mv.type} scale={S} />
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 * S }}>
+          {eff && <FontText text={EFFECT_LABEL[es ? 'es' : 'en'][eff]} font={1} k={S} color={EFFECT_COLOR[eff]} shadow="#30343c" />}
+          <TypePlate type={mv.type} scale={S} />
+        </span>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', borderBottom: line }}>
         {cells.map(([label, value], i) => (
           <div key={label} style={{ padding: `${3 * S}px ${5 * S}px`, borderLeft: i ? line : 'none', display: 'flex', flexDirection: 'column', gap: S }}>
             <FontText text={label} font={1} k={S} color="#a8b0c8" shadow="#30343c" />
-            <FontText text={value} font={0} k={S} color="#ffffff" shadow={MOVE_SHADOW} />
+            {typeof value === 'string' ? <FontText text={value} font={0} k={S} color="#ffffff" shadow={MOVE_SHADOW} /> : value}
           </div>
         ))}
       </div>

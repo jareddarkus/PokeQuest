@@ -17,6 +17,8 @@ export type BattleEvent =
   | { kind: 'volatile'; side: Side; uid: string; what: 'confusion' | 'attract' }
   | { kind: 'move'; side: Side; uid: string; move: string }
   | { kind: 'stat'; side: Side; uid: string; amount: number }
+  /** the stat stages (-6 ... +6) a Pokémon has right now, for the little badges next to its HP box */
+  | { kind: 'stages'; side: Side; uid: string; stages: Record<string, number> }
   | { kind: 'turn'; n: number }
   | { kind: 'win'; side: Side | null }
 
@@ -72,6 +74,8 @@ export class BattleSession {
   defeated: Array<{ foe: Mon; by: string[] }> = []
   private participants = new Set<string>()
   private currentP1 = ''
+  private stages = new Map<string, Record<string, number>>()
+  private stagesPrev = new Map<string, Record<string, number>>()
   private turnCount = 0
 
   /** online duel (the host runs the battle, the guest gets the same events seen from its own side and sends its choices back) */
@@ -191,6 +195,11 @@ export class BattleSession {
     const flip = (x: Side): Side => (view === 'p1' ? x : x === 'p1' ? 'p2' : 'p1')
     const sideOf = (id: string): Side => flip(id.startsWith('p1') ? 'p1' : 'p2')
     const ev: BattleEvent[] = []
+    // stat stages, followed line by line (the second look at the same lines, for the guest of a duel, starts from what it was before)
+    if (commit) this.stagesPrev = new Map([...this.stages].map(([k, v]) => [k, { ...v }]))
+    const st = commit ? this.stages : new Map([...this.stagesPrev].map(([k, v]) => [k, { ...v }]))
+    const stagesOf = (uid: string) => { let r = st.get(uid); if (!r) { r = {}; st.set(uid, r) } return r }
+    const pushStages = (id: string) => { const uid = this.nameOf(id); ev.push({ kind: 'stages', side: sideOf(id), uid, stages: { ...stagesOf(uid) } }) }
     for (const line of lines) {
       if (!line.startsWith('|')) continue
       const p = line.slice(1).split('|')
@@ -203,6 +212,8 @@ export class BattleSession {
           const hp = this.parseHp(p[3])
           const mon = this.monOf(uid)
           if (commit) { if (p[1].startsWith('p1')) { this.currentP1 = uid; this.participants.add(uid) } else { this.participants = new Set([this.currentP1]) } }
+          st.delete(uid)
+          ev.push({ kind: 'stages', side, uid, stages: {} })
           ev.push({ kind: 'switch', side, uid, species: det ? det[1] : mon?.species ?? '?', level: det ? Number(det[2]) : mon?.level ?? 1, hp: hp.hp, maxHp: hp.max, shiny: !!mon?.shiny })
           ev.push({ kind: 'text', text: side === 'p1' ? `Go! ${mon?.species ?? ''}!` : this.pvp ? `${view === 'p1' ? this.pvp.guestName : this.pvp.hostName} sent out ${mon?.species ?? ''}!` : this.isTrainerBattle ? `${this.foeName || 'The foe'} sent out ${mon?.species ?? ''}!` : `A wild ${mon?.species ?? ''} appeared!` })
           break
@@ -266,8 +277,14 @@ export class BattleSession {
           const uid = this.nameOf(p[1])
           ev.push({ kind: 'text', text: `${this.pretty(uid, view)}'s ${stat} ${up ? 'rose' : 'fell'}${how}!` })
           ev.push({ kind: 'stat', side: sideOf(p[1]), uid, amount: up ? n : -n })
+          { const r = stagesOf(uid); r[p[2]] = Math.max(-6, Math.min(6, (r[p[2]] ?? 0) + (up ? n : -n))); pushStages(p[1]) }
           break
         }
+        case '-setboost': { const r = stagesOf(this.nameOf(p[1])); r[p[2]] = Math.max(-6, Math.min(6, Number(p[3]) || 0)); pushStages(p[1]); break }
+        case '-clearboost': { st.set(this.nameOf(p[1]), {}); pushStages(p[1]); break }
+        case '-clearnegativeboost': { const r = stagesOf(this.nameOf(p[1])); for (const k of Object.keys(r)) if (r[k] < 0) r[k] = 0; pushStages(p[1]); break }
+        case '-invertboost': { const r = stagesOf(this.nameOf(p[1])); for (const k of Object.keys(r)) r[k] = -r[k]; pushStages(p[1]); break }
+        case '-clearallboost': { for (const [uid] of st) { st.set(uid, {}); const side: Side = flip(this.battle.p1.pokemon.some((q: { name: string }) => q.name === uid) ? 'p1' : 'p2'); ev.push({ kind: 'stages', side, uid, stages: {} }) } break }
         case 'turn': if (commit) this.turnCount = Number(p[1]); ev.push({ kind: 'turn', n: Number(p[1]) }); break
         case 'win': {
           const w: Side = p[1] === 'You' ? 'p1' : 'p2'

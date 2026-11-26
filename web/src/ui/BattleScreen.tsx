@@ -302,6 +302,24 @@ function ModernHpBox({ side, mine, exp, expFrac, gender, k }: { side: Side; mine
   )
 }
 
+/** Little slanted badges next to an HP box for every stat that is raised (green) or lowered (red): "Atk +2", "Speed -1" ... */
+const STAGE_ORDER = ['atk', 'def', 'spa', 'spd', 'spe', 'accuracy', 'evasion'] as const
+const STAGE_NAME = {
+  en: { atk: 'Atk', def: 'Def', spa: 'Sp. Atk', spd: 'Sp. Def', spe: 'Speed', accuracy: 'Accuracy', evasion: 'Evasion' },
+  es: { atk: 'Ataque', def: 'Defensa', spa: 'At. Esp.', spd: 'Def. Esp.', spe: 'Velocidad', accuracy: 'Precisión', evasion: 'Evasión' },
+} as const
+function StageBadges({ st, es, K, side }: { st: Record<string, number>; es: boolean; K: number; side: 'me' | 'foe' }) {
+  const items = STAGE_ORDER.filter((k) => st[k])
+  if (!items.length) return null
+  return (
+    <div className={`stage-chips ${side}`} style={{ ['--k' as string]: `${K}px` }}>
+      {items.map((k) => (
+        <span key={k} className={`sc ${st[k] > 0 ? 'up' : 'dn'}`}><span>{st[k] > 0 ? '▲' : '▼'} {STAGE_NAME[es ? 'es' : 'en'][k]} {st[k] > 0 ? '+' : ''}{st[k]}</span></span>
+      ))}
+    </div>
+  )
+}
+
 export function HpBox(props: Parameters<typeof ClassicHpBox>[0]) {
   return useTheme() === 'modern' ? <ModernHpBox side={props.side} mine={props.mine} exp={props.exp} expFrac={props.expFrac} gender={props.gender} k={props.k} /> : <ClassicHpBox {...props} />
 }
@@ -322,6 +340,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
   const [trOut, setTrOut] = useState({ foe: false, me: false }) // sliding away
   const [trGone, setTrGone] = useState({ foe: false, me: false }) // gone
   const [throwKey, setThrowKey] = useState(0)
+  const [stages, setStages] = useState<{ me: Record<string, number>; foe: Record<string, number> }>({ me: {}, foe: {} }) // the stat stages of the two Pokémon that are out (badges next to the HP boxes)
   const [expFrac, setExpFrac] = useState<number | null>(null) // the EXP gauge of your Pokémon while it is filling (null: as it is)
   const [lvWin, setLvWin] = useState<null | { name: string; rows: Array<{ label: string; inc: number; now: number }>; phase: 'inc' | 'now' }>(null) // the window of the stat gains after a level
   const meUid = useRef('')
@@ -504,6 +523,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
           await sleep(fx?.ready ? 800 : 300)
           break
         }
+        case 'stages': setStages((o) => ({ ...o, [ev.side === 'p1' ? 'me' : 'foe']: ev.stages })); break
         case 'stat': {
           // the game's own sounds (the picture of the stat-change effect is not decoded yet, nothing is invented here)
           const sd: 'me' | 'foe' = ev.side === 'p1' ? 'me' : 'foe'
@@ -1203,9 +1223,11 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
       {rows && <TeamBalls key={rows} side={rows} count={rows === 'foe' ? foeTeam.length : playerTeam.length} alive={rows === 'foe' ? foeTeam.map((m) => m.hp > 0) : playerTeam.map((m) => m.hp > 0)} K={Kd} />}
       <div className="foe-zone">
         {foe && hpOn.foe && <HpBox side={foe} mine={false} gender={foeCopies.find((m) => m.uid === foe.uid)?.gender} />}
+        {foe && hpOn.foe && <StageBadges st={stages.foe} es={lang === 'es'} K={Kd} side="foe" />}
       </div>
       <div className="me-zone">
         {me && hpOn.me && <HpBox side={me} mine exp={teamRef.current.find((m) => m.uid === me.uid)?.exp} expFrac={expFrac ?? undefined} gender={teamRef.current.find((m) => m.uid === me.uid)?.gender} />}
+        {me && hpOn.me && <StageBadges st={stages.me} es={lang === 'es'} K={Kd} side="me" />}
       </div>
       <div className="battle-bottom">
         <div className="battle-band" style={{ cursor: 'pointer' }} onClick={() => { setSkip((k) => k + 1); wake.current?.() }}><TypedText text={text} ms={msPer} skip={skip} /></div>
@@ -1225,7 +1247,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
         )}
 
         {mode === 'fight' && req && (
-          <MoveScreen S={S} moves={req.moves} party={Array.from({ length: 6 }, (_, i) => { const m = teamRef.current[i]; return m ? (m.hp > 0 ? 'ok' : 'fnt') : 'none' })} onMove={doMove} onBack={() => { fromFight.current = true; setMode('menu') }} />
+          <MoveScreen S={S} foeTypes={foe ? [...Dex.species.get(foe.species).types] : undefined} moves={req.moves} party={Array.from({ length: 6 }, (_, i) => { const m = teamRef.current[i]; return m ? (m.hp > 0 ? 'ok' : 'fnt') : 'none' })} onMove={doMove} onBack={() => { fromFight.current = true; setMode('menu') }} />
         )}
 
         {mode === 'switch' && req && (
