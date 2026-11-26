@@ -30,6 +30,7 @@ import { trText, useLang } from '../i18n'
 import FontText from './FontText'
 import { useTheme } from './theme'
 import { RULES } from '../game/rules'
+import { getTheme, setTheme } from './theme'
 import { nameOf } from '../i18n'
 
 export type BattleKind = 'wild' | 'trainer' | 'gym'
@@ -278,6 +279,8 @@ export function HpBox(props: Parameters<typeof ClassicHpBox>[0]) {
   return useTheme() === 'modern' ? <ModernHpBox side={props.side} mine={props.mine} exp={props.exp} gender={props.gender} k={props.k} /> : <ClassicHpBox {...props} />
 }
 export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed, pvp, playerGirl, textSpeed = 'normal', onEnd }: Props) {
+  // the battle always looks classic (the game's own HP boxes, command and move screens), whatever the theme is; the theme comes back when the battle ends
+  useEffect(() => { const prev = getTheme(); setTheme('classic'); return () => setTheme(prev) }, [])
   const playerTeam = useMemo(() => trainer.team.filter((m) => m.hp > 0).map((m) => ({ ...m, evs: { ...m.evs }, ivs: { ...m.ivs }, moves: [...m.moves] })), [])
   const foeCopies = useMemo(() => foeTeam.map((m) => ({ ...m, evs: { ...m.evs }, ivs: { ...m.ivs }, moves: [...m.moves] })), [])
   const [me, setMe] = useState<Side | null>(null)
@@ -1025,7 +1028,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
         </>
       )}
       </div>
-      {!transDone && <BattleTransition onBlack={() => setShowScene(true)} onFade={() => { sceneRef.current?.startIntro(900); setIntroOn(true); window.setTimeout(() => introResolve.current(), 1450) }} onDone={() => setTransDone(true)} />}
+      {!transDone && <BattleTransition onBlack={() => setShowScene(true)} onFade={() => { /* (no opening fly-in: the battle starts with the usual camera, everything in view) */ setIntroOn(true); window.setTimeout(() => introResolve.current(), 1450) }} onDone={() => setTransDone(true)} />}
       {rows && <TeamBalls key={rows} side={rows} count={rows === 'foe' ? foeTeam.length : playerTeam.length} alive={rows === 'foe' ? foeTeam.map((m) => m.hp > 0) : playerTeam.map((m) => m.hp > 0)} K={Kd} />}
       <div className="foe-zone">
         {foe && hpOn.foe && <HpBox side={foe} mine={false} gender={foeCopies.find((m) => m.uid === foe.uid)?.gender} />}
