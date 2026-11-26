@@ -118,6 +118,27 @@ function TrainerFigure({ still, sprite, k, side, out, play, sil }: { still?: HTM
     tick()
     return () => cancelAnimationFrame(raf)
   }, [still, sprite, play, size])
+  // your trainer is cut off at the legs: scale it (about its top, so it does not move) until its feet reach the bottom of the screen
+  useEffect(() => {
+    const c = ref.current
+    if (!c || side !== 'me') return
+    const fit = () => {
+      c.style.scale = ''
+      const r = c.getBoundingClientRect(), root = c.closest('.fullscreen')?.getBoundingClientRect()
+      if (!root || r.height < 1) return
+      // the hair is the fixed point (the first row with a picture), so the head stays where it is
+      const d = c.getContext('2d')!.getImageData(0, 0, c.width, c.height).data
+      let row = 0
+      while (row < c.height - 1 && !d.subarray(row * c.width * 4, (row + 1) * c.width * 4).some((v, i) => i % 4 === 3 && v > 10)) row++
+      const y0 = r.top + (row / c.height) * r.height
+      const s = (root.bottom - y0) / (r.bottom - y0)
+      c.style.transformOrigin = `50% ${(row / c.height) * 100}%`
+      if (s > 1 && s < 3) c.style.scale = String(s)
+    }
+    fit()
+    window.addEventListener('resize', fit)
+    return () => window.removeEventListener('resize', fit)
+  }, [side, size, k, sprite, play])
   return <canvas ref={ref} width={size} height={size} className={`tr-fig ${side} ${out ? 'out' : sil === undefined ? '' : `sil${sil}`}`} style={{ width: size * k, height: size * k }} />
 }
 

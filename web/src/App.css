@@ -412,7 +412,7 @@ button.big small { opacity: .7; font-size: .75rem; }
 .tr-fig { display: block; image-rendering: pixelated; transition: transform .8s ease-in, opacity .8s ease-in; }
 .tr-fig.foe.out { transform: translateX(130%); opacity: 0; }
 .tr-fig.me.out { transform: translateX(-130%); opacity: 0; }
-.tr-fig.me { margin-left: -22%; margin-bottom: -16%; }
+.tr-fig.me { margin-left: -22%; margin-bottom: -16%; transform-origin: 50% 0; }
 
 /* HP boxes at the places of the real top screen (measured on the reference video; --k = screen pixels per DS pixel) */
 .foe-zone .hp2 { left: calc(6 * var(--k)); top: calc(31 * var(--k)); right: auto; bottom: auto; }
