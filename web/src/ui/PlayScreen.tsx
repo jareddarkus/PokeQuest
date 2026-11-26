@@ -15,6 +15,7 @@ import {
 import BattleScreen, { CHAR_MS, TypedText, type BattleKind, type BattleOutcome, type PvpLink } from './BattleScreen'
 import { addExtraGrass, buildMeadowVisuals, prepareMeadow } from '../game/meadow'
 import { buildCustomVisuals, type CustomWorld } from '../world/customWorld'
+import { fetchPublishedWorld } from '../world/publish'
 import { busyLine, leaderLine, lossLine, preBattleLine } from '../data/npcLines'
 import { BagPanel, PcPanel, TeamPanel } from './MenuPanels'
 import SettingsPanel from './SettingsPanel'
@@ -473,14 +474,17 @@ export default function PlayScreen(props: Props) {
       const seed = props.royale ? props.royale.seed : Math.floor(Math.random() * 1e9)
       setProg({ text: 'Making the meadow, paths and forests…', frac: 0.65, step: 3, steps: 5, done: 0, total: 1, unit: 'step' })
       await pause()
+      // the world the owner published (everybody plays the same one) unless a world is being tested from the editor
+      const custom = props.custom ?? (await fetchPublishedWorld())
+      if (!live) return
       let world: World
-      if (props.custom) { // a world from the editor: its own ground, heights and models replace the real map
+      if (custom) { // a world from the editor: its own ground, heights and models replace the real map
         setProg({ text: 'Drawing your world…', frac: 0.8, step: 4, steps: 5, done: 0, total: 1, unit: 'step' })
         await pause()
         built.group.clear()
         built.uniforms.uHide.value = 9999
-        const vis = buildCustomVisuals(props.custom, built)
-        world = generateWorld(seed, built.ground, { barriers: props.custom.barriers })
+        const vis = buildCustomVisuals(custom, built)
+        world = generateWorld(seed, built.ground, { barriers: custom.barriers })
         built.group.add(vis.group)
       } else {
         prepareMeadow(built, seed) // ring 1 = a meadow (lots of tall grass, a ring road and paths, a beach)

@@ -384,3 +384,7 @@ Seen in the recording but NOT done: the trainers' battle sprites (the foe traine
 - The world is saved in this browser (localStorage `pq.world.custom.v1`, auto every 4 s) — 160 x 160 tiles like the island. Code: `src/world/customWorld.ts` (data, saving, drawing), `src/ui/WorldEditor.tsx`.
 - In the game the custom world replaces the real map; gyms, trainers and items are still placed by `generateWorld`; "Muros de anillo" adds the ring walls of the Battle Royale (off by default).
 - Not done yet: publishing a world for friends (needs a Supabase table + owner check) — until then only this browser sees it; objects cannot be moved after placing (erase + place); the import step only keeps the 5 x 5 map pieces and 10 building packs around the island.
+
+## Round 14 — publishing + moving objects
+- Table `worlds` (everyone reads, only rows of `world_admins` write), `world_admins`, `app_secrets` (no policies) and the function `claim_world_admin(code)`: the owner logs in inside the editor ("Publicar…"), types the owner code once (kept in Supabase only, NOT in this repo) and then can publish / unpublish. Published world = the one every game (practice and matches) loads; none = the normal island. Code: `src/world/publish.ts`.
+- Editor: "Mover objeto" (drag; R turns, Supr deletes the chosen one).

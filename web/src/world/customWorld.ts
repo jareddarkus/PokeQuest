@@ -120,7 +120,7 @@ function toGeometry(g: Geo): THREE.BufferGeometry {
  * Draws a custom world and sets `built.ground` / `built.height` for the game. Returns the picture group (the caller adds it to the scene).
  * `quick` = for the editor while you paint (no tall-grass leaves or objects).
  */
-export function buildCustomVisuals(cw: CustomWorld, built: BuiltWorld, opts: { only?: 'ground' | 'objects' } = {}): { group: THREE.Group; blocked: Uint8Array } {
+export function buildCustomVisuals(cw: CustomWorld, built: BuiltWorld, opts: { only?: 'ground' | 'objects' } = {}): { group: THREE.Group; blocked: Uint8Array; holders: Map<number, THREE.Group> } {
   const group = new THREE.Group()
   const mesh = (g: THREE.BufferGeometry, mat: THREE.Material) => { const m = new THREE.Mesh(g, mat); m.frustumCulled = false; group.add(m); return m }
   const green = (r: number, gr: number, b: number) => gr - 0.6 * (r + b) / 2
@@ -180,6 +180,7 @@ export function buildCustomVisuals(cw: CustomWorld, built: BuiltWorld, opts: { o
   }
 
   const blocked = new Uint8Array(SIZE * SIZE)
+  const holders = new Map<number, THREE.Group>()
   if (opts.only !== 'ground') {
     const pines = cw.objects.filter((o) => o.kind === 'pine')
     if (pines.length) {
@@ -209,6 +210,7 @@ export function buildCustomVisuals(cw: CustomWorld, built: BuiltWorld, opts: { o
       holder.rotation.y = (o.rot * Math.PI) / 180
       const gi = Math.max(0, Math.min(SIZE - 1, Math.floor(o.z))) * SIZE + Math.max(0, Math.min(SIZE - 1, Math.floor(o.x)))
       holder.position.set(o.x, topY(gi), o.z)
+      holders.set(o.id, holder)
       group.add(holder)
       holder.updateMatrixWorld(true)
       const wb = new THREE.Box3().setFromObject(holder)
@@ -217,5 +219,5 @@ export function buildCustomVisuals(cw: CustomWorld, built: BuiltWorld, opts: { o
     for (let i = 0; i < SIZE * SIZE; i++) if (blocked[i] && built.ground[i] !== T.Water) built.ground[i] = T.Tree
   }
   void lv
-  return { group, blocked }
+  return { group, blocked, holders }
 }

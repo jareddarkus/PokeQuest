@@ -5,13 +5,15 @@ import * as THREE from 'three'
 import { buildChunkWorld, type BuiltWorld } from '../rom/chunkWorld'
 import { loadWorldData } from '../rom/store'
 import { ProgressBar } from './ProgressBar'
+import { signIn } from '../supabase'
+import { claimWorldAdmin, currentUserId, isWorldAdmin, publishWorld, publishedInfo, unpublishWorld } from '../world/publish'
 import { SIZE, T } from '../game/world'
 import {
   DEFAULT_TEXTURE, MAX_LEVEL, buildCustomVisuals, cloneWorld, decodeWorld, emptyWorld, encodeWorld, heightOf, loadLocal, saveLocal, texIndex,
   type CustomWorld,
 } from '../world/customWorld'
 
-type Tool = 'paint' | 'kind' | 'height' | 'model' | 'pine' | 'erase'
+type Tool = 'paint' | 'kind' | 'height' | 'model' | 'pine' | 'move' | 'erase'
 
 const KINDS: Array<{ code: number; label: string; hint: string }> = [
   { code: T.Grass, label: 'Hierba', hint: 'Se puede andar' },
@@ -92,6 +94,7 @@ function Editor({ built, onExit, onPlay }: { built: BuiltWorld; onExit: () => vo
   const [name, setName] = useState(cwRef.current.name)
   const [barriers, setBarriers] = useState(cwRef.current.barriers)
   const [, force] = useState(0)
+  const [showPub, setShowPub] = useState(false)
   const redraw = useRef<() => void>(() => {})
   const undo = useRef<CustomWorld[]>([])
   const redo = useRef<CustomWorld[]>([])
@@ -171,11 +174,12 @@ function Editor({ built, onExit, onPlay }: { built: BuiltWorld; onExit: () => vo
     resize()
     window.addEventListener('resize', resize)
 
-    let ground: THREE.Group | null = null, objects: THREE.Group | null = null, blockedMask: Uint8Array = new Uint8Array(SIZE * SIZE)
+    let ground: THREE.Group | null = null, objects: THREE.Group | null = null, blockedMask: Uint8Array = new Uint8Array(SIZE * SIZE), holders = new Map<number, THREE.Group>()
+    let selectedId = -1
     let overlay: THREE.Mesh | null = null
     const dispose = (g: THREE.Group | null) => { if (!g) return; scene.remove(g); g.traverse((o) => { const m = o as THREE.Mesh; if (m.geometry) m.geometry.dispose() }) }
     const rebuildGround = () => { dispose(ground); const r = buildCustomVisuals(cwRef.current, built, { only: 'ground' }); ground = r.group; scene.add(ground); updateOverlay() }
-    const rebuildObjects = () => { dispose(objects); const r = buildCustomVisuals(cwRef.current, built, { only: 'objects' }); objects = r.group; blockedMask = r.blocked; scene.add(objects); updateOverlay() }
+    const rebuildObjects = () => { dispose(objects); const r = buildCustomVisuals(cwRef.current, built, { only: 'objects' }); objects = r.group; blockedMask = r.blocked; holders = r.holders; scene.add(objects); updateOverlay() }
     const updateOverlay = () => {
       if (overlay) { scene.remove(overlay); overlay.geometry.dispose(); overlay = null }
       if (!showBlockedRef.current) return
@@ -202,6 +206,10 @@ function Editor({ built, onExit, onPlay }: { built: BuiltWorld; onExit: () => vo
     const cursor = new THREE.Mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffe040, transparent: true, opacity: 0.45, depthTest: false }))
     cursor.renderOrder = 1000
     scene.add(cursor)
+    const selBox = new THREE.Mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffe040, transparent: true, opacity: 0.5, depthTest: false }))
+    selBox.visible = false
+    selBox.renderOrder = 1001
+    scene.add(selBox)
     const ray = new THREE.Raycaster()
     const mouse = new THREE.Vector2()
     const hover = { x: -1, z: -1, fx: 0, fz: 0, on: false }
@@ -231,6 +239,7 @@ function Editor({ built, onExit, onPlay }: { built: BuiltWorld; onExit: () => vo
       for (let b = 0; b < n; b++) for (let a = 0; a < n; a++) { const x = hover.x - o + a, z = hover.z - o + b; if (x >= 0 && z >= 0 && x < SIZE && z < SIZE) out.push(z * SIZE + x) }
       return out
     }
+    let dragging = false, dragOff = { x: 0, z: 0 }
     let painting = false, panning = false, last = { x: 0, y: 0 }, dirty = false, strokeSeen = new Set<number>(), lowering = false
     const apply = () => {
       if (!hover.on) return
@@ -264,6 +273,13 @@ function Editor({ built, onExit, onPlay }: { built: BuiltWorld; onExit: () => vo
         rebuildObjects(); setSaved('')
         return
       }
+      if (t.tool === 'move') {
+        const cw = cwRef.current
+        let best = -1, bd = 2.2
+        cw.objects.forEach((o, k) => { const d = Math.hypot(o.x - hover.fx, o.z - hover.fz); if (d < bd) { bd = d; best = k } })
+        if (best >= 0) { snapshot(); const o = cw.objects[best]; selectedId = o.id; dragging = true; dragOff = { x: o.x - hover.fx, z: o.z - hover.fz } } else selectedId = -1
+        return
+      }
       if (t.tool === 'erase') {
         const cw = cwRef.current
         let best = -1, bd = 2.2
@@ -284,9 +300,22 @@ function Editor({ built, onExit, onPlay }: { built: BuiltWorld; onExit: () => vo
         return
       }
       pick(ev)
+      if (dragging && hover.on) {
+        const o = cwRef.current.objects.find((q) => q.id === selectedId)
+        if (o) {
+          const nx = o.kind === 'pine' ? Math.round(hover.fx + dragOff.x) : Math.round((hover.fx + dragOff.x) * 2) / 2
+          const nz = o.kind === 'pine' ? Math.round(hover.fz + dragOff.z) : Math.round((hover.fz + dragOff.z) * 2) / 2
+          if (nx !== o.x || nz !== o.z) {
+            o.x = nx; o.z = nz
+            const h = holders.get(o.id)
+            if (h) { const gi = Math.max(0, Math.min(SIZE - 1, Math.floor(nz))) * SIZE + Math.max(0, Math.min(SIZE - 1, Math.floor(nx))); h.position.set(nx, cwRef.current.kind[gi] === T.Water ? built.waterY : heightOf(built, cwRef.current.level[gi]), nz) }
+          }
+        }
+        return
+      }
       if (painting) { apply(); if (!timer) timer = window.setTimeout(() => { timer = 0; flush() }, 90) }
     }
-    const onUp = () => { painting = false; panning = false; flush(); window.clearTimeout(timer); timer = 0 }
+    const onUp = () => { if (dragging) { dragging = false; rebuildObjects(); setSaved('') } painting = false; panning = false; flush(); window.clearTimeout(timer); timer = 0 }
     const onWheel = (ev: WheelEvent) => { ev.preventDefault(); look.dist = Math.max(8, Math.min(220, look.dist * (ev.deltaY > 0 ? 1.12 : 0.89))) }
     const keys = new Set<string>()
     const onKey = (ev: KeyboardEvent) => {
@@ -294,7 +323,13 @@ function Editor({ built, onExit, onPlay }: { built: BuiltWorld; onExit: () => vo
       if (el && /INPUT|TEXTAREA/.test(el.tagName)) return
       if (ev.type === 'keydown') {
         keys.add(ev.key.toLowerCase())
-        if (ev.key.toLowerCase() === 'r') setRot((r) => (r + 90) % 360)
+        if (ev.key.toLowerCase() === 'r') {
+          const o = selectedId >= 0 ? cwRef.current.objects.find((q) => q.id === selectedId) : undefined
+          if (o && toolRef.current.tool === 'move') { snapshot(); o.rot = (o.rot + 90) % 360; rebuildObjects(); setSaved('') } else setRot((r) => (r + 90) % 360)
+        }
+        if ((ev.key === 'Delete' || ev.key === 'Backspace') && selectedId >= 0 && toolRef.current.tool === 'move') {
+          snapshot(); cwRef.current.objects = cwRef.current.objects.filter((q) => q.id !== selectedId); selectedId = -1; rebuildObjects(); setSaved('')
+        }
         if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'z') { ev.preventDefault(); if (ev.shiftKey) doRedoRef.current(); else doUndoRef.current() }
         if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'y') { ev.preventDefault(); doRedoRef.current() }
       } else keys.delete(ev.key.toLowerCase())
@@ -327,6 +362,16 @@ function Editor({ built, onExit, onPlay }: { built: BuiltWorld; onExit: () => vo
         cursor.scale.set(n, 1, n)
         cursor.position.set(hover.x - o + n / 2, heightOf(built, cwRef.current.level[gi]) + 0.6, hover.z - o + n / 2)
       }
+      const so = selectedId >= 0 ? cwRef.current.objects.find((q) => q.id === selectedId) : undefined
+      if (so && toolRef.current.tool === 'move') {
+        const h = holders.get(so.id)
+        const gi = Math.max(0, Math.min(SIZE - 1, Math.floor(so.z))) * SIZE + Math.max(0, Math.min(SIZE - 1, Math.floor(so.x)))
+        let w = 2, d = 2
+        if (h) { h.updateMatrixWorld(true); const bb = new THREE.Box3().setFromObject(h); w = Math.max(1, bb.max.x - bb.min.x); d = Math.max(1, bb.max.z - bb.min.z) }
+        selBox.scale.set(w + 0.3, 1, d + 0.3)
+        selBox.position.set(so.x, heightOf(built, cwRef.current.level[gi]) + 0.65, so.z)
+        selBox.visible = true
+      } else selBox.visible = false
       renderer.render(scene, camera)
     }
     raf = requestAnimationFrame(loop)
@@ -391,13 +436,14 @@ function Editor({ built, onExit, onPlay }: { built: BuiltWorld; onExit: () => vo
         <button onClick={newWorld}>Mundo nuevo</button>
         <label className="we-check"><input type="checkbox" checked={showBlocked} onChange={(e) => setShowBlocked(e.target.checked)} /> Ver bloqueos</label>
         <label className="we-check" title="El juego añade muros entre los anillos (hace falta ganar un gimnasio para pasar)"><input type="checkbox" checked={barriers} onChange={(e) => setBarriers(e.target.checked)} /> Muros de anillo</label>
+        <button onClick={() => setShowPub(true)}>Publicar…</button>
         <button className="we-play" onClick={() => { save(); onPlay({ ...cwRef.current, name, barriers }) }}>▶ Probar mundo</button>
         <span className="we-saved">{saved}</span>
       </div>
       <div className="we-body">
         <div className="we-side">
           <div className="we-tools">
-            {([['paint', 'Pintar suelo'], ['kind', 'Tipo de casilla'], ['height', 'Altura'], ['model', 'Modelos 3D'], ['pine', 'Pino'], ['erase', 'Borrar objeto']] as Array<[Tool, string]>).map(([k, l]) => (
+            {([['paint', 'Pintar suelo'], ['kind', 'Tipo de casilla'], ['height', 'Altura'], ['model', 'Modelos 3D'], ['pine', 'Pino'], ['move', 'Mover objeto'], ['erase', 'Borrar objeto']] as Array<[Tool, string]>).map(([k, l]) => (
               <button key={k} className={tool === k ? 'on' : ''} onClick={() => setTool(k)}>{l}</button>
             ))}
           </div>
@@ -447,11 +493,61 @@ function Editor({ built, onExit, onPlay }: { built: BuiltWorld; onExit: () => vo
             </>
           )}
           {tool === 'pine' && <p className="we-help">Clic en el mapa para plantar un pino (ocupa 2 × 2 casillas y bloquea el paso).</p>}
+          {tool === 'move' && <p className="we-help">Arrastra un modelo o pino para moverlo. Con uno elegido: R lo gira, Supr lo borra.</p>}
           {tool === 'erase' && <p className="we-help">Clic junto a un modelo o pino para quitarlo.</p>}
         </div>
         <div className="we-view" ref={mountRef} />
       </div>
+      {showPub && <PublishPanel getWorld={() => ({ ...cwRef.current, name, barriers })} onClose={() => setShowPub(false)} />}
       <div className="we-status">{info || 'Rueda: zoom · WASD o botón derecho: mover la vista · Ctrl+Z: deshacer'}</div>
+    </div>
+  )
+}
+
+/** Publishing the world for everybody (only the owner's account can do it). */
+function PublishPanel({ getWorld, onClose }: { getWorld: () => CustomWorld; onClose: () => void }) {
+  const [state, setState] = useState<'loading' | 'out' | 'user' | 'admin'>('loading')
+  const [user, setUser] = useState('')
+  const [pass, setPass] = useState('')
+  const [code, setCode] = useState('')
+  const [msg, setMsg] = useState('')
+  const [info, setInfo] = useState<{ name: string; at: string } | null>(null)
+  const refresh = useCallback(async () => {
+    setInfo(await publishedInfo())
+    if (!(await currentUserId())) { setState('out'); return }
+    setState((await isWorldAdmin()) ? 'admin' : 'user')
+  }, [])
+  useEffect(() => { void refresh() }, [refresh])
+  return (
+    <div className="we-modal" onClick={onClose}>
+      <div className="we-modal-box" onClick={(e) => e.stopPropagation()}>
+        <h3>Publicar el mundo</h3>
+        <p className="we-help">Publicado: {info ? `“${info.name}” (${new Date(info.at).toLocaleString()})` : 'ningún mundo (se juega la isla normal)'}</p>
+        {state === 'loading' && <p>Comprobando tu cuenta…</p>}
+        {state === 'out' && (
+          <>
+            <p className="we-help">Inicia sesión con tu cuenta de PokeQuest.</p>
+            <input className="we-search" placeholder="Usuario" value={user} onChange={(e) => setUser(e.target.value)} />
+            <input className="we-search" placeholder="Contraseña" type="password" value={pass} onChange={(e) => setPass(e.target.value)} />
+            <button onClick={async () => { const err = await signIn(user, pass); setMsg(err ?? ''); if (!err) void refresh() }}>Iniciar sesión</button>
+          </>
+        )}
+        {state === 'user' && (
+          <>
+            <p className="we-help">Esta cuenta aún no es la del propietario. Escribe el código de propietario (solo hace falta una vez).</p>
+            <input className="we-search" placeholder="Código de propietario" value={code} onChange={(e) => setCode(e.target.value)} />
+            <button onClick={async () => { const ok = await claimWorldAdmin(code); setMsg(ok ? 'Listo: esta cuenta es la propietaria.' : 'Código incorrecto.'); if (ok) void refresh() }}>Activar</button>
+          </>
+        )}
+        {state === 'admin' && (
+          <>
+            <button className="we-play" onClick={async () => { setMsg('Publicando…'); const err = await publishWorld(getWorld()); setMsg(err ?? 'Publicado ✓ Todos jugarán este mundo.'); void refresh() }}>Publicar este mundo para todos</button>
+            <button onClick={async () => { if (!window.confirm('¿Quitar el mundo publicado? Volverá la isla normal.')) return; const err = await unpublishWorld(); setMsg(err ?? 'Quitado ✓'); void refresh() }}>Quitar el mundo publicado</button>
+          </>
+        )}
+        {msg && <p>{msg}</p>}
+        <button onClick={onClose}>Cerrar</button>
+      </div>
     </div>
   )
 }
