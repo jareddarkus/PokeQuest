@@ -85,6 +85,18 @@ class MusicManager {
 
   cry(dex: number) { return this.playSfx(`cry:${dex}`) }
 
+  /** The cry of a Pokémon by name: #1-#649 from the player's own game file; the newer ones (generations 6-9) are not in that file, so they are played from Pokémon Showdown's public cry files (a plain audio element, nothing is stored). */
+  cryOf(species: string, dex: number) {
+    if (dex <= 649) return this.playSfx(`cry:${dex}`)
+    if (!this.enabled || this.sfxVolume <= 0.001) return Promise.resolve()
+    try {
+      const a = new Audio(`https://play.pokemonshowdown.com/audio/cries/${species.toLowerCase().replace(/[^a-z0-9]/g, '')}.mp3`)
+      a.volume = Math.min(1, this.sfxVolume)
+      void a.play().catch(() => { /* no sound is fine */ })
+    } catch { /* sounds are optional */ }
+    return Promise.resolve()
+  }
+
   setVolume(v: number) {
     this.volume = v
     if (this.master) this.master.gain.value = v

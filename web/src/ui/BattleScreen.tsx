@@ -356,7 +356,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
           }
           let playMs = 1100
           if (ballOut) playMs = await sendOutScene(who, thrown, s, () => { setSend({ side: who, key: ++sendKey }); if (who === 'me') setMe(s); else setFoe(s) })
-          else { setSend({ side: 'foe', key: ++sendKey, wild: true }); setFoe(s); void music.cry(dexNum(ev.species)); await sleep(30); wildAppear('foe') }
+          else { setSend({ side: 'foe', key: ++sendKey, wild: true }); setFoe(s); void music.cryOf(ev.species, dexNum(ev.species)); await sleep(30); wildAppear('foe') }
           hpOf.current[ev.uid] = ev.hp
           await sleep(playMs)
           setSend(null)
@@ -524,7 +524,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
         const anim = d.animate([{ opacity: from }, { opacity: to }], { duration: (frames * 1000) / 60, fill: 'forwards' })
         return anim.finished.then(() => { d.style.opacity = String(to); anim.cancel() }, () => undefined)
       },
-      cry: (s) => { if (s !== 'all' && species.current[s]) void music.cry(dexNum(species.current[s])) },
+      cry: (s) => { if (s !== 'all' && species.current[s]) void music.cryOf(species.current[s], dexNum(species.current[s])) },
       camera: (type, preset, frames, wait, brake) => {
         // which of the game's cameras a preset number means in a single battle: 9 / 10 = the attacker's, 11 / 12 = the defender's, 8 = the usual one
         const view = (s: MonSide) => (s === 'me' ? 0 : 1)
@@ -585,7 +585,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
   const sendOutScene = async (side: 'me' | 'foe', thrown: boolean, s: Side, show: () => void): Promise<number> => {
     const L = layoutRef.current, spl = splRef.current
     const F = 1000 / 60
-    if (!L || !spl?.ready) { await sleep(520); show(); void music.cry(dexNum(s.species)); return 1700 }
+    if (!L || !spl?.ready) { await sleep(520); show(); void music.cryOf(s.species, dexNum(s.species)); return 1700 }
     const { sc } = feetPx(side)
     const topNow = () => { const f = feetPx(side); return { x: f.x, y: f.y - 4 * 16 } } // where the ball opens: 4 units above the platform (read when needed: the camera may still be moving)
     const ballId = 60 // the Poké Ball picture of the effect files (48 + 4 per ball kind, the Poké Ball is the third)
@@ -605,7 +605,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
     void music.playSeq(1383)
     void spl.emit(6, null, topNow(), null, 16, side === 'me' ? { radius: 0.5, life: 1, size: 0.5 } : { radius: 1, life: 1, size: 1 })
     show()
-    void music.cry(dexNum(s.species))
+    void music.cryOf(s.species, dexNum(s.species))
     await new Promise<void>((r) => requestAnimationFrame(() => r()))
     const total = playMon(side, side === 'me' ? 0.7 : 1.2, side === 'me' ? 0.5 : 1.0, sc)
     window.setTimeout(() => { void music.playSeq(1400); const f = feetPx(side); void spl.emit(325, 2, { x: f.x, y: f.y }, null, 16, { maxFrames: 60 }) }, 32 * F + 32 * F + 10 * F)
