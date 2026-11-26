@@ -1,0 +1,49 @@
+// Friends and private messages (whispers). Friends live in the table `friends` (changed only through functions); a whisper goes to the private
+// channel "whisper:<the receiver's account number>" that only the receiver can listen to.
+import { supabase } from '../supabase'
+
+export async function myUserId(): Promise<string | null> {
+  const { data } = await supabase.auth.getSession()
+  return data.session?.user.id ?? null
+}
+
+export async function listFriends(): Promise<string[]> {
+  const { data } = await supabase.rpc('my_friends')
+  return Array.isArray(data) ? (data as Array<{ username: string }>).map((r) => r.username) : []
+}
+export async function addFriend(name: string): Promise<boolean> {
+  const { data, error } = await supabase.rpc('add_friend', { p_username: name })
+  return !error && data === true
+}
+export async function removeFriend(name: string): Promise<boolean> {
+  const { data, error } = await supabase.rpc('remove_friend', { p_username: name })
+  return !error && data === true
+}
+
+export interface Whisper { from: string; text: string; at: number }
+
+const outgoing = new Map<string, ReturnType<typeof supabase.channel>>()
+/** Sends a private message to a player (by username). Returns false when the player does not exist or the message could not be sent. */
+export async function sendWhisper(from: string, to: string, text: string): Promise<boolean> {
+  const { data: uid } = await supabase.rpc('user_id_of', { p_username: to })
+  if (typeof uid !== 'string') return false
+  let ch = outgoing.get(uid)
+  if (!ch) {
+    ch = supabase.channel(`whisper:${uid}`, { config: { private: true, broadcast: { self: false } } })
+    outgoing.set(uid, ch)
+    await new Promise<void>((res) => { ch!.subscribe((s) => { if (s === 'SUBSCRIBED' || s === 'CHANNEL_ERROR' || s === 'TIMED_OUT') res() }) })
+  }
+  const r = await ch.send({ type: 'broadcast', event: 'w', payload: { from, text: text.slice(0, 140), at: Date.now() } })
+  return r === 'ok'
+}
+
+/** Listens for whispers sent to me. Returns the function that stops listening. */
+export function listenWhispers(uid: string, onMsg: (w: Whisper) => void): () => void {
+  const ch = supabase.channel(`whisper:${uid}`, { config: { private: true, broadcast: { self: false } } })
+  ch.on('broadcast', { event: 'w' }, ({ payload }) => {
+    const p = payload as Partial<Whisper> | null
+    if (p && typeof p.from === 'string' && typeof p.text === 'string') onMsg({ from: p.from.slice(0, 24), text: p.text.slice(0, 200), at: typeof p.at === 'number' ? p.at : Date.now() })
+  })
+  ch.subscribe()
+  return () => { void supabase.removeChannel(ch) }
+}

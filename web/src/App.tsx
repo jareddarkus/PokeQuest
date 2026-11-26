@@ -3,6 +3,7 @@ import type { Session } from '@supabase/supabase-js'
 import '@fontsource/unbounded/900.css' // titles (free, SIL Open Font License, served from our own site, not Google)
 import '@fontsource/lexend/400.css' // normal text (same license)
 import { supabase, signIn, signUp } from './supabase'
+import { usernameProblem } from './net/username'
 import { useLook, useSettings } from './game/settings'
 import MainMenu from './ui/MainMenu'
 import Customizer from './ui/Customizer'
@@ -34,6 +35,7 @@ function Login({ onGuest }: { onGuest: () => void }) {
     e.preventDefault()
     if (mode === 'signup' && (!username.trim() || !email.trim() || !password)) { setError('Please fill in all three fields: username, email and password.'); return }
     if (mode === 'signup' && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim())) { setError('That email address does not look right.'); return }
+    if (mode === 'signup') { const bad = usernameProblem(username.trim()); if (bad) { setError(bad); return } }
     setBusy(true)
     setError(null)
     const problem = mode === 'login' ? await signIn(username, password) : await signUp(username.trim(), email.trim(), password)

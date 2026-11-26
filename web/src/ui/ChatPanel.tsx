@@ -1,47 +1,58 @@
 import { useEffect, useRef, useState } from 'react'
-import type { ChatMessage } from './useChat'
+import { GLOBAL, type useChat } from './useChat'
 
-export default function ChatPanel({ messages, status, send, canChat, onClose }: {
-  messages: ChatMessage[]
-  status: 'off' | 'connecting' | 'on' | 'error'
-  send: (text: string) => boolean
-  canChat: boolean
-  onClose: () => void
-}) {
+type Chat = ReturnType<typeof useChat>
+
+/** The chat window in the bottom left corner: Global, friends and private chats (tabs). Click a name to whisper to that player. */
+export default function ChatDock({ chat, canChat, open, setOpen }: { chat: Chat; canChat: boolean; open: boolean; setOpen: (o: boolean) => void }) {
   const [text, setText] = useState('')
   const endRef = useRef<HTMLDivElement>(null)
-  useEffect(() => { endRef.current?.scrollIntoView({ block: 'end' }) }, [messages])
-  const submit = () => { if (send(text)) setText('') }
+  const msgs = chat.byTab[chat.active] ?? []
+  useEffect(() => { endRef.current?.scrollIntoView({ block: 'end' }) }, [msgs.length, chat.active, open])
+  if (!canChat) return null
+  const submit = () => { if (chat.send(text)) setText('') }
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="panel modal chat-panel" onClick={(e) => e.stopPropagation()}>
-        <h2>Chat</h2>
-        {!canChat && <p className="sub">Log in with your account to chat with your friends. (Chat is off when you play without an account.)</p>}
-        {canChat && status !== 'on' && <p className="sub">{status === 'error' ? 'The chat could not connect. Try again in a moment.' : 'Connecting…'}</p>}
-        <div className="chat-log">
-          {messages.length === 0 && canChat && status === 'on' && <span className="muted">No messages yet. Say hello!</span>}
-          {messages.map((m) => (
-            <div key={m.id} className={`chat-msg ${m.mine ? 'mine' : ''}`}>
-              <b>{m.from}</b> <span>{m.text}</span>
-            </div>
-          ))}
-          <div ref={endRef} />
-        </div>
-        {canChat && (
-          <div className="chat-input">
-            <input
-              value={text}
-              maxLength={140}
-              placeholder="Type a message…"
-              autoFocus
-              onChange={(e) => setText(e.target.value)}
-              onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') submit() }}
-            />
-            <button className="primary" onClick={submit} disabled={status !== 'on'}>Send</button>
+    <div className={`chat-dock ${open ? 'open' : ''}`} onKeyDown={(e) => e.stopPropagation()}>
+      <button className="chat-head" onClick={() => setOpen(!open)}>
+        💬 Chat {chat.unread > 0 && <span className="chat-badge">{chat.unread}</span>} <span className="chat-caret">{open ? '▾' : '▴'}</span>
+      </button>
+      {open && (
+        <>
+          <div className="chat-tabs">
+            {[...chat.tabs, 'Amigos'].map((t) => (
+              <span key={t} className={`chat-tab ${chat.active === t ? 'on' : ''}`}>
+                <button onClick={() => chat.setActive(t)}>{t === GLOBAL ? 'Global' : t}{(chat.unreadBy[t] ?? 0) > 0 && <span className="chat-badge">{chat.unreadBy[t]}</span>}</button>
+                {t !== GLOBAL && t !== 'Amigos' && <button className="chat-x" onClick={() => chat.closeTab(t)} aria-label="Cerrar">×</button>}
+              </span>
+            ))}
           </div>
-        )}
-        <button onClick={onClose}>Close</button>
-      </div>
+          {chat.active === 'Amigos' ? (
+            <div className="chat-log">
+              {chat.friends.length === 0 && <span className="muted">Aún no tienes amigos. Pulsa a un jugador en el mapa para añadirlo.</span>}
+              {chat.friends.map((f) => (
+                <div key={f} className="chat-msg"><b>{f}</b> <button className="chat-mini" onClick={() => chat.openWhisper(f)}>Susurrar</button></div>
+              ))}
+            </div>
+          ) : (
+            <div className="chat-log">
+              {chat.status !== 'on' && <span className="muted">{chat.status === 'error' ? 'No se pudo conectar el chat.' : 'Conectando…'}</span>}
+              {msgs.length === 0 && chat.status === 'on' && <span className="muted">{chat.active === GLOBAL ? 'Aún no hay mensajes. ¡Saluda!' : `Chat privado con ${chat.active}. Escribe el primer mensaje.`}</span>}
+              {msgs.map((m) => (
+                <div key={m.id} className={`chat-msg ${m.mine ? 'mine' : ''}`}>
+                  {m.mine || m.from === '⚠' ? <b>{m.from}</b> : <b className="chat-name" onClick={() => chat.openWhisper(m.from)} title="Susurrar">{m.from}</b>} <span>{m.text}</span>
+                </div>
+              ))}
+              <div ref={endRef} />
+            </div>
+          )}
+          {chat.active !== 'Amigos' && (
+            <div className="chat-input">
+              <input value={text} maxLength={140} placeholder={chat.active === GLOBAL ? 'Escribe un mensaje…' : `Susurro a ${chat.active}…`} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') submit() }} />
+              <button className="primary" onClick={submit} disabled={chat.status !== 'on'}>Enviar</button>
+            </div>
+          )}
+        </>
+      )}
     </div>
   )
 }

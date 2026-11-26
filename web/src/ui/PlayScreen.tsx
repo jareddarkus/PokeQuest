@@ -23,7 +23,7 @@ import StarterPick from './StarterPick'
 import MenuButton from './MenuButton'
 import PartyBar from './PartyBar'
 import { useFrameStyle } from './DsFrame'
-import ChatPanel from './ChatPanel'
+import ChatDock from './ChatPanel'
 import { supabase } from '../supabase'
 import { useMatchPlayers } from '../net/useMatchPlayers'
 import { useChat } from './useChat'
@@ -109,7 +109,9 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
   const busy = useRef(false)
 
   const say = (t: string) => setToast(t)
-  const chat = useChat(username, panel === 'chat')
+  const [chatOpen, setChatOpen] = useState(false)
+  const chatUser = username ?? (import.meta.env.DEV && new URLSearchParams(location.search).has('devuser') ? 'DevUser' : null) // (developer test without an account: ?devuser)
+  const chat = useChat(chatUser, chatOpen)
   // trainers that other players are fighting right now (message "busy" every 3 s; forgotten after 9 s)
   const busyNpcs = useRef(new Map<string, { by: string; until: number }>())
   const busySender = useRef<{ send: (npcId: string, on: boolean) => void; duel: (msg: { to?: string; type: string; data?: unknown }) => void } | null>(null)
@@ -386,13 +388,13 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
       </div>
 
       <div className="hud-top-right">
-        <MenuButton icon={9} label="Menu" badge={menuOpen ? 0 : chat.unread} onClick={() => setMenuOpen((o) => !o)} />
+        <MenuButton icon={9} label="Menu" badge={menuOpen || chatOpen ? 0 : chat.unread} onClick={() => setMenuOpen((o) => !o)} />
         {menuOpen && (
           <>
             <MenuButton icon={12} label="Team" onClick={() => { setPanel('team'); setMenuOpen(false) }} />
             <MenuButton icon={7} label="Bag" onClick={() => { setPanel('bag'); setMenuOpen(false) }} />
             <MenuButton icon={6} label="PC" onClick={() => { setPanel('pc'); setMenuOpen(false) }} />
-            <MenuButton icon={5} label="Chat" badge={chat.unread} onClick={() => { setPanel('chat'); setMenuOpen(false) }} />
+            <MenuButton icon={5} label="Chat" badge={chat.unread} onClick={() => { setChatOpen((o) => !o); setMenuOpen(false) }} />
             <MenuButton icon={13} label="Settings" onClick={() => { setPanel('settings'); setMenuOpen(false) }} />
             <MenuButton icon={11} label="Exit" onClick={onExit} />
           </>
@@ -417,7 +419,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
         </div>
       )}
       {toast && <div key={toast} className="toast panel" style={toastFrame ?? undefined}>{toast}</div>}
-      {panel === 'chat' && <ChatPanel messages={chat.messages} status={chat.status} send={chat.send} canChat={!!username} onClose={() => setPanel(null)} />}
+      {!battle && <ChatDock chat={chat} canChat={!!chatUser} open={chatOpen} setOpen={setChatOpen} />}
       {panel === 'settings' && <SettingsPanel settings={settings} onChange={onSettings} onClose={() => setPanel(null)} onCustomize={onCustomize} />}
       {panel === 'team' && <TeamPanel trainer={trainer} setTrainer={setTrainer} onClose={() => setPanel(null)} onMessage={say} />}
       {panel === 'bag' && <BagPanel trainer={trainer} setTrainer={setTrainer} onClose={() => setPanel(null)} onMessage={say} />}
