@@ -264,8 +264,9 @@ function ClassicCommand({ S, onFight, onBag, onPokemon, onRun, closing, party, f
   const bg = useUiUrl('menu:bg')
   const fight = useUiUrl('cmd:fight')
   const bag = useUiUrl('cmd:bag'), poke = useUiUrl('cmd:pokemon'), run = useUiUrl('cmd:run')
-  const Btn = ({ img, x, y, w, h, label, onClick, off }: { img: string | null; x: number; y: number; w: number; h: number; label: string; onClick: () => void; off?: boolean }) => (
-    <button className="ds-btn" aria-label={label} disabled={off} onClick={() => { decide(); onClick() }} style={{ left: x * S, top: y * S, width: w * S, height: h * S, opacity: off ? 0.4 : 1 }}>
+  // (a plain function, not a component: a component made here would be a new one on every update, the buttons would be rebuilt while a finger is on them and the tap would be lost)
+  const btn = ({ img, x, y, w, h, label, onClick, off }: { img: string | null; x: number; y: number; w: number; h: number; label: string; onClick: () => void; off?: boolean }) => (
+    <button key={label} className="ds-btn" aria-label={label} disabled={off} onClick={() => { decide(); onClick() }} style={{ left: x * S, top: y * S, width: w * S, height: h * S, opacity: off ? 0.4 : 1 }}>
       {img ? <img src={img} alt={label} draggable={false} style={{ width: '100%', height: '100%' }} /> : label}
     </button>
   )
@@ -278,9 +279,9 @@ function ClassicCommand({ S, onFight, onBag, onPokemon, onRun, closing, party, f
       <button className="ds-btn" aria-label="Fight" onClick={() => { decide(); onFight() }} style={{ left: 84 * S, top: 86 * S, width: 89 * S, height: 21 * S }}>
         {fight ? <img className="ds-fight-label" src={fight} alt="Fight" draggable={false} style={{ width: '100%', height: '100%' }} /> : null}
       </button>
-      <Btn img={bag} x={0} y={147} w={79} h={46} label="Bag" onClick={onBag} />
-      <Btn img={run} x={96} y={156} w={64} h={37} label="Run" onClick={onRun} />
-      <Btn img={poke} x={177} y={147} w={79} h={46} label="Pokémon" onClick={onPokemon} />
+      {btn({ img: bag, x: 0, y: 147, w: 79, h: 46, label: 'Bag', onClick: onBag })}
+      {btn({ img: run, x: 96, y: 156, w: 64, h: 37, label: 'Run', onClick: onRun })}
+      {btn({ img: poke, x: 177, y: 147, w: 79, h: 46, label: 'Pokémon', onClick: onPokemon })}
     </div>
  </div>
 </Lower>

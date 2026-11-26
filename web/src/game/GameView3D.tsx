@@ -621,10 +621,16 @@ export default function GameView3D(props: Props) {
       if (k === 'arrowdown' || k === 'shift') held.delete('b')
       held.delete(k)
     }
-    const onBlur = () => held.clear()
+    // leaving the page (another app, another tab) and coming back: a finger or key that was down when we left never reports being lifted, so forget every press
+    const onBlur = () => { held.clear(); dpadRef.current = null; tapRef.current = null; bRef.current = false; downAt = null }
+    const onVis = () => onBlur()
     window.addEventListener('keydown', onKeyDown)
     window.addEventListener('keyup', onKeyUp)
     window.addEventListener('blur', onBlur)
+    window.addEventListener('focus', onBlur)
+    window.addEventListener('pagehide', onBlur)
+    window.addEventListener('pageshow', onBlur)
+    document.addEventListener('visibilitychange', onVis)
 
     // the direction asked for right now: the key held longest ago... no: the one pressed last that is still down, or a quick tap that has not been used yet
     const wantedDir = (): { dir: Dir | null; held: boolean } => {
@@ -954,6 +960,10 @@ export default function GameView3D(props: Props) {
       window.removeEventListener('keydown', onKeyDown)
       window.removeEventListener('keyup', onKeyUp)
       window.removeEventListener('blur', onBlur)
+      window.removeEventListener('focus', onBlur)
+      window.removeEventListener('pagehide', onBlur)
+      window.removeEventListener('pageshow', onBlur)
+      document.removeEventListener('visibilitychange', onVis)
       window.removeEventListener('resize', resize)
       propsRef.current.handleRef.current = null
       clearFollower()

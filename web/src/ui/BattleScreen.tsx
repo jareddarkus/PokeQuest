@@ -760,14 +760,14 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
       s.foeName = foeName ?? ''
       sessionRef.current = s
       hostSession = pvp?.role === 'host' ? s : null
-      let opening = kind !== 'wild' // in a trainer battle the foe trainer sends out first, like in the game
+      let opening = true // the foe comes first (a trainer sends out its Pokémon, a wild Pokémon appears), then you send out yours, like in the game
       s.onEvents((evs0) => {
         if (pvp?.role !== 'guest' && !spectate) stream?.(evs0) // somebody may be watching this battle
         // the sentence ("Go! X!", "Y sent out X!") is read first, then the Pokémon comes out
         let evs = [...evs0]
         for (let i = 0; i + 1 < evs.length; i++) {
           const a = evs[i], b = evs[i + 1]
-          if (a.kind === 'switch' && b.kind === 'text' && /^Go! | sent out /.test(b.text)) { evs[i] = b; evs[i + 1] = a; i++ }
+          if (a.kind === 'switch' && b.kind === 'text' && /^Go! | sent out | appeared!$/.test(b.text)) { evs[i] = b; evs[i + 1] = a; i++ }
         }
         if (opening) {
           const a = evs.findIndex((e) => e.kind === 'switch' && e.side === 'p1'), b = evs.findIndex((e) => e.kind === 'switch' && e.side === 'p2')
