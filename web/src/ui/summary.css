@@ -170,3 +170,17 @@
 @media (prefers-reduced-motion: reduce) { .sx *, .sx::before { animation: none !important; } }
 
 .sx-col .sx-hp { min-width: 230px; }
+
+/* the picture panel: gender, height and weight in one row on top; PS + level on the left and nature / ability / item on the right, under the picture */
+.sx-row.top { justify-content: flex-start; align-items: center; flex-wrap: nowrap; gap: 10px; }
+.sx-row.bottom { flex-wrap: nowrap; align-items: flex-end; justify-content: space-between; }
+.sx-row.bottom .sx-col.r { min-width: 0; }
+.sx-col .sx-hp { min-width: 190px; }
+.sx-eviv { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; }
+.sx-evcol { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.sx-evcol .sx-title { margin-bottom: 2px; justify-content: flex-start; }
+.sx-stat.small { grid-template-columns: 84px minmax(0, 1fr) 34px; gap: 10px; }
+.sx-stat.small .sx-bar { height: 18px; }
+.sx-stat.small .sx-seg.grow { animation: sx-reveal .8s cubic-bezier(.16, 1, .3, 1) both; animation-delay: calc(var(--i, 0) * 60ms + 200ms); }
+@media (max-width: 860px) { .sx-eviv { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 560px) { .sx-row.top, .sx-row.bottom { flex-wrap: wrap; } }

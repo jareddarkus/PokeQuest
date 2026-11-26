@@ -193,7 +193,7 @@ function EvoNode({ name, cur, lang }: { name: string; cur: string; lang: 'es' | 
 export default function SummaryCard({ mon, onChange, onBack, onClose, footer }: { mon: Mon; onChange?: (m: Mon) => void; onBack: () => void; onClose?: () => void; footer?: ReactNode }) {
   const lang = useLang()
   const es = lang === 'es'
-  const [tab, setTab] = useState<'stats' | 'moves' | 'evo'>('stats')
+  const [tab, setTab] = useState<'stats' | 'ev' | 'moves' | 'evo'>('stats')
   const [sel, setSel] = useState(0)
   const [pickFor, setPickFor] = useState<number | null>(null)
   const [options, setOptions] = useState<string[]>([])
@@ -271,9 +271,9 @@ export default function SummaryCard({ mon, onChange, onBack, onClose, footer }: 
           <div className="sx-types">{types.map((t) => <TypeChip key={t} type={t} k={2} />)}</div>
         </div>
         <div className="sx-tabs">
-          {(['stats', 'moves', 'evo'] as const).map((tb) => (
+          {(['stats', 'ev', 'moves', 'evo'] as const).map((tb) => (
             <button key={tb} className={`sx-tab ${tab === tb ? 'on' : ''}`} onClick={() => { setTab(tb); setPickFor(null) }}>
-              <span><GT t={tb === 'stats' ? (es ? 'ESTADÍSTICAS' : 'STATS') : tb === 'moves' ? (es ? 'MOVIMIENTOS' : 'MOVES') : es ? 'EVOLUCIÓN' : 'EVOLUTION'} k={2} color={tab === tb ? INK : MUTED} /></span>
+              <span><GT t={tb === 'stats' ? (es ? 'ESTADÍSTICAS' : 'STATS') : tb === 'ev' ? 'EVs & IVs' : tb === 'moves' ? (es ? 'MOVIMIENTOS' : 'MOVES') : es ? 'EVOLUCIÓN' : 'EVOLUTION'} k={2} color={tab === tb ? INK : MUTED} /></span>
             </button>
           ))}
           <button className="sx-tab sx-x" onClick={onClose ?? onBack} aria-label="Close" title="Close"><span><svg viewBox="0 0 14 14" width="14" height="14"><path d="M2 2 L12 12 M12 2 L2 12" stroke="#fff" strokeWidth="2.6" strokeLinecap="square" /></svg></span></button>
@@ -282,17 +282,13 @@ export default function SummaryCard({ mon, onChange, onBack, onClose, footer }: 
 
       {/* the picture panel */}
       <div className="sx-art">
-        <div className="sx-row">
-          <div className="sx-col">
-            <Chip><GT t={`${genderGlyph} ${genderLabel}`.trim()} k={2} color={mon.gender === 'M' ? '#2a7de1' : mon.gender === 'F' ? '#e0467c' : INK} /></Chip>
-          </div>
-          <div className="sx-col r">
-            <Chip><GT t={`${es ? 'ALT' : 'HT'}:`} k={2} color={MUTED} /><GT t={`${sp.heightm} m`} k={2} /></Chip>
-            <Chip><GT t={`${es ? 'PESO' : 'WT'}:`} k={2} color={MUTED} /><GT t={`${sp.weightkg} kg`} k={2} /></Chip>
-          </div>
+        <div className="sx-row top">
+          <Chip><GT t={`${genderGlyph} ${genderLabel}`.trim()} k={2} color={mon.gender === 'M' ? '#2a7de1' : mon.gender === 'F' ? '#e0467c' : INK} /></Chip>
+          <Chip><GT t={`${es ? 'ALT' : 'HT'}:`} k={2} color={MUTED} /><GT t={`${sp.heightm} m`} k={2} /></Chip>
+          <Chip><GT t={`${es ? 'PESO' : 'WT'}:`} k={2} color={MUTED} /><GT t={`${sp.weightkg} kg`} k={2} /></Chip>
         </div>
         <div className="sx-sprite"><div ref={spriteBox} style={{ transform: `translateY(${lift}px)`, transition: 'transform .4s ease-out' }}><div className="sx-spr"><MonSprite species={mon.species} shiny={mon.shiny} scale={small ? 3 : 4} animated /></div></div></div>
-        <div className="sx-row">
+        <div className="sx-row bottom">
           <div className="sx-col">
             <span className="sx-hp"><span className="sx-un">
               <span style={{ display: 'flex', gap: 6 }}><GT t={`${es ? 'PS' : 'HP'}:`} k={2} color={MUTED} /><GT t={`${mon.hp} / ${mx}`} k={2} /></span>
@@ -304,12 +300,12 @@ export default function SummaryCard({ mon, onChange, onBack, onClose, footer }: 
             </span></span>
           </div>
           <div className="sx-col r">
-            <Chip tip={<GT t={natureTip} k={2} color="#ffffff" maxWidth={150} />} right><GT t={`${es ? 'NATURALEZA' : 'NATURE'}:`} k={2} color={MUTED} /><GT t={trText(mon.nature).toUpperCase()} k={2} /></Chip>
-            <Chip tip={<GT t={abilityDesc(mon.ability) || '—'} k={2} color="#ffffff" maxWidth={150} />} right><GT t={`${es ? 'HABILIDAD' : 'ABILITY'}:`} k={2} color={MUTED} /><GT t={trText(mon.ability).toUpperCase()} k={2} /></Chip>
+            <Chip tip={<GT t={natureTip} k={2} color="#ffffff" maxWidth={150} />} right><GT t={`${es ? 'NATURALEZA' : 'NATURE'}:`} k={1} color={MUTED} /><GT t={trText(mon.nature).toUpperCase()} k={1} /></Chip>
+            <Chip tip={<GT t={abilityDesc(mon.ability) || '—'} k={2} color="#ffffff" maxWidth={150} />} right><GT t={`${es ? 'HABILIDAD' : 'ABILITY'}:`} k={1} color={MUTED} /><GT t={trText(mon.ability).toUpperCase()} k={1} /></Chip>
             <Chip tip={<GT t={mon.item ? itemText : es ? 'No lleva ningún objeto.' : 'Not holding an item.'} k={2} color="#ffffff" maxWidth={150} />} right>
-              <GT t={`${es ? 'OBJETO' : 'ITEM'}:`} k={2} color={MUTED} />
-              {mon.item && <ItemIcon name={mon.item} size={22} />}
-              <GT t={mon.item ? trText(mon.item).toUpperCase() : es ? 'NINGUNO' : 'NONE'} k={2} />
+              <GT t={`${es ? 'OBJETO' : 'ITEM'}:`} k={1} color={MUTED} />
+              {mon.item && <ItemIcon name={mon.item} size={20} />}
+              <GT t={mon.item ? trText(mon.item).toUpperCase() : es ? 'NINGUNO' : 'NONE'} k={1} />
             </Chip>
           </div>
         </div>
@@ -331,6 +327,34 @@ export default function SummaryCard({ mon, onChange, onBack, onClose, footer }: 
             <span><i><b><GT t="2" k={1} color="#ffffff" /></b></i><GT t={es ? 'IV + EV + Naturaleza + Objeto' : 'IV + EV + Nature + Item'} k={1} color={MUTED} /></span>
           </div>
           <span className="sx-chip sx-total"><span className="sx-un"><GT t={`${es ? 'TOTAL' : 'STAT TOTAL'}:`} k={2} color={MUTED} /><GT t={String(total)} k={2} /></span></span>
+        </div>
+      )}
+      {tab === 'ev' && (
+        <div className="sx-stats">
+          <div className="sx-eviv">
+            <div className="sx-evcol">
+              <div className="sx-title"><i /><GT t="EVs" k={2} font={0} /><GT t={`${STAT_IDS.reduce((a, x) => a + mon.evs[x], 0)} / 510`} k={2} color={MUTED} /></div>
+              {STAT_IDS.map((x, i) => (
+                <div className="sx-stat small" key={x} style={{ ['--i' as string]: i } as React.CSSProperties}>
+                  <GT t={STAT_NAMES[x]} k={2} />
+                  <div className="sx-bar"><span className="sx-seg grow" style={{ position: 'absolute', top: 3, bottom: 3, left: 1, width: `calc(${Math.min(100, (mon.evs[x] / 252) * 100)}% - 2px)`, background: STAT_COLOR[x] }} /></div>
+                  <span className="v"><GT t={String(mon.evs[x])} k={2} font={0} /></span>
+                </div>
+              ))}
+              <GT t={es ? 'Máximo 252 por estadística' : 'At most 252 per stat'} k={1} color={MUTED} />
+            </div>
+            <div className="sx-evcol">
+              <div className="sx-title"><i /><GT t="IVs" k={2} font={0} /></div>
+              {STAT_IDS.map((x, i) => (
+                <div className="sx-stat small" key={x} style={{ ['--i' as string]: i } as React.CSSProperties}>
+                  <GT t={STAT_NAMES[x]} k={2} />
+                  <div className="sx-bar"><span className="sx-seg grow" style={{ position: 'absolute', top: 3, bottom: 3, left: 1, width: `calc(${Math.min(100, (mon.ivs[x] / 31) * 100)}% - 2px)`, background: STAT_COLOR[x] }} /></div>
+                  <span className="v"><GT t={String(mon.ivs[x])} k={2} font={0} /></span>
+                </div>
+              ))}
+              <GT t={es ? 'Máximo 31 por estadística' : 'At most 31 per stat'} k={1} color={MUTED} />
+            </div>
+          </div>
         </div>
       )}
       {tab === 'moves' && (

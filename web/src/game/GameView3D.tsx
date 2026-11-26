@@ -284,7 +284,7 @@ export default function GameView3D(props: Props) {
       s.renderOrder = 3
       s.position.set(pk.x + 0.5, heightAt(pk.x + 0.5, pk.y + 0.5) + 0.05, pk.y + 0.5)
       scene.add(s)
-      const psh = makeShadow(scene, 0.95) // the ball on the ground has a little shadow under it (a little towards the camera so it shows under the ball)
+      const psh = makeShadow(scene, 1.6) // the ball on the ground has a little shadow under it (a little towards the camera so it shows under the ball)
       psh.position.set(pk.x + 0.5, heightAt(pk.x + 0.5, pk.y + 0.5) + 0.04, pk.y + 0.62)
       pickupShadows.set(pk.id, psh)
       s.userData = { tx: pk.x, ty: pk.y, bs, sand: world.tiles[pk.y * SIZE + pk.x] === T.Sand }
