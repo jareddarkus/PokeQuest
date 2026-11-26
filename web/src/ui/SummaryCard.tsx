@@ -69,22 +69,24 @@ interface Seg { key: string; v: number; color: string; tip: string; neg?: boolea
 function statSegments(mon: Mon, s: StatId, lang: 'es' | 'en'): { segs: Seg[]; final: number; cap: number } {
   const B = Dex.species.get(mon.species).baseStats[s], L = mon.level, IV = mon.ivs[s], EVq = Math.floor(mon.evs[s] / 4)
   const final = calcStat(mon.species, s, L, IV, mon.evs[s], mon.nature)
-  const plain = Math.floor((2 * B * L) / 100)
-  const withIv = Math.floor(((2 * B + IV) * L) / 100)
-  const withEv = Math.floor(((2 * B + IV + EVq) * L) / 100)
   const flat = s === 'hp' ? L + 10 : 5
-  let base = plain + flat, iv = withIv - plain, ev = withEv - withIv
-  if (mon.species === 'Shedinja' && s === 'hp') { base = 1; iv = 0; ev = 0 }
-  const nat = final - (base + iv + ev)
+  // the stat = species part + IV part + EV part (+ nature); the parts are kept with their decimals so that even a small IV / EV shows as a chunk
+  const rawF = ((2 * B + IV + EVq) * L) / 100 + flat
+  const rawI = Math.floor(rawF)
+  let ivP = (IV * L) / 100, evP = (EVq * L) / 100
+  let base = rawI - ivP - evP
+  let nat = final - rawI
+  if (mon.species === 'Shedinja' && s === 'hp') { base = 1; ivP = 0; evP = 0; nat = 0 }
+  const f1 = (x: number) => Number(x.toFixed(1))
   const c = STAT_COLOR[s]
   const es = lang === 'es'
   const nm = natureMods(mon.nature)
   const natLabel = nm.plus ? `${trText(mon.nature)} (${nm.plus === s ? '+10%' : nm.minus === s ? '-10%' : '0%'})` : trText(mon.nature)
   const segs: Seg[] = [
-    { key: 'base', v: base, color: c, tip: es ? `Especie (base ${B}): ${base}` : `Species (base ${B}): ${base}` },
-    { key: 'ev', v: ev, color: c, tip: `EV ${mon.evs[s]}: +${ev}` },
-    { key: 'iv', v: iv, color: c, tip: `IV ${IV}: +${iv}` },
-    { key: 'nat', v: Math.max(0, nat), color: c, tip: `${natLabel}: ${nat >= 0 ? '+' : ''}${nat}`, neg: false },
+    { key: 'base', v: base, color: c, tip: es ? `Especie (base ${B}): ${f1(base)}` : `Species (base ${B}): ${f1(base)}` },
+    { key: 'iv', v: ivP, color: c, tip: `IV ${IV}: +${f1(ivP)}` },
+    { key: 'ev', v: evP, color: c, tip: `EV ${mon.evs[s]}: +${f1(evP)}` },
+    { key: 'nat', v: Math.max(0, nat), color: c, tip: `${natLabel}: +${nat}`, neg: false },
   ]
   if (nat < 0) segs.push({ key: 'natneg', v: -nat, color: '#ffffff', tip: `${natLabel}: ${nat}`, neg: true })
   const im = mon.item ? itemMult(mon.item, s, mon.species) : 1
@@ -110,15 +112,15 @@ function StatBar({ mon, s, lang }: { mon: Mon; s: StatId; lang: 'es' | 'en' }) {
       )
       continue
     }
+    if (g.v < 0.05) continue // nothing from this part (no EVs, no nature effect on this stat ...): no chunk
     const w = (g.v / cap) * 100
-    const zero = g.v <= 0
-    const width = zero ? 1.6 : Math.max(w, 1.8)
+    const width = Math.max(w, 1.8)
     items.push(
       <Tip key={g.key} tip={<GT t={g.tip} color="#ffffff" />} style={{ position: 'absolute', top: 3, bottom: 3, left: `calc(${at}% + 1px)`, width: `calc(${Math.min(width, 100 - at)}% - 2px)` }}>
         <span className="sx-seg" style={{ background: g.color }} />
       </Tip>,
     )
-    at += zero ? 0 : w
+    at += w
   }
   return <div className="sx-bar">{items}</div>
 }
@@ -216,7 +218,6 @@ export default function SummaryCard({ mon, onChange, onBack, onClose, footer }: 
 
   return (
     <div className="sx">
-      <button className="sx-x" onClick={onClose ?? onBack} aria-label="Close" title="Close"><svg viewBox="0 0 14 14" width="14" height="14"><path d="M2 2 L12 12 M12 2 L2 12" stroke="#fff" strokeWidth="2.6" strokeLinecap="square" /></svg></button>
       {/* header */}
       <div className="sx-head">
         <div className="sx-who">
@@ -235,6 +236,7 @@ export default function SummaryCard({ mon, onChange, onBack, onClose, footer }: 
               <span><GT t={tb === 'stats' ? (es ? 'ESTADÍSTICAS' : 'STATS') : tb === 'moves' ? (es ? 'MOVIMIENTOS' : 'MOVES') : es ? 'EVOLUCIÓN' : 'EVOLUTION'} k={2} color={tab === tb ? INK : MUTED} /></span>
             </button>
           ))}
+          <button className="sx-tab sx-x" onClick={onClose ?? onBack} aria-label="Close" title="Close"><span><svg viewBox="0 0 14 14" width="14" height="14"><path d="M2 2 L12 12 M12 2 L2 12" stroke="#fff" strokeWidth="2.6" strokeLinecap="square" /></svg></span></button>
         </div>
       </div>
 
@@ -280,7 +282,7 @@ export default function SummaryCard({ mon, onChange, onBack, onClose, footer }: 
             </div>
           ))}
           <div className="sx-legend">
-            {[[es ? 'Especie' : 'Species'], ['EV'], ['IV'], [es ? 'Naturaleza' : 'Nature'], ...(mon.item ? [[es ? 'Objeto' : 'Item']] : [])].map(([name], i) => (
+            {[[es ? 'Especie' : 'Species'], ['IV'], ['EV'], [es ? 'Naturaleza' : 'Nature'], ...(mon.item ? [[es ? 'Objeto' : 'Item']] : [])].map(([name], i) => (
               <span key={name}><i><b><GT t={String(i + 1)} k={1} color="#ffffff" /></b></i><GT t={name} k={1} color={MUTED} /></span>
             ))}
           </div>
