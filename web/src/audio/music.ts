@@ -100,7 +100,15 @@ class MusicManager {
   /** The jingle of finding an item (a game file imported before it was added only has the short "getting" sound). */
   async itemGet() {
     const index = await loadMusicIndex()
-    return this.playSfx(index?.itemget ? 'itemget' : 'se:getting')
+    const key = index?.itemget ? 'itemget' : 'se:getting'
+    if (!this.enabled || this.sfxVolume <= 0.001 || !index?.[key]) return this.playSfx(key) // (nothing will be heard: the music is left alone)
+    // the world music stops quickly (it does not play under the jingle) and goes on from the same place when the jingle is over
+    const song = this.current?.player
+    song?.pause(0.12)
+    const back = () => song?.resume(0.25)
+    window.setTimeout(back, 6000) // (safety: never leave the music silent)
+    await this.playSfx(key, back)
+    if (!index?.itemget) window.setTimeout(back, 900) // (the short sound has no end signal worth waiting for)
   }
 
   /** The healing sound of the game: one sound, then the next one right after it. */

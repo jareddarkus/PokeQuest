@@ -136,6 +136,7 @@ export class SongPlayer {
   private loop: boolean
   private onEnd?: () => void
   private stopped = false
+  private paused = false
 
   constructor(ctx: AudioContext, dest: AudioNode, sseq: Uint8Array, bank: Uint8Array, waveFiles: Array<Uint8Array | null>, songVol: number, loop: boolean, onEnd?: () => void) {
     this.ctx = ctx
@@ -161,6 +162,29 @@ export class SongPlayer {
   }
 
   start() {
+    this.timer = window.setInterval(() => this.pump(), 25)
+  }
+
+  /** Stops the song where it is, with a quick fade out (resume() goes on from the same place). */
+  pause(fadeSeconds = 0.12) {
+    if (this.stopped || this.paused) return
+    this.paused = true
+    window.clearInterval(this.timer)
+    const t = this.ctx.currentTime
+    this.out.gain.cancelScheduledValues(t)
+    this.out.gain.setValueAtTime(this.out.gain.value, t)
+    this.out.gain.linearRampToValueAtTime(0, t + fadeSeconds)
+  }
+
+  /** Goes on from where pause() stopped, with a quick fade in. */
+  resume(fadeSeconds = 0.2) {
+    if (this.stopped || !this.paused) return
+    this.paused = false
+    const t = this.ctx.currentTime
+    this.nextTick = t + 0.05 // (the song's clock goes on from now: the music continues where it was)
+    this.out.gain.cancelScheduledValues(t)
+    this.out.gain.setValueAtTime(0, t)
+    this.out.gain.linearRampToValueAtTime(1, t + fadeSeconds)
     this.timer = window.setInterval(() => this.pump(), 25)
   }
 
