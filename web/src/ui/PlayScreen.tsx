@@ -209,7 +209,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
       if (m.type === 'telim') { const l = (m.data as { loser?: string } | undefined)?.loser; if (typeof l === 'string') { outPlayers.current.add(l); applyLoss(tour.current, l) } return }
       if (m.type === 'bat') { const info = m.data as BattleInfo; if (info && typeof info.host === 'string') batInfo.current.set(m.from, { info, until: Date.now() + 9000 }); return }
       if (m.type === 'bat-end') { batInfo.current.delete(m.from); if (watching.current === m.from && battleRef.current?.spectate) stopSpectate(); return }
-      if (m.type === 'spec-join') { if (battleRef.current && !battleRef.current.spectate && myBat.current) { spectators.current.add(m.from); busySender.current?.duel({ to: m.from, type: 'bhist', data: { events: snapshotOf(battleLog.current), info: myBat.current } }) } return }
+      if (m.type === 'spec-join') { if (!royale && battleRef.current && !battleRef.current.spectate && myBat.current) { spectators.current.add(m.from); busySender.current?.duel({ to: m.from, type: 'bhist', data: { events: snapshotOf(battleLog.current), info: myBat.current } }) } return }
       if (m.type === 'spec-leave') { spectators.current.delete(m.from); return }
       if (m.type === 'bhist') { if (watching.current === m.from && !battleRef.current) { const d = m.data as { events: BattleEvent[]; info: BattleInfo }; beginSpectate(m.from, d.info, d.events) } return }
       if (m.type === 'bev') { if (watching.current === m.from && Array.isArray(m.data)) { const evs = m.data as BattleEvent[]; specBuf.current.push(...evs); for (const cb of specListeners.current) cb(evs) } return }
@@ -768,7 +768,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
         <PlayerPopup
           name={pmenu.name} x={pmenu.x} y={pmenu.y} isFriend={chat.friends.some((f) => f.toLowerCase() === pmenu.name!.toLowerCase())}
           onClose={() => setPmenu(null)}
-          onWatch={(() => { const b = batInfo.current.get(pmenu.name!); return b && b.until > Date.now() ? () => { const n = pmenu.name!; setPmenu(null); startSpectate(n) } : undefined })()}
+          onWatch={(() => { const b = batInfo.current.get(pmenu.name!); return !royale && b && b.until > Date.now() ? () => { const n = pmenu.name!; setPmenu(null); startSpectate(n) } : undefined })()}
           onFriend={(add) => { const n = pmenu.name!; setPmenu(null); if (!chatUser) { say('Inicia sesión para tener amigos.'); return } void chat.friendAction(n, add).then((ok) => say(ok ? (add ? `${n} ahora es tu amigo.` : `${n} ya no es tu amigo.`) : 'No se pudo hacer eso.')) }}
           onWhisper={() => { const n = pmenu.name!; setPmenu(null); if (!chatUser) { say('Inicia sesión para chatear.'); return } chat.openWhisper(n); setChatOpen(true) }}
           onTrade={() => { const n = pmenu.name!; setPmenu(null); if (!royale) { say('Solo se puede intercambiar en una partida con otros jugadores.'); return } sendTo(n, 'trade-req'); say(`Petición de intercambio enviada a ${n}…`) }}
