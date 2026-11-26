@@ -23,11 +23,21 @@ function GT({ t, k = 2, color = INK, maxWidth, align, font = 1 }: { t: string; k
   )
 }
 
-/** A small pop-up on hover (or on a tap) over its child. */
+/** A small pop-up on hover (mouse) or on a tap (touch): a tapped one stays until another one is tapped or you tap anywhere else. */
 function Tip({ tip, children, className, right, style }: { tip: ReactNode; children: ReactNode; className?: string; right?: boolean; style?: React.CSSProperties }) {
   const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLSpanElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const away = (e: PointerEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false) }
+    document.addEventListener('pointerdown', away, true)
+    return () => document.removeEventListener('pointerdown', away, true)
+  }, [open])
   return (
-    <span className={`sx-tipwrap ${className ?? ''}`} style={style} onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)} onClick={() => setOpen((o) => !o)}>
+    <span ref={ref} className={`sx-tipwrap ${className ?? ''}`} style={style}
+      onPointerEnter={(e) => { if (e.pointerType === 'mouse') setOpen(true) }}
+      onPointerLeave={(e) => { if (e.pointerType === 'mouse') setOpen(false) }}
+      onClick={() => setOpen(true)}>
       {children}
       {open && <span className={`sx-tip ${right ? 'right' : ''}`}>{tip}</span>}
     </span>
