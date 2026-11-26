@@ -211,3 +211,21 @@
   .sx-art { margin-left: 20px; }
   .sx-stats { padding-right: 12px; }
 }
+
+/* layout: the picture panel on the left, the stats with the four moves (2 x 2) right below them on the right */
+.sx { grid-template-areas: "head head" "art stats" "art moves" "foot foot"; grid-template-rows: auto auto 1fr auto; }
+.sx-moves { grid-template-columns: repeat(2, minmax(0, 1fr)); align-content: start; }
+.sx-foot { grid-area: foot; }
+.sx-head { margin-bottom: 14px; }
+.sx-bar-s { width: 100px; }
+.sx-col .sx-hp { min-width: 130px; }
+.sx-layer .sx-row.top { flex-wrap: nowrap; }
+@media (max-width: 860px) {
+  .sx { grid-template-areas: "head" "art" "stats" "moves" "foot"; grid-template-rows: auto; }
+  .sx-layer .sx-row.top { flex-wrap: wrap; }
+}
+.sx-col .sx-hp { min-width: 140px; }
+.sx-hp .sx-un span { white-space: nowrap; }
+.sx-hp .sx-un > span:first-child { gap: 4px; }
+.sx-hp .sx-un span { white-space: nowrap !important; }
+.sx-hp .sx-un > span:first-child { flex-wrap: nowrap; }

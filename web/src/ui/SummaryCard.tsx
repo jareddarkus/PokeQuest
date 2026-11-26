@@ -237,7 +237,6 @@ export default function SummaryCard({ mon, onChange, onBack, onClose, footer }: 
   const types = speciesTypes(mon.species)
   const st = Object.fromEntries(STAT_IDS.map((s) => [s, calcStat(mon.species, s, mon.level, mon.ivs[s], mon.evs[s], mon.nature)])) as Record<StatId, number>
   const mx = st.hp
-  const total = STAT_IDS.reduce((a, s) => a + st[s], 0)
   const frac = mx > 0 ? Math.max(0, Math.min(1, mon.hp / mx)) : 0
   const expLo = mon.level ** 3, expHi = (mon.level + 1) ** 3
   const expNow = Math.max(0, mon.exp - expLo), expNeed = expHi - expLo
@@ -284,9 +283,13 @@ export default function SummaryCard({ mon, onChange, onBack, onClose, footer }: 
       {/* the picture panel */}
       <div className="sx-art"><div className="sx-layer">
         <div className="sx-row top">
-          <Chip><GT t={`${genderGlyph} ${genderLabel}`.trim()} k={2} color={mon.gender === 'M' ? '#2a7de1' : mon.gender === 'F' ? '#e0467c' : INK} /></Chip>
-          <Chip><GT t={`${es ? 'ALT' : 'HT'}:`} k={2} color={MUTED} /><GT t={`${sp.heightm} m`} k={2} /></Chip>
-          <Chip><GT t={`${es ? 'PESO' : 'WT'}:`} k={2} color={MUTED} /><GT t={`${sp.weightkg} kg`} k={2} /></Chip>
+          <Chip>
+            <GT t={`${genderGlyph} ${genderLabel}`.trim()} k={2} color={mon.gender === 'M' ? '#2a7de1' : mon.gender === 'F' ? '#e0467c' : INK} />
+            <GT t="|" k={2} color={MUTED} />
+            <GT t={`${es ? 'ALT' : 'HT'}:`} k={2} color={MUTED} /><GT t={`${sp.heightm} m`} k={2} />
+            <GT t="|" k={2} color={MUTED} />
+            <GT t={`${es ? 'PESO' : 'WT'}:`} k={2} color={MUTED} /><GT t={`${sp.weightkg} kg`} k={2} />
+          </Chip>
         </div>
         <div className="sx-sprite"><div ref={spriteBox} style={{ transform: `translateY(${lift}px)`, opacity: placed ? 1 : 0, transition: placed ? 'opacity .45s ease-out' : 'none' }}><div className="sx-spr"><MonSprite species={mon.species} shiny={mon.shiny} scale={small ? 3 : 4} animated /></div></div></div>
         <div className="sx-row bottom">
@@ -327,7 +330,6 @@ export default function SummaryCard({ mon, onChange, onBack, onClose, footer }: 
             <span><i><b><GT t="1" k={1} color="#ffffff" /></b></i><GT t={es ? 'Especie' : 'Species'} k={1} color={MUTED} /></span>
             <span><i><b><GT t="2" k={1} color="#ffffff" /></b></i><GT t={es ? 'IV + EV + Naturaleza + Objeto' : 'IV + EV + Nature + Item'} k={1} color={MUTED} /></span>
           </div>
-          <span className="sx-chip sx-total"><span className="sx-un"><GT t={`${es ? 'TOTAL' : 'STAT TOTAL'}:`} k={2} color={MUTED} /><GT t={String(total)} k={2} /></span></span>
         </div>
       )}
       {tab === 'ev' && (
