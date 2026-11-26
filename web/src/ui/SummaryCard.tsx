@@ -63,7 +63,6 @@ function itemMult(item: string, stat: StatId, species: string): number {
   }
 }
 
-const RED = '#e03a4c'
 
 interface StatMath { base: number; final: number; end: number; cap: number; lines: Array<{ label: string; v: number }>; net: number }
 
@@ -125,7 +124,7 @@ function StatBar({ mon, s, lang, i }: { mon: Mon; s: StatId; lang: 'es' | 'en'; 
       </Tip>
       {chunkW > 0 && (
         <Tip tip={<ChunkTip m={m} lang={lang} />} style={{ position: 'absolute', top: 3, bottom: 3, left: `calc(${chunkL}% + 1px)`, width: `calc(${Math.min(chunkW, 100 - chunkL)}% - 2px)` }}>
-          <span className="sx-seg grow late" style={{ background: pos ? c : RED }} />
+          <span className="sx-seg grow late" style={{ background: pos ? c : c + '4d' }} />
         </Tip>
       )}
     </div>
