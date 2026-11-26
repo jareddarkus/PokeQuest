@@ -77,6 +77,12 @@ class MusicManager {
     } catch { /* sounds are optional */ }
   }
 
+  /** The jingle of finding an item (a game file imported before it was added only has the short "getting" sound). */
+  async itemGet() {
+    const index = await loadMusicIndex()
+    return this.playSfx(index?.itemget ? 'itemget' : 'se:getting')
+  }
+
   /** The healing sound of the game: one sound, then the next one right after it. */
   heal() { return this.playSfx('be:9', () => { void this.playSfx('be:14') }) }
 

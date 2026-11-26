@@ -278,7 +278,7 @@ export function generateWorld(seed: number, ground: Uint8Array, opts: { barriers
   }
 
   const pickups: PickupSpec[] = []
-  const pcounts = [16, 14, 12, 8]
+  const pcounts = [40, 34, 28, 16] // Poké Balls on the ground: plenty in every ring
   for (let ring = 1; ring <= 4; ring++) {
     for (let i = 0; i < pcounts[ring - 1]; i++) {
       const p = freeTile(ring)

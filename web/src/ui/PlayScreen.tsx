@@ -542,7 +542,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
         ))
       },
       onPickup: (id) => {
-        void music.playSfx('se:getting')
+        void music.itemGet() // the game's "item found" jingle
         const pos = handleRef.current?.getPos()
         const r = pos ? ringAt(pos.x, pos.y) : 1
         const items = rollPickup(r, Math.random)

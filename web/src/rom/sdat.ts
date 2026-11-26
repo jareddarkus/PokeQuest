@@ -23,6 +23,7 @@ export const SONGS: Record<string, string> = {
   gymLeader: 'SEQ_BGM_VS_GYMLEADER',
   win: 'SEQ_BGM_WIN1',
   caught: 'SEQ_ME_POKEGET',
+  itemget: 'SEQ_ME_ITEM', // the jingle of finding an item
 }
 
 /** Short sound effects of the game (menus, battle). */
