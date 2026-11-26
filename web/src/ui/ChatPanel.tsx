@@ -14,7 +14,7 @@ export default function ChatDock({ chat, canChat, open, setOpen }: { chat: Chat;
   return (
     <div className={`chat-dock ${open ? 'open' : ''}`} onKeyDown={(e) => e.stopPropagation()}>
       <button className="chat-head" onClick={() => setOpen(!open)}>
-        💬 Chat {chat.unread > 0 && <span className="chat-badge">{chat.unread}</span>} <span className="chat-caret">{open ? '▾' : '▴'}</span>
+        <span className="chat-ico">💬</span><span className="chat-label"> Chat</span> {chat.unread > 0 && <span className="chat-badge">{chat.unread}</span>} <span className="chat-caret">{open ? '▾' : '▴'}</span>
       </button>
       {open && (
         <>

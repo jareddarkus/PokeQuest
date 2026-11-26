@@ -25,6 +25,7 @@ import MenuButton from './MenuButton'
 import PartyBar from './PartyBar'
 import { useFrameStyle } from './DsFrame'
 import ChatDock from './ChatPanel'
+import MiniMap, { useIsMobile } from './MiniMap'
 import { PlayerPopup, ReactionPopup, TradePanel, type TradeState } from './PlayerMenu'
 import { supabase } from '../supabase'
 import { useMatchPlayers } from '../net/useMatchPlayers'
@@ -111,6 +112,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
   const busy = useRef(false)
 
   const say = (t: string) => setToast(t)
+  const mobile = useIsMobile()
   const [chatOpen, setChatOpen] = useState(false)
   const chatUser = username ?? (import.meta.env.DEV && new URLSearchParams(location.search).has('devuser') ? 'DevUser' : null) // (developer test without an account: ?devuser)
   const chat = useChat(chatUser, chatOpen)
@@ -411,7 +413,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
 
   const alive = trainer.team.filter((m) => m.hp > 0).length
   return (
-    <div className="fullscreen">
+    <div className={`fullscreen ${settings.showDpad ? (settings.dpadSide === 'left' ? 'dpad-l' : 'dpad-r') : ''}`}>
       <GameView3D
         world={world}
         built={built}
@@ -473,6 +475,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
         </div>
       )}
       {toast && <div key={toast} className="toast panel" style={toastFrame ?? undefined}>{toast}</div>}
+      {!battle && <MiniMap world={world} getMe={() => handleRef.current?.getPos() ?? null} others={playersVisible} radius={radius} collapseOn={collapseOn} mobile={mobile} />}
       {!battle && <ChatDock chat={chat} canChat={!!chatUser} open={chatOpen} setOpen={setChatOpen} />}
       {panel === 'settings' && <SettingsPanel settings={settings} onChange={onSettings} onClose={() => setPanel(null)} onCustomize={onCustomize} />}
       {panel === 'team' && <TeamPanel trainer={trainer} setTrainer={setTrainer} onClose={() => setPanel(null)} onMessage={say} />}

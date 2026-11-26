@@ -18,7 +18,6 @@ import { getAnim, warmAnim } from '../ui/AnimSprite'
 import { pixelDom } from '../ui/MonSprite'
 import type { AnimatedSprite } from '../rom/anim'
 import type { Settings } from './settings'
-import { makeGrassCoverTexture } from './meadow'
 import { loadGrassTuft } from '../rom/grassFx'
 import {
   DX, DY, SIZE, T, TYPE_COLOR, collapseRadius, dist, inBounds, isWalkable, tileAt, type Dir, type NpcSpec, type World,
@@ -298,37 +297,36 @@ export default function GameView3D(props: Props) {
     fit(mySprite)
     scene.add(mySprite)
     const myShadow = makeShadow(scene)
-    // standing in tall grass: the grass in front of the character covers its lower body (a picture drawn over the feet, like in the game)
-    const coverTex = makeGrassCoverTexture(built)
-    const makeCover = () => {
-      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: coverTex ?? undefined, color: coverTex ? 0xffffff : 0x2a8a3a, transparent: true, alphaTest: 0.1, depthWrite: false }))
-      sp.center.set(0.5, 0); sp.visible = false; scene.add(sp)
-      return sp
-    }
-    /** Characters are drawn south (nearer the camera) over north, always: the order follows the ground position. */
-    const order = (sp: THREE.Sprite, z: number) => { sp.renderOrder = 3 + z * 0.001 }
-    // the game's own grass tuft (overworld effect "kusaeff", four pictures: leaves fly up, then the tuft settles); until it is loaded the stacked leaves are used
+    // the game's own grass effect ("kusaeff", model ee_kusa): a tuft of leaves lying a little above the ground at the character's feet. It bursts (four pictures) when
+    // you step into grass and then stays as the last picture while you are in the grass; it is a real flat picture in the world, so it covers the legs by depth.
     let tuftTex: THREE.CanvasTexture[] | null = null
     void loadGrassTuft().then((frames) => {
       if (!frames) return
       tuftTex = frames.map((c) => { const t = new THREE.CanvasTexture(c); t.magFilter = THREE.NearestFilter; t.minFilter = THREE.NearestFilter; t.colorSpace = THREE.SRGBColorSpace; return t })
     })
-    const cover = (sp: THREE.Sprite, on: boolean, x: number, ground: number, z: number, wide = 1.0, frame = 3) => {
-      sp.visible = on
-      if (!on) return
-      sp.renderOrder = 3 + z * 0.001 + 0.0005 // right above its character, below the characters further south
-      const m = sp.material as THREE.SpriteMaterial
-      if (tuftTex && frame < 3) { // just stepped in: the game's own tuft effect (leaves fly up), then the grass settles
-        const t = tuftTex[Math.max(0, frame)]
-        if (m.map !== t) { m.map = t; m.color.set(0xffffff); m.needsUpdate = true }
-        sp.scale.set(2 * wide, 2 * wide, 1) // 32 picture pixels = 2 tiles
-      } else { sp.visible = false; return } // standing in it: the grass itself (the leaf layers of the tiles) covers the lower body
-      place(sp, camera, x, ground, z, PUSH + 0.04)
+    const tuftGeo = new THREE.BufferGeometry() // the corners of the game's model (16 units = 1 tile): a little slanted, 0.3 - 0.6 tiles above the ground
+    tuftGeo.setAttribute('position', new THREE.Float32BufferAttribute([-0.5625, 0.3125, 0.375, 0.4375, 0.3125, 0.375, 0.4375, 0.625, -0.5625, -0.5625, 0.625, -0.5625], 3))
+    tuftGeo.setAttribute('uv', new THREE.Float32BufferAttribute([0, 1, 1, 1, 1, 0, 0, 0], 2))
+    tuftGeo.setIndex([0, 1, 2, 0, 2, 3])
+    const makeCover = () => {
+      const m = new THREE.Mesh(tuftGeo, new THREE.MeshBasicMaterial({ transparent: true, alphaTest: 0.1, depthWrite: true, side: THREE.DoubleSide }))
+      m.visible = false; m.renderOrder = 2; m.frustumCulled = false; scene.add(m)
+      return m
+    }
+    /** Characters are drawn south (nearer the camera) over north, always: the order follows the ground position. */
+    const order = (sp: THREE.Sprite, z: number) => { sp.renderOrder = 3 + z * 0.001 }
+    const cover = (m: THREE.Mesh, on: boolean, x: number, ground: number, z: number, _wide = 1.0, frame = 3) => {
+      m.visible = on && !!tuftTex
+      if (!m.visible) return
+      const t = tuftTex![Math.max(0, Math.min(3, frame))]
+      const mat = m.material as THREE.MeshBasicMaterial
+      if (mat.map !== t) { mat.map = t; mat.needsUpdate = true }
+      m.position.set(x, ground, z)
     }
     const myCover = makeCover(), folCover = makeCover()
     let prevT = 1, puffAt = 0
-    const npcCovers = new Map<NpcRuntime, THREE.Sprite>()
-    const otherCovers = new Map<string, THREE.Sprite>()
+    const npcCovers = new Map<NpcRuntime, THREE.Mesh>()
+    const otherCovers = new Map<string, THREE.Mesh>()
     const tallAt = (tx: number, ty: number) => tileAt(world, Math.round(tx), Math.round(ty)) === T.Tall
     const npcShadows = new Map<NpcRuntime, THREE.Mesh>()
 

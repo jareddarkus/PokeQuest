@@ -583,3 +583,22 @@ button.big small { opacity: .7; font-size: .75rem; }
 .pm-list button { display: flex; align-items: center; gap: 6px; text-align: left; }
 .pm-list button.on { outline: 2px solid #ffd36a; }
 .pm-offer { display: flex; align-items: center; gap: 8px; min-height: 52px; }
+
+/* the little map (bottom right) */
+.minimap { position: absolute; right: 8px; bottom: 8px; z-index: 20; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.mm-box { position: relative; background: rgba(16,18,26,.92); border: 2px solid rgba(255,255,255,.6); border-radius: 8px; padding: 4px; }
+.mm-box canvas { display: block; image-rendering: pixelated; border-radius: 4px; }
+.mm-btn, .mm-close { background: rgba(16,18,26,.92); color: #fff; border: 2px solid rgba(255,255,255,.6); border-radius: 22px; width: 44px; height: 44px; font-size: 1.3rem; cursor: pointer; padding: 0; }
+.mm-close { position: absolute; top: -12px; right: -12px; width: 30px; height: 30px; border-radius: 15px; font-size: 1.1rem; }
+.hud-practice { right: 200px !important; }
+@media (max-width: 700px) {
+  .hud-practice { right: auto !important; left: 50%; transform: translateX(-50%); bottom: 10px; top: auto; }
+  .minimap.mobile { align-items: flex-end; }
+  .minimap.mobile .mm-box { position: fixed; right: 12px; bottom: 60px; left: auto; }
+  .dpad-r .minimap { bottom: 200px; }
+  .chat-dock:not(.open) { width: 44px; height: 44px; border-radius: 22px; }
+  .chat-dock:not(.open) .chat-head { padding: 0; justify-content: center; height: 44px; width: 44px; font-size: 1.3rem; }
+  .chat-dock:not(.open) .chat-label, .chat-dock:not(.open) .chat-caret { display: none; }
+  .dpad-l .chat-dock { bottom: 200px; }
+  .chat-dock.open { width: min(92vw, 360px); }
+}
