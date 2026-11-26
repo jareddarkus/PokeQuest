@@ -101,6 +101,8 @@ const lift = (sp: THREE.Sprite) => (sp.material.userData.real ? 0.2 : 0)
  * (we make it a little smaller to compensate) but puts it in front of the wall.
  */
 const PUSH = 1.4
+/** a character standing in tall grass is not pushed forward: the leaves in front of it really cover its lower body (depth), like in the game */
+const TALL_PUSH = import.meta.env.DEV && new URLSearchParams(location.search).has('tp') ? Number(new URLSearchParams(location.search).get('tp')) : 0.1
 const _v = new THREE.Vector3()
 function place(sp: THREE.Sprite, camera: THREE.Camera, x: number, y: number, z: number, push = PUSH) {
   _v.set(x, y, z)
@@ -320,10 +322,7 @@ export default function GameView3D(props: Props) {
         const t = tuftTex[Math.max(0, frame)]
         if (m.map !== t) { m.map = t; m.color.set(0xffffff); m.needsUpdate = true }
         sp.scale.set(2 * wide, 2 * wide, 1) // 32 picture pixels = 2 tiles
-      } else { // standing in it: the same leaf pictures as the grass of the map, stacked, in front of the lower body
-        if (coverTex && m.map !== coverTex) { m.map = coverTex; m.color.set(0xffffff); m.needsUpdate = true }
-        sp.scale.set(1.15 * wide, 0.9 * wide, 1)
-      }
+      } else { sp.visible = false; return } // standing in it: the grass itself (the leaf layers of the tiles) covers the lower body
       place(sp, camera, x, ground, z, PUSH + 0.04)
     }
     const myCover = makeCover(), folCover = makeCover()
@@ -757,7 +756,7 @@ export default function GameView3D(props: Props) {
       const myFrame = me.t >= 1 ? 0 : me.run ? [1, 0, 2, 0][me.cycle] : me.t < 0.5 ? 1 + me.step : 0
       mySprite.material = charMaterial(p.look, me.dir, myFrame, me.run && me.t < 1) // (standing still after a run: the normal standing picture)
       fit(mySprite)
-      place(mySprite, camera, px + 0.5, ph + lift(mySprite), py + 0.5)
+      place(mySprite, camera, px + 0.5, ph + lift(mySprite), py + 0.5, me.t < 1 ? (tallAt(me.t < 0.5 ? me.fromX : me.x, me.t < 0.5 ? me.fromY : me.y) ? TALL_PUSH : PUSH) : tallAt(me.x, me.y) ? TALL_PUSH : PUSH)
       order(mySprite, py + 0.5)
       if (me.t >= 1 && prevT < 1 && tallAt(me.x, me.y)) puffAt = now // stepped into tall grass: the leaves fly up
       prevT = me.t
@@ -798,7 +797,7 @@ export default function GameView3D(props: Props) {
           cx.drawImage(fol.strip, (fol.dir * 2 + frame) * folCw, 0, folCw, folCh, 0, 0, folCw, folCh)
           if (fol.owTex) fol.owTex.needsUpdate = true
           fol.sprite.scale.set(folCw / 16, folCh / 16, 1) // 16 picture pixels = 1 tile (32 = 2 tiles), like the characters
-          place(fol.sprite, camera, fx + 0.5, fh + 0.2 + hop, fy + 0.5)
+          place(fol.sprite, camera, fx + 0.5, fh + 0.2 + hop, fy + 0.5, (fol.t < 0.5 ? tallAt(fol.fromX, fol.fromY) : tallAt(fol.x, fol.y)) ? TALL_PUSH : PUSH)
         } else if (fol.mode === 'rom' && fol.anim) {
           const cx = fol.canvas.getContext('2d')!
           cx.clearRect(0, 0, 96, 96)
@@ -806,7 +805,7 @@ export default function GameView3D(props: Props) {
           hardEdges(cx, 96, 96)
           if (fol.tex) fol.tex.needsUpdate = true
           fol.sprite.scale.set(1.9, 1.9, 1) // 96 picture pixels = 1.9 tiles
-          place(fol.sprite, camera, fx + 0.5, fh + 0.05 + hop, fy + 0.5)
+          place(fol.sprite, camera, fx + 0.5, fh + 0.05 + hop, fy + 0.5, (fol.t < 0.5 ? tallAt(fol.fromX, fol.fromY) : tallAt(fol.x, fol.y)) ? TALL_PUSH : PUSH)
         } else if (fol.mode === 'dom' && fol.dom) {
           const w = mount.clientWidth, h = mount.clientHeight
           const a = new THREE.Vector3(fx + 0.5, fh + 0.05 + hop, fy + 0.5).project(camera)
@@ -826,7 +825,7 @@ export default function GameView3D(props: Props) {
         n.sprite.material = charMaterial(n.look, n.dir, frame, n.spec.behavior === 'run' && n.moving > 0)
         fit(n.sprite)
         const nh = n.spec.swim ? Math.max(heightAt(n.fx + 0.5, n.fy + 0.5), built.waterY - 0.02) : heightAt(n.fx + 0.5, n.fy + 0.5) // swimmers float on the water
-        place(n.sprite, camera, n.fx + 0.5, nh + lift(n.sprite), n.fy + 0.5)
+        place(n.sprite, camera, n.fx + 0.5, nh + lift(n.sprite), n.fy + 0.5, !n.spec.swim && (n.moving > 0 && n.moving < 0.5 ? tallAt(n.fromX, n.fromY) : tallAt(n.x, n.y)) ? TALL_PUSH : PUSH)
         order(n.sprite, n.fy + 0.5)
         { let nc = npcCovers.get(n); if (!nc) { nc = makeCover(); npcCovers.set(n, nc) }
           cover(nc, !n.spec.swim && (n.moving > 0 && n.moving < 0.5 ? tallAt(n.fromX, n.fromY) : tallAt(n.x, n.y)), n.fx + 0.5, nh, n.fy + 0.5) }
@@ -874,7 +873,7 @@ export default function GameView3D(props: Props) {
         e.body.material = charMaterial(o.look, o.dir, o.moving ? (Math.floor(now / 133) % 2 ? 0 : 1 + (Math.floor(now / 266) % 2)) : 0)
         fit(e.body)
         const h = heightAt(o.x + 0.5, o.y + 0.5)
-        place(e.body, camera, o.x + 0.5, h + lift(e.body), o.y + 0.5)
+        place(e.body, camera, o.x + 0.5, h + lift(e.body), o.y + 0.5, tallAt(o.x, o.y) ? TALL_PUSH : PUSH)
         order(e.body, o.y + 0.5)
         { let oc = otherCovers.get(o.id); if (!oc) { oc = makeCover(); otherCovers.set(o.id, oc) }
           cover(oc, tallAt(o.x, o.y), o.x + 0.5, h, o.y + 0.5) }
