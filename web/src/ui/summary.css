@@ -108,15 +108,29 @@
   .sx-art { padding: 14px 16px; min-height: 300px; }
   .sx-pane { grid-area: stats; }
 }
-
-/* the Pokémon floats a little: a slow, soft up-and-down */
-.sx-float { animation: sx-float 3.4s ease-in-out infinite; will-change: transform; }
-@keyframes sx-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-9px); } }
-@media (prefers-reduced-motion: reduce) { .sx-float { animation: none; } }
 .sx-stat .v { white-space: nowrap; }
 
-/* the X in the top right corner closes the window */
-.sx-x { position: absolute !important; top: 10px; right: 12px; z-index: 40; width: 34px; height: 34px; border: 0; border-radius: 50%; cursor: pointer; background: #fff; color: #1c2333; font-size: 16px; line-height: 1; box-shadow: 0 2px 8px rgba(40, 55, 90, .25); }
-.sx-x:hover { background: #1c2333; color: #fff; }
-.sx { padding-top: 28px; }
-.sx-head { padding-right: 38px; }
+/* the X in the top right corner closes the window: a black slanted shape with a white X */
+.sx-x { position: absolute !important; top: 18px; right: 26px; z-index: 40; width: 46px; height: 34px; border: 0; border-radius: 3px; cursor: pointer; background: #0d1018; transform: skewX(-12deg); display: flex; align-items: center; justify-content: center; box-shadow: 0 3px 9px rgba(0, 0, 0, .3); }
+.sx-x svg { transform: skewX(12deg); }
+.sx-x:hover { background: #2b3350; }
+.sx { padding-top: 22px; }
+.sx-head { padding-right: 84px; }
+.sx-modal { width: min(1280px, 98vw); }
+.sx { column-gap: 34px; }
+.sx-stats { padding-left: 10px; }
+.sx-tip { font-style: normal; }
+.sx-bar .sx-tip { transform: translateX(-50%) skewX(18deg); }
+.sx-bar .sx-tip.right { transform: skewX(18deg); }
+.sx-seg.neg, .sx-seg { cursor: help; }
+.sx-seg.neg { background: #fff !important; box-shadow: 0 0 0 1px #d3dae8; }
+.sx-legend i { width: 22px; height: 16px; background: #4b5468; transform: skewX(-12deg); display: inline-flex; align-items: center; justify-content: center; }
+.sx-legend i b { transform: skewX(12deg); display: flex; }
+.sx-bar-s { display: block; height: 16px; width: 190px; }
+.sx-hpbox { }
+.sx-type, .sx-mv .tchip { display: inline-flex; align-items: center; }
+.sx-type > span, .sx-mv .tchip > span { display: flex; align-items: center; justify-content: center; line-height: 1; }
+.sx-type span span, .sx-mv .tchip span span { line-height: 1 !important; }
+.sx-mvname { display: flex; align-items: center; gap: 8px; }
+.sx-btn.rh { transform: skewX(-12deg); border-radius: 3px; padding: 9px 22px; margin-top: 14px; }
+.sx-btn.rh > span { display: block; transform: skewX(12deg); }

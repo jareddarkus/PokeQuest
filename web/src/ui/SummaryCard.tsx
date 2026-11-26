@@ -10,6 +10,7 @@ import { abilityDesc, itemDesc, shortDesc, trText, useLang } from '../i18n'
 import { moveFacts, moveGameText } from '../data/moveText'
 import ItemIcon from './ItemIcon'
 import MonSprite, { MonIcon } from './MonSprite'
+import TypePlate from './TypePlate'
 
 const INK = '#1c2333', MUTED = '#6b7690'
 
@@ -18,7 +19,7 @@ function GT({ t, k = 2, color = INK, maxWidth, align, font = 1 }: { t: string; k
   const title = font === 0
   const size = title ? [0, 12, 16, 22, 28][k] ?? 16 : [0, 11, 14, 18, 22][k] ?? 14
   return (
-    <span style={{ fontFamily: title ? "'Unbounded', 'Lexend', sans-serif" : "'Lexend', sans-serif", fontWeight: title ? 900 : 400, fontSize: size, lineHeight: 1.3, color, textAlign: align, display: 'inline-block', maxWidth: maxWidth ? maxWidth * k : undefined, letterSpacing: title ? '0.01em' : undefined }}>{trText(t)}</span>
+    <span style={{ fontFamily: title ? "'Unbounded', 'Lexend', sans-serif" : "'Lexend', sans-serif", fontWeight: title ? 900 : 400, fontSize: size, lineHeight: 1.3, color, textAlign: align, display: 'inline-block', whiteSpace: 'pre-wrap', maxWidth: maxWidth ? maxWidth * k : undefined, letterSpacing: title ? '0.01em' : undefined }}>{trText(t)}</span>
   )
 }
 
@@ -81,16 +82,16 @@ function statSegments(mon: Mon, s: StatId, lang: 'es' | 'en'): { segs: Seg[]; fi
   const natLabel = nm.plus ? `${trText(mon.nature)} (${nm.plus === s ? '+10%' : nm.minus === s ? '-10%' : '0%'})` : trText(mon.nature)
   const segs: Seg[] = [
     { key: 'base', v: base, color: c, tip: es ? `Especie (base ${B}): ${base}` : `Species (base ${B}): ${base}` },
-    { key: 'ev', v: ev, color: c + 'bb', tip: `EV ${mon.evs[s]}: +${ev}` },
-    { key: 'iv', v: iv, color: c + '77', tip: `IV ${IV}: +${iv}` },
-    { key: 'nat', v: Math.max(0, nat), color: '#dfe6f4', tip: `${natLabel}: ${nat >= 0 ? '+' : ''}${nat}`, neg: false },
+    { key: 'ev', v: ev, color: c, tip: `EV ${mon.evs[s]}: +${ev}` },
+    { key: 'iv', v: iv, color: c, tip: `IV ${IV}: +${iv}` },
+    { key: 'nat', v: Math.max(0, nat), color: c, tip: `${natLabel}: ${nat >= 0 ? '+' : ''}${nat}`, neg: false },
   ]
-  if (nat < 0) segs.push({ key: 'natneg', v: -nat, color: '#e03a4c', tip: `${natLabel}: ${nat}`, neg: true })
+  if (nat < 0) segs.push({ key: 'natneg', v: -nat, color: '#ffffff', tip: `${natLabel}: ${nat}`, neg: true })
   const im = mon.item ? itemMult(mon.item, s, mon.species) : 1
   if (im !== 1) {
     const d = Math.floor(final * im) - final
-    if (d > 0) segs.push({ key: 'item', v: d, color: '#ffd24a', tip: `${trText(mon.item)}: +${d}` })
-    else if (d < 0) segs.push({ key: 'itemneg', v: -d, color: '#e03a4c', tip: `${trText(mon.item)}: ${d}`, neg: true })
+    if (d > 0) segs.push({ key: 'item', v: d, color: c, tip: `${trText(mon.item)}: +${d}` })
+    else if (d < 0) segs.push({ key: 'itemneg', v: -d, color: '#ffffff', tip: `${trText(mon.item)}: ${d}`, neg: true })
   }
   return { segs, final, cap: barCap(s, L) }
 }
@@ -114,7 +115,7 @@ function StatBar({ mon, s, lang }: { mon: Mon; s: StatId; lang: 'es' | 'en' }) {
     const width = zero ? 1.6 : Math.max(w, 1.8)
     items.push(
       <Tip key={g.key} tip={<GT t={g.tip} color="#ffffff" />} style={{ position: 'absolute', top: 3, bottom: 3, left: `calc(${at}% + 1px)`, width: `calc(${Math.min(width, 100 - at)}% - 2px)` }}>
-        <span className={`sx-seg ${zero ? 'zero' : ''}`} style={{ background: g.color }} />
+        <span className="sx-seg" style={{ background: g.color }} />
       </Tip>,
     )
     at += zero ? 0 : w
@@ -140,9 +141,9 @@ function MoveCard({ mon, i, on, onClick, lang }: { mon: Mon; i: number; on: bool
   return (
     <button className={`sx-mv ${on ? 'on' : ''}`} style={{ ['--c' as string]: color }} onClick={onClick}>
       <span className="sx-un">
-        <GT t={name} k={2} />
+        <span className="sx-mvname"><TypePlate type={info.category} scale={0.75} /><GT t={name} k={2} /></span>
         <span className="meta">
-          <GT t={`${info.power || '—'} ${lang === 'es' ? 'POT' : 'PWR'}   ${pp}/${info.pp} PP`} k={1} font={2} color={MUTED} />
+          <GT t={`${lang === 'es' ? 'POT' : 'PWR'}: ${info.power || '—'}   |   PP: ${pp}/${info.pp}`} k={1} color={MUTED} />
           <span className="tchip"><span><GT t={info.type} k={1} color="#ffffff" /></span></span>
         </span>
       </span>
@@ -181,7 +182,7 @@ function EvoNode({ name, cur, lang }: { name: string; cur: string; lang: 'es' | 
   )
 }
 
-export default function SummaryCard({ mon, onChange, onBack, onClose, backLabel = 'Back', footer }: { mon: Mon; onChange?: (m: Mon) => void; onBack: () => void; onClose?: () => void; backLabel?: string; footer?: ReactNode }) {
+export default function SummaryCard({ mon, onChange, onBack, onClose, footer }: { mon: Mon; onChange?: (m: Mon) => void; onBack: () => void; onClose?: () => void; footer?: ReactNode }) {
   const lang = useLang()
   const es = lang === 'es'
   const [tab, setTab] = useState<'stats' | 'moves' | 'evo'>('stats')
@@ -215,7 +216,7 @@ export default function SummaryCard({ mon, onChange, onBack, onClose, backLabel 
 
   return (
     <div className="sx">
-      <button className="sx-x" onClick={onClose ?? onBack} aria-label="Close" title="Close">✕</button>
+      <button className="sx-x" onClick={onClose ?? onBack} aria-label="Close" title="Close"><svg viewBox="0 0 14 14" width="14" height="14"><path d="M2 2 L12 12 M12 2 L2 12" stroke="#fff" strokeWidth="2.6" strokeLinecap="square" /></svg></button>
       {/* header */}
       <div className="sx-head">
         <div className="sx-who">
@@ -249,18 +250,19 @@ export default function SummaryCard({ mon, onChange, onBack, onClose, backLabel 
             <Chip><GT t={`${es ? 'PESO' : 'WT'}: ${sp.weightkg} kg`} k={2} /></Chip>
           </div>
         </div>
-        <div className="sx-sprite"><div className="sx-float"><MonSprite species={mon.species} shiny={mon.shiny} scale={small ? 3 : 4} animated /></div></div>
+        <div className="sx-sprite"><div><MonSprite species={mon.species} shiny={mon.shiny} scale={small ? 3 : 4} animated /></div></div>
         <div className="sx-row">
           <span className="sx-hp"><span className="sx-un">
-            <GT t={`HP ${mon.hp} / ${mx}`} k={2} />
-            <span className="sx-hpbar"><i className={frac > 0.5 ? '' : frac > 0.2 ? 'mid' : 'low'} style={{ width: `${frac * 100}%` }} /></span>
+            <GT t={`${es ? 'PS' : 'HP'}: ${mon.hp} / ${mx}`} k={2} />
+            <span className="sx-bar sx-bar-s"><span className="sx-seg" style={{ position: 'absolute', top: 3, bottom: 3, left: 1, width: `calc(${frac * 100}% - 2px)`, background: frac > 0.5 ? STAT_COLOR.hp : frac > 0.2 ? '#f0a800' : '#e03a4c' }} /></span>
           </span></span>
           <div className="sx-col r">
-            <Chip tip={<GT t={natureTip} k={2} color="#ffffff" maxWidth={150} />} right><GT t={`${es ? 'NATURALEZA' : 'NATURE'}: ${mon.nature.toUpperCase()}`} k={2} /></Chip>
-            <Chip tip={<GT t={abilityDesc(mon.ability) || '—'} k={2} color="#ffffff" maxWidth={150} />} right><GT t={`${es ? 'HABILIDAD' : 'ABILITY'}: ${mon.ability.toUpperCase()}`} k={2} /></Chip>
+            <Chip tip={<GT t={natureTip} k={2} color="#ffffff" maxWidth={150} />} right><GT t={`${es ? 'NATURALEZA' : 'NATURE'}:`} k={2} color={MUTED} /><GT t={mon.nature.toUpperCase()} k={2} /></Chip>
+            <Chip tip={<GT t={abilityDesc(mon.ability) || '—'} k={2} color="#ffffff" maxWidth={150} />} right><GT t={`${es ? 'HABILIDAD' : 'ABILITY'}:`} k={2} color={MUTED} /><GT t={mon.ability.toUpperCase()} k={2} /></Chip>
             <Chip tip={<GT t={mon.item ? itemText : es ? 'No lleva ningún objeto.' : 'Not holding an item.'} k={2} color="#ffffff" maxWidth={150} />} right>
-              {mon.item && <ItemIcon name={mon.item} size={20} />}
-              <GT t={`${es ? 'OBJETO' : 'ITEM'}: ${mon.item ? mon.item.toUpperCase() : es ? 'NINGUNO' : 'NONE'}`} k={2} />
+              <GT t={`${es ? 'OBJETO' : 'ITEM'}:`} k={2} color={MUTED} />
+              {mon.item && <ItemIcon name={mon.item} size={22} />}
+              <GT t={mon.item ? mon.item.toUpperCase() : es ? 'NINGUNO' : 'NONE'} k={2} />
             </Chip>
           </div>
         </div>
@@ -278,11 +280,9 @@ export default function SummaryCard({ mon, onChange, onBack, onClose, backLabel 
             </div>
           ))}
           <div className="sx-legend">
-            <span><i style={{ background: '#8a93a8' }} /><GT t={es ? 'Especie' : 'Species'} k={1} color={MUTED} /></span>
-            <span><i style={{ background: '#8a93a8bb' }} /><GT t="EV" k={1} color={MUTED} /></span>
-            <span><i style={{ background: '#8a93a877' }} /><GT t="IV" k={1} color={MUTED} /></span>
-            <span><i style={{ background: '#dfe6f4' }} /><GT t={es ? 'Naturaleza' : 'Nature'} k={1} color={MUTED} /></span>
-            {mon.item && <span><i style={{ background: '#ffd24a' }} /><GT t={es ? 'Objeto' : 'Item'} k={1} color={MUTED} /></span>}
+            {[[es ? 'Especie' : 'Species'], ['EV'], ['IV'], [es ? 'Naturaleza' : 'Nature'], ...(mon.item ? [[es ? 'Objeto' : 'Item']] : [])].map(([name], i) => (
+              <span key={name}><i><b><GT t={String(i + 1)} k={1} color="#ffffff" /></b></i><GT t={name} k={1} color={MUTED} /></span>
+            ))}
           </div>
           <span className="sx-chip sx-total"><span className="sx-un"><GT t={`${es ? 'TOTAL' : 'STAT TOTAL'}: ${total}`} k={2} /></span></span>
         </div>
@@ -293,14 +293,15 @@ export default function SummaryCard({ mon, onChange, onBack, onClose, backLabel 
           {mv && mi ? (
             <div className="sx-detail">
               <span style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-                <GT t={mv} k={3} font={0} /><TypeChip type={mi.type} k={1} />
+                <TypePlate type={mi.category} scale={1} /><GT t={mv} k={3} font={0} /><TypeChip type={mi.type} k={1} />
                 <GT t={`${es ? ({ Physical: 'Físico', Special: 'Especial', Status: 'Estado' } as Record<string, string>)[mi.category] : mi.category}  ${mi.power ? (es ? 'Potencia' : 'Power') + ' ' + mi.power : es ? 'sin potencia' : 'no power'}  ${mi.accuracy === true ? '—' : mi.accuracy + '%'}`} k={1} color={MUTED} />
               </span>
               <GT t={moveFacts(mv, lang)} k={kText} maxWidth={textW} />
               <GT t={moveGameText(mv, lang)} k={kText} maxWidth={textW} color={MUTED} />
-              {onChange && <button className="sx-btn" onClick={() => setPickFor(pickFor === sel ? null : sel)}><GT t={es ? 'Cambiar movimiento…' : 'Replace move…'} k={1} color="#ffffff" /></button>}
+              {onChange && <button className="sx-btn rh" onClick={() => setPickFor(pickFor === sel ? null : sel)}><span><GT t={es ? 'Cambiar movimiento' : 'Replace move'} k={1} color="#ffffff" /></span></button>}
             </div>
           ) : <GT t="—" />}
+          {pickFor !== null && options.filter((o) => !mon.moves.includes(o)).length === 0 && <GT t={es ? 'A este nivel no puede aprender más movimientos.' : 'It cannot learn any other move at this level.'} k={2} color={MUTED} />}
           {pickFor !== null && (
             <div className="sx-pick">
               {options.filter((o) => !mon.moves.includes(o)).map((o) => {
@@ -324,10 +325,7 @@ export default function SummaryCard({ mon, onChange, onBack, onClose, backLabel 
         {[0, 1, 2, 3].map((i) => <MoveCard key={i} mon={mon} i={i} lang={lang} on={tab === 'moves' && sel === i} onClick={() => { if (!mon.moves[i]) return; setSel(i); setTab('moves'); setPickFor(null) }} />)}
       </div>
 
-      <div className="sx-foot">
-        <button className="sx-btn ghost" onClick={onBack}><GT t={backLabel} k={2} /></button>
-        {footer}
-      </div>
+      {footer && <div className="sx-foot">{footer}</div>}
     </div>
   )
 }

@@ -510,13 +510,42 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
           if (kind === 'scale') frames2 = [{ transform: 'scale(1,1)' }, { transform: `scale(${Math.max(0.05, 1 + a)},${Math.max(0.05, 1 + b)})` }]
           else if (kind === 'move') frames2 = [{ transform: 'translate(0,0)' }, { transform: `translate(${a * pxUnit * dir}px,${-b * pxUnit}px)` }]
           else if (kind === 'shake') frames2 = [{ transform: `translate(${-a * pxUnit}px,0)` }, { transform: `translate(${a * pxUnit}px,0)` }]
-          else if (kind === 'rotate') frames2 = [{ transform: 'rotate(0deg)' }, { transform: `rotate(${a}deg)` }]
+          else if (kind === 'rotate') { // (a = the angle: 0x10000000 = a full turn in the game's numbers; b = the axis: 1 / 2 / 3 = x / y / z)
+            const fn = b === 1 ? 'perspective(600px) rotateX' : b === 2 ? 'perspective(600px) rotateY' : 'rotate'
+            frames2 = [{ transform: `${fn}(0deg)` }, { transform: `${fn}(${a}deg)` }]
+          }
           else if (kind === 'alpha') frames2 = [{ opacity: 1 }, { opacity: a }]
           else frames2 = [{ opacity: 1 }, { opacity: 0.15 }]
           const anim = e.animate(frames2, { duration: ms, iterations: Math.max(2, times * 2), direction: 'alternate', easing: 'linear', composite: kind === 'alpha' || kind === 'blink' ? 'replace' : 'add' })
           return anim.finished.then(() => { e.style.transformOrigin = '' }, () => { e.style.transformOrigin = '' })
         })
         return Promise.all(jobs).then(() => undefined)
+      },
+      tint: (side, from, to, frames, color) => {
+        const targets: MonSide[] = side === 'all' ? ['me', 'foe'] : [side]
+        const cr = (color & 31) / 31, cg = ((color >> 5) & 31) / 31, cb = ((color >> 10) & 31) / 31
+        return Promise.all(targets.map((sd) => new Promise<void>((res) => {
+          const e = el(sd)
+          if (!e) { res(); return }
+          if (!document.getElementById('pq-tint-defs')) {
+            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+            svg.id = 'pq-tint-defs'; svg.setAttribute('width', '0'); svg.setAttribute('height', '0'); svg.style.position = 'absolute'
+            svg.innerHTML = ['me', 'foe'].map((n) => `<filter id="pq-tint-${n}" color-interpolation-filters="sRGB" x="-10%" y="-10%" width="120%" height="120%"><feColorMatrix id="pq-tint-m-${n}" type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 1 0"/></filter>`).join('')
+            document.body.appendChild(svg)
+          }
+          const m = document.getElementById(`pq-tint-m-${sd}`)!
+          const set = (t: number) => m.setAttribute('values', `${1 - t} 0 0 0 ${t * cr}  0 ${1 - t} 0 0 ${t * cg}  0 0 ${1 - t} 0 ${t * cb}  0 0 0 1 0`)
+          const ms = Math.max(16, (frames * 1000) / 60), t0 = performance.now()
+          set(from)
+          e.style.filter = `url(#pq-tint-${sd})`
+          const step = (now: number) => {
+            const k = Math.min(1, (now - t0) / ms)
+            set(from + (to - from) * k)
+            if (k < 1) requestAnimationFrame(step)
+            else { if (to <= 0.001) e.style.filter = ''; res() }
+          }
+          requestAnimationFrame(step)
+        }))).then(() => undefined)
       },
       dim: (from, to, frames) => {
         const d = dimRef.current
@@ -540,7 +569,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
       },
       call: (effect) => (effect >= FIRST_EFFECT ? spl.effectScript(effect - FIRST_EFFECT) : spl.moveScript(effect)),
     }
-    try { await runEffScript(data, host) } finally { if (dimRef.current) { dimRef.current.getAnimations().forEach((x) => x.cancel()); dimRef.current.style.opacity = '0' } }
+    try { await runEffScript(data, host) } finally { for (const sd of ['me', 'foe'] as const) { const e = el(sd); if (e && e.style.filter.startsWith('url(#pq-tint')) e.style.filter = '' } if (dimRef.current) { dimRef.current.getAnimations().forEach((x) => x.cancel()); dimRef.current.style.opacity = '0' } }
     return true
   }
 

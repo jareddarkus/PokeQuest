@@ -17,6 +17,8 @@ export interface EffHost {
   sound(seq: number, delayFrames: number, volume: number): void
   sprite(side: Side | 'all', kind: 'scale' | 'move' | 'shake' | 'alpha' | 'blink' | 'rotate', a: number, b: number, frames: number, times: number): Promise<void>
   dim(from: number, to: number, frames: number): Promise<void>
+  /** blends a Pokémon's picture toward a colour (5-5-5 bits, red in the lowest bits): `from` / `to` are 0..1 of the way to the colour */
+  tint(side: Side | 'all', from: number, to: number, frames: number, color: number): Promise<void>
   cry(side: Side | 'all'): void
   shakeCamera(amplitude: number, frames: number, count: number): Promise<void>
   /** moves the camera to a preset of the game (`moveType` 0 = jump, 1 = move) */
@@ -36,7 +38,8 @@ export async function runEffScript(d: Uint8Array, host: EffHost, depth = 0): Pro
   const vars = new Map<number, number>()
   let lastSound = 0
   const started = performance.now()
-  const waitAll = async () => { const p = pending.splice(0); await Promise.all(p); const rest = lastSound - performance.now(); if (rest > 0) await new Promise((r) => setTimeout(r, Math.min(rest, 800))) }
+  // waiting for the pictures / sprites to finish; only when the script ENDS also wait for the sounds that were scheduled ahead (a sound block at the start of a script must not hold the pictures back)
+  const waitAll = async (sounds = false) => { const p = pending.splice(0); await Promise.all(p); const rest = lastSound - performance.now(); if (sounds && rest > 0) await new Promise((r) => setTimeout(r, Math.min(rest, 1200))) }
   while (pos + 2 <= d.length && performance.now() - started < 9000) {
     const op = dv.getUint16(pos, true)
     if (op >= ARGS.length) break
@@ -72,9 +75,10 @@ export async function runEffScript(d: Uint8Array, host: EffHost, depth = 0): Pro
       case 0x12: { const s = host.sideOf(a[0]); pending.push(host.sprite(s, 'move', fx(a[2]), fx(a[3]), Math.max(1, a[4]), Math.max(1, a[6]))); break }
       case 0x14: { const s = host.sideOf(a[0]); pending.push(host.sprite(s, 'shake', fx(a[4]), a[1], Math.max(1, a[5]), 1)); break }
       case 0x15: case 0x1e: { const s = host.sideOf(a[0]); pending.push(host.sprite(s, 'scale', fx(a[2]), fx(a[3]), Math.max(1, a[4]), Math.max(1, a[6]))); break }
-      case 0x16: { const s = host.sideOf(a[0]); pending.push(host.sprite(s, 'rotate', (a[2] / 65536) * 360, 0, Math.max(1, a[3]), Math.max(1, a[5]))); break }
+      case 0x16: { const s = host.sideOf(a[0]); pending.push(host.sprite(s, 'rotate', (a[2] / 268435456) * 360, a[1], Math.max(1, a[3]), Math.max(1, a[5]))); break }
       case 0x17: { const s = host.sideOf(a[0]); pending.push(host.sprite(s, 'alpha', a[2] / 31, 0, Math.max(1, a[3]), Math.max(1, a[5]))); break }
       case 0x19: { const s = host.sideOf(a[0]); pending.push(host.sprite(s, 'blink', 0, 0, Math.max(1, a[2]), Math.max(1, a[3]))); break }
+      case 0x1b: { const s = host.sideOf(a[0]); pending.push(host.tint(s, a[1] / 16, a[2] / 16, Math.max(1, Math.abs(a[2] - a[1]) * Math.max(1, a[3])), a[4])); break } // (the Pokémon turns red for Ember, white for a ball ...)
       case 0x2a: pending.push(host.dim(a[1] / 16, a[2] / 16, Math.max(1, Math.abs(a[2] - a[1]) * Math.max(1, a[3])))); break
       case 0x34: { host.sound(a[0], a[3], a[5] / 127); lastSound = Math.max(lastSound, performance.now() + (a[3] * 1000) / 60 + 350); break }
       case 0x38: await waitAll(); break
@@ -91,12 +95,12 @@ export async function runEffScript(d: Uint8Array, host: EffHost, depth = 0): Pro
       case 0x40: vars.set(a[0], a[1]); break
       case 0x43: host.cry(host.sideOf(a[0])); break
       case 0x46: { const sub = host.call(a[0]); if (sub) { await waitAll(); await runEffScript(sub, host, depth + 1) } break }
-      case 0x47: case 0x4d: await waitAll(); return
+      case 0x47: case 0x4d: await waitAll(true); return
       case 0x48: pos = next + a[0]; break
       default: break // (backgrounds, trainers, balls, cell actors, ... are not drawn)
     }
   }
-  await waitAll()
+  await waitAll(true)
 }
 
 export { FIRST_EFFECT }
