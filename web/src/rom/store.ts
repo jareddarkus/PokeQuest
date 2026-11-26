@@ -303,6 +303,13 @@ let musicIndex: MusicIndex | null | undefined
 export async function loadMusicIndex(): Promise<MusicIndex | null> {
   if (musicIndex !== undefined) return musicIndex
   try { musicIndex = (await get<MusicIndex>('music:index')) ?? null } catch { musicIndex = null }
+  const first = musicIndex?.['cry:1']
+  if (musicIndex && first) { // older imports named the cries by the bank NAME, whose numbers are the game's old development numbers for the new Pokémon: the right bank is the one at the position of the national number (the banks lie one after the other, bank 1 = Bulbasaur)
+    const byNo = new Map<number, MusicIndex[string]>()
+    for (const [k, v] of Object.entries(musicIndex)) if (k.startsWith('cry:')) byNo.set(v.bank - first.bank + 1, v)
+    for (const k of Object.keys(musicIndex)) if (k.startsWith('cry:')) delete musicIndex[k]
+    for (const [n, v] of byNo) if (n >= 1 && n <= 649) musicIndex[`cry:${n}`] = v
+  }
   return musicIndex
 }
 /** A stored file of the game by key (the particle files and scripts). */

@@ -114,11 +114,10 @@ export async function extractMusic(nds: NdsFile, put: (id: number, data: Uint8Ar
   if (pv !== undefined) {
     const pvSeqFile = u16(tables, rec(0, pv))
     for (let i = 0; i < bcount; i++) {
+      // the banks are in the order of the national numbers (bank 1 = Bulbasaur ... bank 649 = Genesect). Their NAMES of the new Pokémon (BANK_PMWB_5xx) are the game's old development numbers, so they are not used.
       const no = u32(tables, symb + bankNames + 4 + i * 4)
-      if (!no) continue
-      const nm = cstr(tables, symb + no)
-      const m = /^BANK_PV(\d{3})$/.exec(nm) ?? /^BANK_PMWB_(\d{3})$/.exec(nm)
-      if (m) await addSeq(`cry:${Number(m[1])}`, pv, { seqFile: pvSeqFile, bankId: i })
+      if (!no || i < 1 || i > 649) continue
+      if (/^BANK_(PV|PMWB)_?\d{3}/.test(cstr(tables, symb + no))) await addSeq(`cry:${i}`, pv, { seqFile: pvSeqFile, bankId: i })
     }
   }
   return index
