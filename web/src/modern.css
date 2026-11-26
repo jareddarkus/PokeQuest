@@ -310,3 +310,7 @@ html[data-theme="modern"] .pq-progress-fill { border-radius: max(2px, calc(var(-
   html[data-theme="modern"] .hud-top-right .menu-slab { width: 138px; padding: 4px 14px 4px 16px; gap: 8px; }
   html[data-theme="modern"] .hud-top-right .menu-slab > span:not(.menu-badge) { display: inline !important; color: inherit; font-size: .82rem; white-space: nowrap; }
 }
+
+/* the Battle Royale button on the main menu looks like all the other big buttons (white, dark letters) */
+html[data-theme="modern"] .title-side button.big.primary { --bg: #fff; --bgh: #0d1018; --sh: inset 0 -3px 0 #dfe4ee; color: #1c2333; font-weight: 500; }
+html[data-theme="modern"] .title-side button.big.primary:hover:not(:disabled), html[data-theme="modern"] .title-side button.big.primary:focus-visible { color: #fff; }
