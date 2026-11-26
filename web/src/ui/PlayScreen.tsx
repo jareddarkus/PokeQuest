@@ -8,6 +8,7 @@ import type { Settings } from '../game/settings'
 import { ENCOUNTER_RATE, groupMon, groupTeam, gymTeam, trainerTeam, wildEncounter } from '../game/encounters'
 import { addItems, emptyTrainer, makeStarter, type Trainer } from '../game/state'
 import { ITEMS, STARTING_BAG, rollPickup } from '../data/items'
+import ItemIcon from './ItemIcon'
 import { maxHp, newUid, type Mon } from '../data/dex'
 import {
   C, COLLAPSE_SECONDS, squareTile, RADIUS, RING_INNER, SIZE, T, collapseRadius, generateWorld, isWalkable, ringAt, type Dir, type World,
@@ -73,6 +74,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
   const [teamSel, setTeamSel] = useState<number | null>(null) // a Pokémon clicked in the side bar opens its summary straight away
   const [caughtMon, setCaughtMon] = useState<Mon | null>(null) // right after a catch: its summary
   const [toast, setToast] = useState<string | null>(null)
+  const [toastItems, setToastItems] = useState<Record<string, number> | null>(null) // the things you took from a ball (shown with their icons)
   // a trainer (or gym leader) talks before the battle: { who, line, then }
   const [speech, setSpeech] = useState<null | { who: string; line: string; then: () => void }>(null)
   const [speechSkip, setSpeechSkip] = useState(0)
@@ -113,7 +115,8 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
   const beatenGyms = useRef(new Set<string>())
   const busy = useRef(false)
 
-  const say = (t: string) => setToast(t)
+  const say = (t: string) => { setToastItems(null); setToast(t) }
+  if (import.meta.env.DEV) (globalThis as { __pqFound?: unknown }).__pqFound = (items: Record<string, number>) => { setToastItems(items); setToast('You found:' + Date.now()) } // developer hook
   const mobile = useIsMobile()
   const [chatOpen, setChatOpen] = useState(false)
   const chatUser = username ?? (import.meta.env.DEV && new URLSearchParams(location.search).has('devuser') ? 'DevUser' : null) // (developer test without an account: ?devuser)
@@ -377,7 +380,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
         const items = rollPickup(r, Math.random)
         handleRef.current?.removePickup(id)
         setTrainer({ ...trainerRef.current, bag: addItems(trainerRef.current.bag, items) })
-        say('You found: ' + Object.entries(items).map(([k, n]) => `${ITEMS[k]?.name ?? k} x${n}`).join(', '))
+        setToastItems(items); setToast('You found:' + Date.now()) // (the text is drawn from the items; the stamp makes every pick-up a new message)
       },
       onPlayerClick: (name, x, y) => { if (!battleRef.current && !talking.current) setPmenu({ name, x, y }) },
       onPushed: (_x, _y, r) => say(`The ground crumbled — you were pushed to ring ${r}!`),
@@ -492,7 +495,18 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
           <span><TypedText text={speech.line} ms={CHAR_MS[settings.textSpeed ?? 'normal']} skip={speechSkip} /></span>
         </div>
       )}
-      {toast && <div key={toast} className="toast panel" style={toastFrame ?? undefined}>{toast}</div>}
+      {toast && (
+        <div key={toast} className="toast panel" style={toastFrame ?? undefined}>
+          {toastItems ? (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
+              <span>You found:</span>
+              {Object.entries(toastItems).map(([k, n]) => (
+                <span key={k} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><ItemIcon name={k} size={24} /><span>{ITEMS[k]?.name ?? k} x{n}</span></span>
+              ))}
+            </span>
+          ) : toast}
+        </div>
+      )}
       {!battle && <MiniMap world={world} getMe={() => handleRef.current?.getPos() ?? null} others={playersVisible} radius={radius} collapseOn={collapseOn} mobile={mobile} />}
       {!battle && <ChatDock chat={chat} canChat={!!chatUser} open={chatOpen} setOpen={setChatOpen} />}
       {panel === 'settings' && <SettingsPanel settings={settings} onChange={onSettings} onClose={() => setPanel(null)} onCustomize={onCustomize} />}

@@ -105,7 +105,7 @@ const DICT: Record<string, string> = {
   // menus
   'Menu': 'Menú', 'Team': 'Equipo', 'Bag': 'Mochila', 'PC': 'PC', 'Chat': 'Chat', 'Exit': 'Salir', 'Close': 'Cerrar', 'Back': 'Atrás', 'Use': 'Usar', 'Send': 'Enviar',
   'Items': 'Objetos', 'Medicine': 'Medicinas', 'Poké Balls': 'Poké Balls', 'Your team': 'Tu equipo', 'Pick a Pokémon to see its summary': 'Elige un Pokémon para ver su resumen',
-  'Info': 'Datos', 'Stats': 'Estadísticas', 'Moves': 'Movimientos', 'Nature': 'Naturaleza', 'Ability': 'Habilidad', 'Held item': 'Objeto', 'Type': 'Tipo', 'Level': 'Nivel',
+  'You found:': 'Has encontrado:', 'Info': 'Datos', 'Stats': 'Estadísticas', 'Moves': 'Movimientos', 'Nature': 'Naturaleza', 'Ability': 'Habilidad', 'Held item': 'Objeto', 'Type': 'Tipo', 'Level': 'Nivel',
   'Exp. points': 'Puntos de Exp.', 'To next level': 'Para el siguiente nivel', 'none': 'ninguno', 'Move up': 'Subir', 'Move down': 'Bajar',
   'Choose a Pokémon.': 'Elige un Pokémon.', 'Nothing in this pocket.': 'No hay nada en este bolsillo.',
   'Your bag is empty. Look for Poké Balls on the ground!': 'Tu mochila está vacía. ¡Busca Poké Balls por el suelo!',

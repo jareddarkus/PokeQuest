@@ -275,6 +275,7 @@ export default function GameView3D(props: Props) {
       ballMat.needsUpdate = true
     }
     const pickupSprites = new Map<string, THREE.Sprite>()
+    const pickupShadows = new Map<string, THREE.Mesh>()
     for (const pk of world.pickups) {
       const s = new THREE.Sprite(ballMat)
       s.center.set(0.5, 0.1)
@@ -283,6 +284,9 @@ export default function GameView3D(props: Props) {
       s.renderOrder = 3
       s.position.set(pk.x + 0.5, heightAt(pk.x + 0.5, pk.y + 0.5) + 0.05, pk.y + 0.5)
       scene.add(s)
+      const psh = makeShadow(scene, 0.95) // the ball on the ground has a little shadow under it (a little towards the camera so it shows under the ball)
+      psh.position.set(pk.x + 0.5, heightAt(pk.x + 0.5, pk.y + 0.5) + 0.04, pk.y + 0.62)
+      pickupShadows.set(pk.id, psh)
       s.userData = { tx: pk.x, ty: pk.y, bs, sand: world.tiles[pk.y * SIZE + pk.x] === T.Sand }
       pickupSprites.set(pk.id, s)
     }
@@ -556,7 +560,7 @@ export default function GameView3D(props: Props) {
       teleport: (x, y) => { me.x = x; me.y = y; me.fromX = x; me.fromY = y; me.t = 1; const f1 = followerSpot(x, y, me.dir); fol.x = f1.x; fol.y = f1.y; fol.fromX = f1.x; fol.fromY = f1.y; fol.t = 1 },
       getPos: () => ({ x: me.x, y: me.y, dir: me.dir }),
       showEmote,
-      removePickup: (id) => { removed.add(id); const s = pickupSprites.get(id); if (s) s.visible = false },
+      removePickup: (id) => { removed.add(id); const s = pickupSprites.get(id); if (s) s.visible = false; const h = pickupShadows.get(id); if (h) h.visible = false },
       defeatNpc: (id) => { const n = npcs.find((q) => q.spec.id === id); if (n) n.defeated = true },
       setPaused: (p) => { paused = p },
       setNpcFreeze: (id) => { for (const n of npcs) n.frozen = id !== null && n.spec.id === id },
