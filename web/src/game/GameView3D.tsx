@@ -305,7 +305,7 @@ export default function GameView3D(props: Props) {
       tuftTex = frames.map((c) => { const t = new THREE.CanvasTexture(c); t.magFilter = THREE.NearestFilter; t.minFilter = THREE.NearestFilter; t.colorSpace = THREE.SRGBColorSpace; return t })
     })
     const tuftGeo = new THREE.BufferGeometry() // the corners of the game's model (16 units = 1 tile): a little slanted, 0.3 - 0.6 tiles above the ground
-    tuftGeo.setAttribute('position', new THREE.Float32BufferAttribute([-0.5625, 0.3125, 0.375, 0.4375, 0.3125, 0.375, 0.4375, 0.625, -0.5625, -0.5625, 0.625, -0.5625], 3))
+    tuftGeo.setAttribute('position', new THREE.Float32BufferAttribute([-1.1, 0.3, 0.8, 0.9, 0.3, 0.8, 0.9, 0.55, -1.1, -1.1, 0.55, -1.1], 3)) // (the picture is 32 x 32: one picture pixel = one pixel of the map, so it is two tiles wide)
     tuftGeo.setAttribute('uv', new THREE.Float32BufferAttribute([0, 1, 1, 1, 1, 0, 0, 0], 2))
     tuftGeo.setIndex([0, 1, 2, 0, 2, 3])
     const makeCover = () => {
@@ -324,7 +324,16 @@ export default function GameView3D(props: Props) {
       m.position.set(x, ground, z)
     }
     const myCover = makeCover(), folCover = makeCover()
-    let prevT = 1, puffAt = 0
+    // the burst of the grass effect plays every time a character comes onto a tile of tall grass (the tile of its drawn position changes)
+    const grassState = new Map<string, { tile: string; at: number }>()
+    const grassFrame = (key: string, x: number, y: number, now: number): number => {
+      const tx = Math.round(x), ty = Math.round(y)
+      const tile = `${tx},${ty}`
+      let g = grassState.get(key)
+      if (!g) { g = { tile, at: 0 }; grassState.set(key, g) }
+      if (g.tile !== tile) { g.tile = tile; g.at = tileAt(world, tx, ty) === T.Tall ? now : 0 }
+      return g.at ? Math.min(3, Math.floor((now - g.at) / 100)) : 3
+    }
     const npcCovers = new Map<NpcRuntime, THREE.Mesh>()
     const otherCovers = new Map<string, THREE.Mesh>()
     const tallAt = (tx: number, ty: number) => tileAt(world, Math.round(tx), Math.round(ty)) === T.Tall
@@ -756,9 +765,7 @@ export default function GameView3D(props: Props) {
       fit(mySprite)
       place(mySprite, camera, px + 0.5, ph + lift(mySprite), py + 0.5, me.t < 1 ? (tallAt(me.t < 0.5 ? me.fromX : me.x, me.t < 0.5 ? me.fromY : me.y) ? TALL_PUSH : PUSH) : tallAt(me.x, me.y) ? TALL_PUSH : PUSH)
       order(mySprite, py + 0.5)
-      if (me.t >= 1 && prevT < 1 && tallAt(me.x, me.y)) puffAt = now // stepped into tall grass: the leaves fly up
-      prevT = me.t
-      cover(myCover, me.t < 1 ? tallAt(me.t < 0.5 ? me.fromX : me.x, me.t < 0.5 ? me.fromY : me.y) : tallAt(me.x, me.y), px + 0.5, ph, py + 0.5, 1.0, puffAt ? Math.min(3, Math.floor((now - puffAt) / 90)) : 3) // in tall grass the leaves cover the lower body, like in the game
+      cover(myCover, tallAt(px, py), px + 0.5, ph, py + 0.5, 1.0, grassFrame('me', px, py, now)) // in tall grass: the game's leaf effect at the feet (and the leaves of the tiles cover the legs)
       myShadow.position.set(px + 0.5, ph + 0.03, py + 0.5)
       // the crates: on sand they sit a little in the sand; everywhere else they are pushed towards the camera (like the characters) so the ground does not cut them
       for (const sp of pickupSprites.values()) {
@@ -785,7 +792,7 @@ export default function GameView3D(props: Props) {
         const hop = fol.t < 1 ? Math.abs(Math.sin(fol.t * Math.PI)) * 0.12 : 0
         fol.shadow.position.set(fx + 0.5, fh + 0.03, fy + 0.5)
         order(fol.sprite, fy + 0.5)
-        cover(folCover, fol.sprite.visible && (fol.t < 0.5 ? tallAt(fol.fromX, fol.fromY) : tallAt(fol.x, fol.y)), fx + 0.5, fh, fy + 0.5, 1.2)
+        cover(folCover, fol.sprite.visible && (fol.t < 0.5 ? tallAt(fol.fromX, fol.fromY) : tallAt(fol.x, fol.y)), fx + 0.5, fh, fy + 0.5, 1.2, grassFrame('fol', fx, fy, now))
         if (fol.mode === 'ow' && fol.strip) {
           const dxm = fol.x - fol.fromX, dym = fol.y - fol.fromY
           if (fol.t < 1 && (Math.abs(dxm) > 0.01 || Math.abs(dym) > 0.01)) fol.dir = Math.abs(dxm) > Math.abs(dym) ? (dxm > 0 ? 3 : 2) : (dym > 0 ? 1 : 0) // 0 up, 1 down, 2 left, 3 right
@@ -826,7 +833,7 @@ export default function GameView3D(props: Props) {
         place(n.sprite, camera, n.fx + 0.5, nh + lift(n.sprite), n.fy + 0.5, !n.spec.swim && (n.moving > 0 && n.moving < 0.5 ? tallAt(n.fromX, n.fromY) : tallAt(n.x, n.y)) ? TALL_PUSH : PUSH)
         order(n.sprite, n.fy + 0.5)
         { let nc = npcCovers.get(n); if (!nc) { nc = makeCover(); npcCovers.set(n, nc) }
-          cover(nc, !n.spec.swim && (n.moving > 0 && n.moving < 0.5 ? tallAt(n.fromX, n.fromY) : tallAt(n.x, n.y)), n.fx + 0.5, nh, n.fy + 0.5) }
+          cover(nc, !n.spec.swim && (n.moving > 0 && n.moving < 0.5 ? tallAt(n.fromX, n.fromY) : tallAt(n.x, n.y)), n.fx + 0.5, nh, n.fy + 0.5, 1.0, grassFrame(`npc:${n.spec.id}`, n.fx, n.fy, now)) }
         let sh = npcShadows.get(n)
         if (!sh) { sh = makeShadow(scene); npcShadows.set(n, sh) }
         sh.visible = !n.spec.swim
@@ -874,7 +881,7 @@ export default function GameView3D(props: Props) {
         place(e.body, camera, o.x + 0.5, h + lift(e.body), o.y + 0.5, tallAt(o.x, o.y) ? TALL_PUSH : PUSH)
         order(e.body, o.y + 0.5)
         { let oc = otherCovers.get(o.id); if (!oc) { oc = makeCover(); otherCovers.set(o.id, oc) }
-          cover(oc, tallAt(o.x, o.y), o.x + 0.5, h, o.y + 0.5) }
+          cover(oc, tallAt(o.x, o.y), o.x + 0.5, h, o.y + 0.5, 1.0, grassFrame(`pl:${o.id}`, o.x, o.y, now)) }
         e.shadow.position.set(o.x + 0.5, h + 0.03, o.y + 0.5)
         e.label.position.set(o.x + 0.5, h + 1.5, o.y + 0.5)
       }
