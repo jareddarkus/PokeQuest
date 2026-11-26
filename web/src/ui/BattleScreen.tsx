@@ -53,6 +53,10 @@ interface Props {
   foeSeed?: string
   /** set for a duel against another player */
   pvp?: PvpLink
+  /** set when you are only watching another player's battle: the events come from them and nothing can be chosen */
+  spectate?: { who: string; listen: (cb: (evs: BattleEvent[]) => void) => () => void }
+  /** your own battle is being watched: every event of it is handed over here */
+  stream?: (evs: BattleEvent[]) => void
   /** the player's character is the girl */
   playerGirl?: boolean
   /** how fast the message text is typed */
@@ -299,7 +303,7 @@ function ModernHpBox({ side, mine, exp, gender, k }: { side: Side; mine: boolean
 export function HpBox(props: Parameters<typeof ClassicHpBox>[0]) {
   return useTheme() === 'modern' ? <ModernHpBox side={props.side} mine={props.mine} exp={props.exp} gender={props.gender} k={props.k} /> : <ClassicHpBox {...props} />
 }
-export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed, pvp, playerGirl, textSpeed = 'normal', onEnd }: Props) {
+export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed, pvp, spectate, stream, playerGirl, textSpeed = 'normal', onEnd }: Props) {
   // the battle always looks classic (the game's own HP boxes, command and move screens), whatever the theme is; the theme comes back when the battle ends
   useEffect(() => { const prev = getTheme(); setTheme('classic'); return () => setTheme(prev) }, [])
   const playerTeam = useMemo(() => trainer.team.filter((m) => m.hp > 0).map((m) => ({ ...m, evs: { ...m.evs }, ivs: { ...m.ivs }, moves: [...m.moves] })), [])
@@ -726,6 +730,8 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
     const guestSession = pvp?.role === 'guest' ? new PvpGuestSession(playerTeam, pvp.send) : null
     let guestReady: () => void = () => {}
     const guestIsReady = new Promise<void>((res) => { guestReady = res })
+    const specSession = spectate ? new PvpGuestSession([], () => {}) : null
+    let unspec: (() => void) | null = null
     let hostSession: BattleSession | null = null
     const unlisten = pvp ? pvp.listen((type, data) => {
       if (guestSession) guestSession.receive(type, data)
@@ -743,6 +749,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
         setRows(null)
       }
       if (pvp?.role === 'guest') s = guestSession as unknown as BattleSession
+      else if (specSession) s = specSession as unknown as BattleSession
       else s = new BattleSession(playerTeam, foeCopies, pvp ? { send: pvp.send, hostName: pvp.hostName, guestName: pvp.guestName } : undefined)
       s.isTrainerBattle = kind !== 'wild'
       s.foeName = foeName ?? ''
@@ -750,6 +757,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
       hostSession = pvp?.role === 'host' ? s : null
       let opening = kind !== 'wild' // in a trainer battle the foe trainer sends out first, like in the game
       s.onEvents((evs0) => {
+        if (pvp?.role !== 'guest' && !spectate) stream?.(evs0) // somebody may be watching this battle
         // the sentence ("Go! X!", "Y sent out X!") is read first, then the Pokémon comes out
         let evs = [...evs0]
         for (let i = 0; i + 1 < evs.length; i++) {
@@ -768,13 +776,20 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
       })
       if (pvp?.role === 'host') void Promise.race([guestIsReady, sleep(20000)]).then(() => { if (!cancelled) s?.start() })
       else s.start()
+      if (spectate && specSession) unspec = spectate.listen((evs) => specSession.receive('events', evs))
     })
-    return () => { cancelled = true; endedRef.current = true; s?.destroy(); unlisten?.() }
+    return () => { cancelled = true; endedRef.current = true; s?.destroy(); unlisten?.(); unspec?.() }
   }, [])
 
   // ---------------------------------------------------------------- after the battle
   const finish = async (winner: 'p1' | 'p2' | null) => {
     const s = sessionRef.current!
+    if (spectate) {
+      setMode('done')
+      await say(winner === 'p1' ? `${spectate.who} won the battle!` : winner === 'p2' ? `${spectate.who} lost the battle!` : 'The battle is over.', 1200)
+      onEnd('ran', trainer)
+      return
+    }
     s.syncBack()
     setMode('done')
     let t: Trainer = { ...trainer, bag: bagRef.current }
@@ -1050,6 +1065,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
       )}
       </div>
       {!transDone && <BattleTransition onBlack={() => setShowScene(true)} onFade={() => { /* (no opening fly-in: the battle starts with the usual camera, everything in view) */ setIntroOn(true); window.setTimeout(() => introResolve.current(), 1450) }} onDone={() => setTransDone(true)} />}
+      {spectate && <button className="spec-leave" onClick={() => onEnd('ran', trainer)}>Stop watching · {spectate.who}</button>}
       {rows && <TeamBalls key={rows} side={rows} count={rows === 'foe' ? foeTeam.length : playerTeam.length} alive={rows === 'foe' ? foeTeam.map((m) => m.hp > 0) : playerTeam.map((m) => m.hp > 0)} K={Kd} />}
       <div className="foe-zone">
         {foe && hpOn.foe && <HpBox side={foe} mine={false} gender={foeCopies.find((m) => m.uid === foe.uid)?.gender} />}

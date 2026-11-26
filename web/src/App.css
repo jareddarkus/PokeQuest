@@ -602,3 +602,9 @@ button.big small { opacity: .7; font-size: .75rem; }
   .dpad-l .chat-dock { bottom: 200px; }
   .chat-dock.open { width: min(92vw, 360px); }
 }
+
+/* the banner of an eliminated player (the map stays visible so that they can watch the others fight) */
+.hud-out { position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%); z-index: 60; display: flex; align-items: center; gap: 12px; padding: 10px 16px; flex-wrap: wrap; justify-content: center; max-width: calc(100vw - 24px); }
+
+/* "Stop watching" while you watch another player's battle */
+.spec-leave { position: absolute; top: 12px; right: 12px; z-index: 40; font-size: .8rem; padding: 6px 12px; }

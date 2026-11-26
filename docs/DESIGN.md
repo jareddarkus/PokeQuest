@@ -425,3 +425,8 @@ Seen in the recording but NOT done: the trainers' battle sprites (the foe traine
 - Duels between players (peak): `restoreForDuel` heals both teams (HP and PP) first, with a message; used items stay used.
 - PC: drag Pokémon between team and box (HTML drag and drop; a tap still works); the last Pokémon that can still fight cannot leave the team.
 - Not done yet: the peak tournament (forced bracket after the last 5 minutes) and spectating battles.
+
+## Round 21 — peak tournament and spectating
+- `web/src/game/tournament.ts`: at 4 × ring time (end of the 5 minutes at the peak) a random bracket is announced; all pairs fight at once; winners get a new random bracket; odd player waits (bye, not twice in a row if avoidable); last one standing is announced (`tdone`). Everybody keeps the same state from the messages (`tbracket`, `eliminated`/`telim`, `tdone`); the lowest-named present player publishes the brackets (anyone can take over). A pair member that left loses after 25 s. Touch-duels stop once the tournament begins.
+- Spectating: a fighter tells everybody `bat` (every 3 s while fighting) and `bat-end`; clicking that player offers "Ver combate" → `spec-join` → the fighter answers `bhist` (snapshot: what each side has out) and then streams every battle event as `bev`; the watcher plays them in `BattleScreen` (`spectate` prop, `PvpGuestSession` as session). Works for wild, trainer and player battles (a duel is followed from the host's point of view). Eliminated players get a banner instead of a blocking window so they can watch.
+- Untested with real players (needs two accounts): the realtime messages. Tested: the bracket logic (script), the spectator screen with a made-up feed (`__pqSpec`, `__pqSpecEv` dev hooks).

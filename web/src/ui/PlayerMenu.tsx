@@ -13,8 +13,8 @@ function EmoteImg({ idx }: { idx: number }) {
   return <img src={img.src} alt={`reacción ${idx}`} width={40} height={40} style={{ imageRendering: 'pixelated' }} draggable={false} />
 }
 
-export function PlayerPopup({ name, x, y, isFriend, onFriend, onWhisper, onTrade, onClose }: {
-  name: string; x: number; y: number; isFriend: boolean
+export function PlayerPopup({ name, x, y, isFriend, onFriend, onWhisper, onTrade, onWatch, onClose }: {
+  name: string; x: number; y: number; isFriend: boolean; onWatch?: () => void
   onFriend: (add: boolean) => void; onWhisper: () => void; onTrade: () => void; onClose: () => void
 }) {
   const [confirm, setConfirm] = useState(false)
@@ -27,6 +27,7 @@ export function PlayerPopup({ name, x, y, isFriend, onFriend, onWhisper, onTrade
           <>
             <button onClick={() => (isFriend ? setConfirm(true) : onFriend(true))}>{isFriend ? 'Quitar amigo' : 'Añadir amigo'}</button>
             <button onClick={onWhisper}>Susurrar</button>
+            {onWatch && <button className="primary" onClick={onWatch}>Ver combate</button>}
             <button onClick={onTrade}>Intercambiar</button>
             <button className="pm-close" onClick={onClose}>Cerrar</button>
           </>

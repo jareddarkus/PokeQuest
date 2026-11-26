@@ -18,7 +18,7 @@ import { addExtraGrass, buildMeadowVisuals, prepareMeadow } from '../game/meadow
 import { buildCustomVisuals, type CustomWorld } from '../world/customWorld'
 import { fetchPublishedWorld } from '../world/publish'
 import { applyCustomEvents } from '../world/applyEvents'
-import { applyRules } from '../game/rules'
+import { applyRules, RULES } from '../game/rules'
 import { busyLine, leaderLine, lossLine, preBattleLine } from '../data/npcLines'
 import { BagPanel, CaughtPanel, PcPanel, TeamPanel } from './MenuPanels'
 import SettingsPanel from './SettingsPanel'
@@ -28,6 +28,9 @@ import PartyBar from './PartyBar'
 import { useFrameStyle } from './DsFrame'
 import ChatDock from './ChatPanel'
 import MiniMap, { useIsMobile } from './MiniMap'
+import { fakeMon, snapshotOf, summarize, type BattleInfo } from '../battle/spectate'
+import type { BattleEvent } from '../battle/engine'
+import { applyBracket, applyLoss, type BracketMsg, isPaired, makeBracket, newTournament, opponentOf, roundDone, winnersOf } from '../game/tournament'
 import { PlayerPopup, ReactionPopup, TradePanel, type TradeState } from './PlayerMenu'
 import { supabase } from '../supabase'
 import { useMatchPlayers } from '../net/useMatchPlayers'
@@ -50,7 +53,7 @@ interface Props {
   custom?: CustomWorld | null
 }
 
-interface ActiveBattle { id?: number; kind: BattleKind; foe: Mon[]; name?: string; onWin?: () => void; npcId?: string; pvp?: PvpLink }
+interface ActiveBattle { id?: number; kind: BattleKind; foe: Mon[]; name?: string; onWin?: () => void; npcId?: string; pvp?: PvpLink; foeSeed?: string; spectate?: { who: string; girl: boolean; mine: Mon[]; listen: (cb: (evs: BattleEvent[]) => void) => () => void } }
 let battleCounter = 0
 
 function PlayInner({ royale, username, look, settings, onSettings, onExit, onCustomize, world, built }: Props & { world: World; built: BuiltWorld }) {
@@ -145,6 +148,18 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
   const eliminatedRef = useRef(false)
   const outPlayers = useRef(new Set<string>()) // players that are out of the match
   const duelPending = useRef<string | null>(null)
+  // the tournament after the last 5 minutes at the peak (state shared by everybody through messages)
+  const tour = useRef(newTournament())
+  const [tourRound, setTourRound] = useState(0)
+  const [champion, setChampion] = useState<string | null>(null)
+  // watching battles: the fighter sends its events to the ones that asked to watch; the watcher plays them
+  const battleLog = useRef<BattleEvent[]>([]) // every event of my own battle so far
+  const spectators = useRef(new Set<string>())
+  const myBat = useRef<BattleInfo | null>(null)
+  const batInfo = useRef(new Map<string, { info: BattleInfo; until: number }>()) // players that are fighting right now (what they told us every 3 s)
+  const watching = useRef<string | null>(null) // the fighter I am watching (or about to)
+  const specBuf = useRef<BattleEvent[]>([])
+  const specListeners = useRef(new Set<(evs: BattleEvent[]) => void>())
   const pvpListeners = useRef(new Set<(type: string, data: unknown) => void>())
   const startDuelRef = useRef<(role: 'host' | 'guest', opp: string, team: Mon[]) => void>(() => {})
   const players = useMatchPlayers(royale?.id ?? null, username, look, () => handleRef.current?.getPos() ?? null, royale ? {
@@ -154,7 +169,16 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
     onAllPicked: () => { const nt = Date.now() + 1500; if (nt < t0Ref.current) { startRef.current = nt; t0Ref.current = nt; setT0(nt) } }, // everybody is ready: start right away
     onBusy: (npc, by, on) => { if (on) busyNpcs.current.set(npc, { by, until: Date.now() + 9000 }); else busyNpcs.current.delete(npc) },
     onDuel: (m) => {
-      if (m.type === 'eliminated') { outPlayers.current.add(m.from); return }
+      if (m.type === 'eliminated') { outPlayers.current.add(m.from); applyLoss(tour.current, m.from); return }
+      if (m.type === 'telim') { const l = (m.data as { loser?: string } | undefined)?.loser; if (typeof l === 'string') { outPlayers.current.add(l); applyLoss(tour.current, l) } return }
+      if (m.type === 'bat') { const info = m.data as BattleInfo; if (info && typeof info.host === 'string') batInfo.current.set(m.from, { info, until: Date.now() + 9000 }); return }
+      if (m.type === 'bat-end') { batInfo.current.delete(m.from); if (watching.current === m.from && battleRef.current?.spectate) stopSpectate(); return }
+      if (m.type === 'spec-join') { if (battleRef.current && !battleRef.current.spectate && myBat.current) { spectators.current.add(m.from); busySender.current?.duel({ to: m.from, type: 'bhist', data: { events: snapshotOf(battleLog.current), info: myBat.current } }) } return }
+      if (m.type === 'spec-leave') { spectators.current.delete(m.from); return }
+      if (m.type === 'bhist') { if (watching.current === m.from && !battleRef.current) { const d = m.data as { events: BattleEvent[]; info: BattleInfo }; beginSpectate(m.from, d.info, d.events) } return }
+      if (m.type === 'bev') { if (watching.current === m.from && Array.isArray(m.data)) { const evs = m.data as BattleEvent[]; specBuf.current.push(...evs); for (const cb of specListeners.current) cb(evs) } return }
+      if (m.type === 'tbracket') { gotBracket(m.data as BracketMsg); return }
+      if (m.type === 'tdone') { const c = (m.data as { champion?: string } | undefined)?.champion; if (typeof c === 'string') setChampion(c); return }
       if (m.type === 'react') { const idx = (m.data as { idx?: number } | undefined)?.idx; if (typeof idx === 'number') handleRef.current?.showEmote(m.from, idx); return }
       if (m.type === 'trade-req') { if (!battleRef.current && !tradeRef.current && !tradeAskRef.current) setTradeAsk(m.from); else busySender.current?.duel({ to: m.from, type: 'trade-no' }); return }
       if (m.type === 'trade-ok') { if (tradeRef.current?.partner === m.from || !tradeRef.current) setTrade({ partner: m.from, mine: null, theirs: null, myAccept: false, theirAccept: false }); return }
@@ -165,7 +189,8 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
       if (m.type === 'pvp') { const d = m.data as { t: string; d: unknown }; for (const cb of pvpListeners.current) cb(d.t, d.d); return }
       if (m.type === 'challenge') { // a player touched me at the peak: the duel starts at once
         const ring = (() => { const q = handleRef.current?.getPos(); return q ? ringAt(q.x, q.y) : 0 })()
-        if (battleRef.current || busy.current || eliminatedRef.current || ring !== 4 || !trainerRef.current.team.length || duelPending.current) { busySender.current?.duel({ to: m.from, type: 'decline' }); return }
+        const tourOk = tour.current.round > 0 ? opponentOf(tour.current, username ?? '') === m.from : ring === 4
+        if (battleRef.current || busy.current || eliminatedRef.current || !tourOk || !trainerRef.current.team.length || duelPending.current) { busySender.current?.duel({ to: m.from, type: 'decline' }); return }
         duelPending.current = m.from
         busySender.current?.duel({ to: m.from, type: 'accept', data: restoreForDuel() })
         startDuelRef.current('guest', m.from, m.data as Mon[])
@@ -270,6 +295,8 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
       return
     }
     busy.current = true
+    battleLog.current = []
+    spectators.current.clear()
     handleRef.current?.setNpcFreeze(b.npcId ?? null)
     setBattle({ ...b, id: ++battleCounter })
   }
@@ -287,6 +314,13 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
   startDuelRef.current = startDuel
 
   const endBattle = (outcome: BattleOutcome, t: Trainer) => {
+    const sp = battleRef.current?.spectate
+    if (sp) { // I was only watching: nothing changes for me
+      busySender.current?.duel({ to: sp.who, type: 'spec-leave' })
+      watching.current = null; specBuf.current = []; specListeners.current.clear()
+      setBattle(null); busy.current = false
+      return
+    }
     const before = trainerRef.current
     setTrainer(t)
     const b = battleRef.current
@@ -305,8 +339,8 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
     }
     if (b?.pvp) { // a duel against another player: the loser is out of the match
       duelPending.current = null
-      if (outcome === 'lose') { eliminatedRef.current = true; setEliminated(true); busySender.current?.duel({ type: 'eliminated' }) }
-      else if (outcome === 'win') { outPlayers.current.add(b.name ?? ''); say(`You beat ${b.name}! They are out of the match.`) }
+      if (outcome === 'lose') { eliminatedRef.current = true; setEliminated(true); applyLoss(tour.current, username ?? ''); busySender.current?.duel({ type: 'eliminated' }) }
+      else if (outcome === 'win') { outPlayers.current.add(b.name ?? ''); applyLoss(tour.current, b.name ?? ''); say(`You beat ${b.name}! They are out of the match.`) }
       return
     }
     if (outcome === 'lose') blackOut()
@@ -316,7 +350,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
   useEffect(() => {
     if (!royale || !username) return
     const id = window.setInterval(() => {
-      if (battleRef.current || busy.current || eliminatedRef.current || duelPending.current || Date.now() < t0Ref.current) return
+      if (battleRef.current || busy.current || eliminatedRef.current || duelPending.current || Date.now() < t0Ref.current || tour.current.round > 0) return
       const me = handleRef.current?.getPos()
       if (!me || ringAt(me.x, me.y) !== 4) return
       const team = trainerRef.current.team.map(healedCopy)
@@ -333,6 +367,105 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
         }
       }
     }, 400)
+    return () => window.clearInterval(id)
+  }, [royale, username])
+
+  // ---- watching another player's battle
+  const streamEvents = (evs: BattleEvent[]) => {
+    battleLog.current.push(...evs)
+    if (spectators.current.size) busySender.current?.duel({ type: 'bev', data: evs })
+  }
+  const startSpectate = (name: string) => {
+    const info = batInfo.current.get(name)?.info
+    if (!info || busy.current || battleRef.current || talking.current) return
+    watching.current = info.host
+    specBuf.current = []
+    busySender.current?.duel({ to: info.host, type: 'spec-join' })
+    window.setTimeout(() => { if (watching.current === info.host && !battleRef.current) { watching.current = null; say(`You cannot watch ${name}'s battle right now.`) } }, 4000)
+  }
+  const beginSpectate = (host: string, info: BattleInfo, events: BattleEvent[]) => {
+    busy.current = true
+    specBuf.current = [...events, ...specBuf.current]
+    const girl = players().find((o) => o.id === host)?.look.sprite === 10
+    const listen = (cb: (evs: BattleEvent[]) => void) => { cb(specBuf.current.slice()); specListeners.current.add(cb); return () => { specListeners.current.delete(cb) } }
+    setBattle({ id: ++battleCounter, kind: info.kind, foe: info.foe.map(fakeMon), name: info.foeName, foeSeed: info.foeSeed, spectate: { who: host, girl, mine: info.mine.map(fakeMon), listen } })
+  }
+  const stopSpectate = () => { const b = battleRef.current; if (b?.spectate) endBattle('ran', trainerRef.current) }
+  // developer hook: watch a made-up battle (Oshawott vs Lillipup) to see the spectator screen; __pqSpecEv(events) sends more events to it
+  if (import.meta.env.DEV) {
+    const g = globalThis as { __pqSpec?: unknown; __pqSpecEv?: unknown }
+    g.__pqSpec = () => {
+      const info: BattleInfo = { kind: 'trainer', foeName: 'Trainer Test', foeSeed: 'test', host: 'Friend', mine: [{ species: 'Oshawott', level: 8, shiny: false }], foe: [{ species: 'Lillipup', level: 7, shiny: false }] }
+      beginSpectate('Friend', info, [
+        { kind: 'switch', side: 'p1', uid: 'spec0', species: 'Oshawott', level: 8, hp: 20, maxHp: 25, shiny: false },
+        { kind: 'switch', side: 'p2', uid: 'spec0', species: 'Lillipup', level: 7, hp: 24, maxHp: 24, shiny: false },
+      ])
+    }
+    g.__pqSpecEv = (evs: BattleEvent[]) => { specBuf.current.push(...evs); for (const cb of specListeners.current) cb(evs) }
+  }
+  // while I fight, the others can see that (and ask to watch)
+  useEffect(() => {
+    const b = battle
+    if (!b || b.spectate || !username || !royale) return
+    const guest = b.pvp?.role === 'guest'
+    const mine = trainerRef.current.team.filter((m) => m.hp > 0)
+    const info: BattleInfo = {
+      kind: b.kind, foeName: guest ? username : b.name ?? '', foeSeed: b.npcId ?? b.name ?? '', host: guest ? b.pvp!.hostName : username,
+      mine: summarize(guest ? b.foe : mine), foe: summarize(guest ? mine : b.foe),
+    }
+    if (!guest) myBat.current = info
+    const send = () => busySender.current?.duel({ type: 'bat', data: info })
+    send()
+    const t = window.setInterval(send, 3000)
+    return () => { window.clearInterval(t); busySender.current?.duel({ type: 'bat-end' }); myBat.current = null; spectators.current.clear() }
+  }, [battle?.id])
+
+  // ---- the tournament: starts when the 5 minutes at the peak are over
+  const gotBracket = (m: BracketMsg) => {
+    if (!m || !Array.isArray(m.pairs) || !applyBracket(tour.current, m)) return
+    setTourRound(m.round)
+    const me = username ?? ''
+    const pair = m.pairs.find(([a, b]) => a === me || b === me)
+    if (m.bye === me) say(`Tournament · round ${m.round}: you have no opponent this round, wait for the next one.`)
+    else if (pair && !eliminatedRef.current) say(`Tournament · round ${m.round}: you fight ${pair[0] === me ? pair[1] : pair[0]}!`)
+    else say(`Tournament · round ${m.round} begins.`)
+  }
+  useEffect(() => {
+    if (!royale || !username) return
+    const me = username
+    const id = window.setInterval(() => {
+      const T = tour.current, now = Date.now()
+      if (now < t0Ref.current || now < startRef.current + 4 * RULES.ringSeconds * 1000 || T.champion) return
+      const seen = new Set(players().map((o) => o.id)); seen.add(me)
+      const everyone = royale.players.filter((n) => (n === me ? !eliminatedRef.current : !outPlayers.current.has(n)) && !T.losers.has(n))
+      const present = everyone.filter((n) => seen.has(n))
+      const iAmBoss = present.length > 0 && [...present].sort()[0] === me
+      const announce = (m: BracketMsg) => { busySender.current?.duel({ type: 'tbracket', data: m }); gotBracket(m) }
+      const finish = (c: string) => { T.champion = c; busySender.current?.duel({ type: 'tdone', data: { champion: c } }); setChampion(c) }
+      if (iAmBoss) {
+        if (T.round === 0) { if (present.length >= 2) announce(makeBracket(1, present, T.hadBye)); else finish(present[0]) }
+        else if (roundDone(T)) {
+          const w = winnersOf(T).filter((n) => !T.losers.has(n))
+          if (w.length <= 1) finish(w[0] ?? present[0])
+          else announce(makeBracket(T.round + 1, w, T.hadBye))
+        } else if (now - T.roundAt > 25_000) { // a player that left in the middle of a round loses it
+          for (const [a, b] of T.pairs) {
+            if (T.resolved.has(a) || T.resolved.has(b)) continue
+            for (const n of [a, b]) if (!seen.has(n)) { busySender.current?.duel({ type: 'telim', data: { loser: n } }); outPlayers.current.add(n); applyLoss(T, n) }
+          }
+        }
+      }
+      // my own fight: the one whose name comes first asks (again every second until the other one is ready)
+      const opp = opponentOf(T, me)
+      if (opp && isPaired(T, me) && !eliminatedRef.current && me < opp && !battleRef.current && !busy.current && !duelPending.current && seen.has(opp)) {
+        const team = trainerRef.current.team.map(healedCopy)
+        if (!team.length) return
+        duelPending.current = opp
+        void music.playSfx('fld:07')
+        busySender.current?.duel({ to: opp, type: 'challenge', data: team })
+        window.setTimeout(() => { if (duelPending.current === opp && !battleRef.current) duelPending.current = null }, 4000)
+      }
+    }, 1000)
     return () => window.clearInterval(id)
   }, [royale, username])
 
@@ -489,7 +622,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
       <div className="hud-top-left panel" style={hudFrame ?? undefined}>
         <strong>Ring {ring}</strong>
         <span>
-          {waiting ? 'Island falls when the match starts' : collapseOn ? (clock.ring >= 4 ? `Only the peak is left · the tournament starts in ${fmtClock(clock.seconds)}` : clock.falling ? `Ring ${clock.ring} is crumbling!` : `Ring ${clock.ring} falls in ${fmtClock(clock.seconds)}`) : 'Island collapse is off'}
+          {waiting ? 'Island falls when the match starts' : collapseOn ? (clock.ring >= 4 ? (tourRound > 0 ? `Tournament · round ${tourRound}` : clock.seconds > 0 ? `Only the peak is left · the tournament starts in ${fmtClock(clock.seconds)}` : 'The tournament is about to begin…') : clock.falling ? `Ring ${clock.ring} is crumbling!` : `Ring ${clock.ring} falls in ${fmtClock(clock.seconds)}`) : 'Island collapse is off'}
         </span>
         <span>Team {alive}/{trainer.team.length} fit · {trainer.bag['Poke Ball'] ?? 0} Poké Balls</span>
         {!royale && (
@@ -554,6 +687,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
         <PlayerPopup
           name={pmenu.name} x={pmenu.x} y={pmenu.y} isFriend={chat.friends.some((f) => f.toLowerCase() === pmenu.name!.toLowerCase())}
           onClose={() => setPmenu(null)}
+          onWatch={(() => { const b = batInfo.current.get(pmenu.name!); return b && b.until > Date.now() ? () => { const n = pmenu.name!; setPmenu(null); startSpectate(n) } : undefined })()}
           onFriend={(add) => { const n = pmenu.name!; setPmenu(null); if (!chatUser) { say('Inicia sesión para tener amigos.'); return } void chat.friendAction(n, add).then((ok) => say(ok ? (add ? `${n} ahora es tu amigo.` : `${n} ya no es tu amigo.`) : 'No se pudo hacer eso.')) }}
           onWhisper={() => { const n = pmenu.name!; setPmenu(null); if (!chatUser) { say('Inicia sesión para chatear.'); return } chat.openWhisper(n); setChatOpen(true) }}
           onTrade={() => { const n = pmenu.name!; setPmenu(null); if (!royale) { say('Solo se puede intercambiar en una partida con otros jugadores.'); return } sendTo(n, 'trade-req'); say(`Petición de intercambio enviada a ${n}…`) }}
@@ -581,25 +715,34 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
         />
       )}
 
-      {eliminated && (
-        <div className="modal-backdrop" style={{ zIndex: 80 }}>
+      {champion && (
+        <div className="modal-backdrop" style={{ zIndex: 85 }}>
           <div className="panel modal">
-            <h2>You were eliminated</h2>
-            <p className="sub">You lost a duel at the peak. Thanks for playing!</p>
+            <h2>{champion === username ? 'You won the match!' : `${champion} won the match!`}</h2>
+            <p className="sub">{champion === username ? 'You are the last trainer standing. Congratulations!' : 'The tournament is over. Thanks for playing!'}</p>
             <button className="primary" onClick={onExit}>Back to the menu</button>
           </div>
+        </div>
+      )}
+      {eliminated && !champion && !battle && (
+        <div className="hud-out panel">
+          <b>You were eliminated</b>
+          <span>You can still watch: click a player that is fighting.</span>
+          <button className="primary" onClick={onExit}>Back to the menu</button>
         </div>
       )}
       {battle && (
         <BattleScreen
           key={battle.id}
-          trainer={trainer}
+          trainer={battle.spectate ? { ...trainer, team: battle.spectate.mine } : trainer}
           foeTeam={battle.foe}
           kind={battle.kind}
           foeName={battle.name}
-          foeSeed={battle.npcId ?? battle.name}
+          foeSeed={battle.foeSeed ?? battle.npcId ?? battle.name}
           pvp={battle.pvp}
-          playerGirl={look.sprite === 10}
+          spectate={battle.spectate ? { who: battle.spectate.who, listen: battle.spectate.listen } : undefined}
+          stream={streamEvents}
+          playerGirl={battle.spectate ? battle.spectate.girl : look.sprite === 10}
           textSpeed={settings.textSpeed}
           onEnd={endBattle}
         />
