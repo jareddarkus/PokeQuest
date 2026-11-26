@@ -198,3 +198,16 @@
 /* every bar: the coloured part sits inside the track with the same small margin on all four sides */
 .sx-bar-in { position: absolute; inset: 3px; display: block; }
 .sx-bar-in .sx-seg { border-radius: max(2px, calc(var(--mx-r) - 2px)); }
+
+/* the same margin (30px) between the window's edge and what it holds, on all four sides; slanted shapes lean out, so they are pulled in by how far they lean */
+.sx { padding: 30px; }
+.sx-art { margin-left: 46px; }
+.sx-moves { padding: 0 10px; }
+.sx-head { padding-left: 6px; padding-right: 6px; }
+.sx-stats { padding-right: 22px; }
+.sx-foot { padding-left: 6px; }
+@media (max-width: 860px) {
+  .sx { padding: 20px; }
+  .sx-art { margin-left: 20px; }
+  .sx-stats { padding-right: 12px; }
+}
