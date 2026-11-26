@@ -8,15 +8,18 @@ import { ITEMS } from '../data/items'
 import { TYPE_COLOR, type PType } from '../game/world'
 import { abilityDesc, itemDesc, shortDesc, trText, useLang } from '../i18n'
 import { moveFacts, moveGameText } from '../data/moveText'
-import FontText from './FontText'
 import ItemIcon from './ItemIcon'
 import MonSprite, { MonIcon } from './MonSprite'
 
 const INK = '#1c2333', MUTED = '#6b7690'
 
-/** Text in the game's font (translated like every other text of the game). */
+/** Text of the window: Unbounded Black for titles (font 0), Lexend Regular for everything else. `k` is the size step (1 small ... 4 big). */
 function GT({ t, k = 2, color = INK, maxWidth, align, font = 1 }: { t: string; k?: number; color?: string; maxWidth?: number; align?: 'left' | 'right' | 'center'; font?: 0 | 1 | 2 | 3 }) {
-  return <FontText text={trText(t)} k={k} font={font} color={color} shadow={null} maxWidth={maxWidth} align={align} />
+  const title = font === 0
+  const size = title ? [0, 12, 16, 22, 28][k] ?? 16 : [0, 11, 14, 18, 22][k] ?? 14
+  return (
+    <span style={{ fontFamily: title ? "'Unbounded', 'Lexend', sans-serif" : "'Lexend', sans-serif", fontWeight: title ? 900 : 400, fontSize: size, lineHeight: 1.3, color, textAlign: align, display: 'inline-block', maxWidth: maxWidth ? maxWidth * k : undefined, letterSpacing: title ? '0.01em' : undefined }}>{trText(t)}</span>
+  )
 }
 
 /** A small pop-up on hover (or on a tap) over its child. */
@@ -215,7 +218,7 @@ export default function SummaryCard({ mon, onChange, onBack, backLabel = 'Back',
       {/* header */}
       <div className="sx-head">
         <div className="sx-who">
-          <span className="sx-card sx-id"><span className="sx-un"><GT t={`#${String(dexNum(mon.species)).padStart(4, '0')}`} k={3} color={MUTED} /></span></span>
+          <span className="sx-card sx-id"><span className="sx-un"><GT t={`#${String(dexNum(mon.species)).padStart(4, '0')}`} k={2} font={0} color={MUTED} /></span></span>
           <div className="sx-name">
             <span style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
               <GT t={`${mon.species}${mon.shiny ? ' ★' : ''}`} k={3} font={0} />
@@ -245,7 +248,7 @@ export default function SummaryCard({ mon, onChange, onBack, backLabel = 'Back',
             <Chip><GT t={`${es ? 'PESO' : 'WT'}: ${sp.weightkg} kg`} k={2} /></Chip>
           </div>
         </div>
-        <div className="sx-sprite"><MonSprite species={mon.species} shiny={mon.shiny} scale={small ? 3 : 4} animated /></div>
+        <div className="sx-sprite"><div className="sx-float"><MonSprite species={mon.species} shiny={mon.shiny} scale={small ? 3 : 4} animated /></div></div>
         <div className="sx-row">
           <span className="sx-hp"><span className="sx-un">
             <GT t={`HP ${mon.hp} / ${mx}`} k={2} />
