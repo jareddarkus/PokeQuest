@@ -944,7 +944,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
       )}
       {layout && foe && (
         <>
-          <div className="stage-shadow" style={{ left: layout.foe.x, top: layout.foe.y + layout.foe.w * 0.03, width: layout.foe.w * 0.78 * shadowFor(foe.species) }} />
+          <div className="stage-shadow" style={{ left: layout.foe.x, top: layout.foe.y + layout.foe.w * 0.13, width: layout.foe.w * 0.5 * shadowFor(foe.species) }} />
           <div data-mon="foe" className={`stage-sprite ${shake === 'foe' ? 'hit' : ''} ${foe.fainted ? 'fainted' : ''} ${lunge === 'foe' ? 'lunge-foe' : ''}`} style={{ left: layout.foe.x, top: layout.foe.y + layout.foe.w * 0.1, width: layout.foe.w, ['--hv' as string]: `${Math.round(layout.foe.w * 0.9)}px` }}>
             {!ball && <div className={send?.side === 'foe' ? 'so-mon' : undefined} key={send?.side === 'foe' ? send.key : 'foe'}><MonSprite species={foe.species} shiny={foe.shiny} scale={snap((layout.foe.w * 1.05) / 76.8 * 0.8) / 0.8} platform={layout.foe.w} animated />{send?.side === 'foe' && <div className="so-white" aria-hidden><MonSprite species={foe.species} shiny={foe.shiny} scale={snap((layout.foe.w * 1.05) / 76.8 * 0.8) / 0.8} platform={layout.foe.w} animated /></div>}</div>}
             {ball && <div className={`ball shake-${ball.shakes}`} />}
@@ -953,7 +953,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
       )}
       {layout && me && (
         <>
-          <div className="stage-shadow" style={{ left: layout.me.x, top: layout.me.y + layout.me.w * 0.03, width: layout.me.w * 0.78 * shadowFor(me.species) }} />
+          <div className="stage-shadow" style={{ left: layout.me.x, top: layout.me.y + layout.me.w * 0.09, width: layout.me.w * 0.32 * shadowFor(me.species) }} />
           <div data-mon="me" className={`stage-sprite ${shake === 'me' ? 'hit' : ''} ${me.fainted ? 'fainted' : ''} ${lunge === 'me' ? 'lunge-me' : ''}`} style={{ left: layout.me.x, top: layout.me.y + layout.me.w * 0.1, width: layout.me.w, ['--hv' as string]: `${Math.round(layout.me.w * 0.75)}px` }}>
             <div className={send?.side === 'me' ? 'so-mon' : undefined} key={send?.side === 'me' ? send.key : 'me'}><MonSprite species={me.species} back shiny={me.shiny} scale={snap((layout.me.w * 0.92) / 76.8 * 0.8) / 0.8} platform={layout.me.w} animated />{send?.side === 'me' && <div className="so-white" aria-hidden><MonSprite species={me.species} back shiny={me.shiny} scale={snap((layout.me.w * 0.92) / 76.8 * 0.8) / 0.8} platform={layout.me.w} animated /></div>}</div>
           </div>

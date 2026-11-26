@@ -230,6 +230,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
     handleRef.current?.setNpcFreeze(b.npcId ?? null)
     setBattle({ ...b, id: ++battleCounter })
   }
+  if (import.meta.env.DEV) (globalThis as { __pqWild?: unknown }).__pqWild = () => void wildEncounter(1).then((mon) => startBattle({ kind: 'wild', foe: [mon] })) // developer hook
 
   /** Two players meet at the peak: the one whose name comes first runs the battle (host), the other follows (guest). */
   const startDuel = (role: 'host' | 'guest', opp: string, team: Mon[]) => {
