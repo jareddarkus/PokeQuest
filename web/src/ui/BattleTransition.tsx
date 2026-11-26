@@ -3,18 +3,19 @@ import { useEffect, useRef } from 'react'
 /**
  * The way into a battle, copied from the reference recording (times in ms):
  *   0-600     the picture flashes white twice (peaks at 150 and 450),
- *   800-2950  the picture is cut into 6 horizontal bands that turn black in thin vertical columns of different lengths (the bands in the order 1, 3, 5, 2, 4, 6),
+ *   700-2550  (the recording: 800-2950) the picture is cut into 6 horizontal bands that turn black in thin vertical columns of different lengths (the bands in the order 1, 3, 5, 2, 4, 6),
  *   2950-4450 black,
  *   4450-4850 the black fades away (the battle picture is already underneath).
  * `onBlack` is called when the screen is hidden by the bars (swap the picture), `onFade` when the black starts to fade (the battle begins), `onDone` at the end.
  */
 const FLASH: Array<[number, number]> = [[0, 0], [50, 0.1], [100, 0.47], [150, 0.85], [200, 0.72], [250, 0.34], [300, 0], [350, 0.34], [400, 0.72], [450, 0.85], [500, 0.47], [550, 0.22], [600, 0]]
 const BAND_ORDER = [0, 2, 4, 1, 3, 5]
-const BAND_START = [800, 1150, 1450, 1650, 1850, 2100]
-const BAND_MS = 850
-export const TRANSITION_BLACK_AT = 2950
-export const TRANSITION_FADE_AT = 4450
-const END = 4900
+// (the recording waited 1.5 s in black; here the black only lasts a moment, so the way into a battle is about 1.5 s shorter)
+const BAND_START = [700, 950, 1200, 1350, 1500, 1700]
+const BAND_MS = 650
+export const TRANSITION_BLACK_AT = 2750
+export const TRANSITION_FADE_AT = 3150
+const END = 3550
 const COLS = 14
 
 export default function BattleTransition({ onBlack, onFade, onDone }: { onBlack: () => void; onFade: () => void; onDone: () => void }) {
@@ -48,7 +49,7 @@ export default function BattleTransition({ onBlack, onFade, onDone }: { onBlack:
         ctx.fillStyle = `rgba(0,0,0,${Math.max(0, 1 - (t - TRANSITION_FADE_AT) / 400)})`; ctx.fillRect(0, 0, W, H)
       } else if (t >= TRANSITION_BLACK_AT) {
         ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H)
-      } else if (t >= 800) {
+      } else if (t >= 700) {
         ctx.fillStyle = '#000'
         const bh = H / 6
         BAND_ORDER.forEach((band, n) => {

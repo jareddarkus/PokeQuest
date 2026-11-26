@@ -7,6 +7,21 @@ import { MAX_ROM_DEX } from '../rom/sprites'
 import { Dex } from '@pkmn/sim'
 
 const cache = new Map<string, AnimatedSprite | null>()
+
+/**
+ * Pokémon that hover above their platform in battle (7 pixels). Most flying-type Pokémon do NOT: birds like Pidgey, Natu, Hoothoot, Starly stand on the platform.
+ * The game file has no table for this, so it is by body: everything that has Levitate, plus the bats, moths, dragonflies, big airborne legends and so on listed here.
+ */
+const HOVERERS = new Set([
+  'Zubat', 'Golbat', 'Crobat', 'Butterfree', 'Beedrill', 'Venomoth', 'Ledyba', 'Ledian', 'Yanma', 'Yanmega', 'Beautifly', 'Dustox', 'Masquerain', 'Ninjask', 'Shedinja', 'Mothim', 'Vespiquen', 'Combee',
+  'Vibrava', 'Flygon', 'Aerodactyl', 'Mantine', 'Mantyke', 'Swablu', 'Altaria', 'Latias', 'Latios', 'Rayquaza', 'Lugia', 'Ho-Oh', 'Articuno', 'Zapdos', 'Moltres',
+  'Tornadus', 'Thundurus', 'Landorus', 'Woobat', 'Swoobat', 'Sigilyph', 'Rotom', 'Chimecho', 'Cresselia', 'Togekiss', 'Gliscor', 'Drifblim', 'Drifloon', 'Volbeat', 'Illumise',
+  'Cottonee', 'Whimsicott',
+])
+const hoverOf = (species: string): number => {
+  const sp = Dex.species.get(species)
+  return HOVERERS.has(species) || Object.values(sp.abilities).includes('Levitate') ? 7 : 0
+}
 const gaps = new Map<AnimatedSprite, number>()
 
 /** How many empty rows there are under the Pokémon's feet in its 96 x 96 picture (so that it can be set down on its platform). */
@@ -109,9 +124,9 @@ export default function AnimSprite({ species, back, shiny, scale: wanted = 2 }: 
   }, [sprite])
 
   if (!sprite) return <div style={{ width: 96 * scale, height: 96 * scale }} />
-  if (sprite.mismatch > 0.25) return <StillPicture dex={dex} back={back} shiny={shiny} scale={scale} hover={Dex.species.get(species).types.includes('Flying') ? 7 : 0} />
+  if (sprite.mismatch > 0.25) return <StillPicture dex={dex} back={back} shiny={shiny} scale={scale} hover={hoverOf(species)} />
   // set the Pokémon down on its platform (flying ones hover a little above it)
-  const hover = Dex.species.get(species).types.includes('Flying') ? 7 : 0
+  const hover = hoverOf(species)
   const down = (footGap(sprite) - hover) * scale
   return <canvas ref={ref} width={96} height={96} style={{ width: 96 * scale, height: 96 * scale, imageRendering: 'pixelated', transform: `translateY(${down}px)` }} />
 }

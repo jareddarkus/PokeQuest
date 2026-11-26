@@ -10,7 +10,7 @@ import { ENCOUNTER_RATE, groupMon, groupTeam, gymTeam, trainerTeam, wildEncounte
 import { addItems, emptyTrainer, makeStarter, type Trainer } from '../game/state'
 import { ITEMS, STARTING_BAG, rollPickup } from '../data/items'
 import ItemIcon from './ItemIcon'
-import { maxHp, newUid, type Mon } from '../data/dex'
+import { createMon, maxHp, newUid, type Mon } from '../data/dex'
 import {
   C, collapseInfo, squareTile, RADIUS, RING_INNER, SIZE, T, collapseRadius, generateWorld, isWalkable, ringAt, type Dir, type World,
 } from '../game/world'
@@ -314,7 +314,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
     handleRef.current?.setNpcFreeze(b.npcId ?? null)
     setBattle({ ...b, id: ++battleCounter })
   }
-  if (import.meta.env.DEV) (globalThis as { __pqWild?: unknown }).__pqWild = (ring = 1) => void wildEncounter(ring).then((mon) => startBattle({ kind: 'wild', foe: [mon] })) // developer hook
+  if (import.meta.env.DEV) (globalThis as { __pqWild?: unknown }).__pqWild = (ring = 1, species?: string, level = 3) => void (species ? createMon(species, level) : wildEncounter(ring)).then((mon) => startBattle({ kind: 'wild', foe: [mon] })) // developer hook
 
   /** Two players meet at the peak: the one whose name comes first runs the battle (host), the other follows (guest). */
   const startDuel = (role: 'host' | 'guest', opp: string, team: Mon[]) => {

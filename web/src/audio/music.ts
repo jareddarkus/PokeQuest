@@ -77,6 +77,26 @@ class MusicManager {
     } catch { /* sounds are optional */ }
   }
 
+  /** Plays a sound over and over until the returned function is called (the EXP gauge filling up). */
+  async loopSfx(key: string): Promise<() => void> {
+    if (!this.enabled || this.sfxVolume <= 0.001) return () => {}
+    try {
+      const ctx = this.ensure()
+      if (!ctx || !this.sfx) return () => {}
+      const index = await loadMusicIndex()
+      const info = index?.[key]
+      if (!info) return () => {}
+      const [seq, bank, ...waves] = await Promise.all([this.file(info.seq), this.file(info.bank), ...info.waves.map((w) => (w >= 0 ? this.file(w) : Promise.resolve(null)))])
+      if (!seq || !bank) return () => {}
+      const p = new SongPlayer(ctx, this.sfx, seq, bank, waves, info.vol, true)
+      p.start()
+      let stopped = false
+      const stop = () => { if (!stopped) { stopped = true; p.stop(0.05) } }
+      window.setTimeout(stop, 8000) // a safety stop
+      return stop
+    } catch { return () => {} }
+  }
+
   /** The jingle of finding an item (a game file imported before it was added only has the short "getting" sound). */
   async itemGet() {
     const index = await loadMusicIndex()

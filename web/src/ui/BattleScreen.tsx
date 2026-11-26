@@ -4,10 +4,10 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { snap } from './pixel'
 import { BattleSession, type BattleEvent, type Request } from '../battle/engine'
 import { PvpGuestSession } from '../battle/pvp'
-import { allSpecies, dexNum, maxHp, statsOf, type Mon } from '../data/dex'
+import { allSpecies, dexNum, expForLevel, levelUpMoves, maxHp, statsOf, type Mon } from '../data/dex'
 import { ITEMS } from '../data/items'
 import {
-  addEvs, catchChance, evYield, evolve, expGain, gainExp, healMon, levelEvolution, rollCatch, useItemFromBag, type Trainer,
+  addEvs, catchChance, evYield, evolve, expGain, healMon, levelEvolution, rollCatch, useItemFromBag, type Trainer,
 } from '../game/state'
 import { useUiUrl } from './CmdButton'
 import StatusIcon from './StatusIcon'
@@ -238,7 +238,7 @@ function useDrain(target: number, _max: number): number {
  * the name in the game's font (white, black outline), the gender sign, "Lv" and the level in the game's digits, the grey plate with the HP label, the
  * 48-pixel HP gauge (yours also shows the HP numbers and the 80-pixel EXP gauge).
  */
-function ClassicHpBox({ side, mine, exp, gender, k, nameFont = 2 }: { side: Side; mine: boolean; exp?: number; gender?: 'M' | 'F' | 'N'; k?: number; nameFont?: 0 | 1 | 2 }) {
+function ClassicHpBox({ side, mine, exp, expFrac, gender, k, nameFont = 2 }: { side: Side; mine: boolean; exp?: number; expFrac?: number; gender?: 'M' | 'F' | 'N'; k?: number; nameFont?: 0 | 1 | 2 }) {
   const strip = useUiUrl(mine ? 'hp:stripme' : 'hp:stripfoe')
   const sheet = useUiUrl('hp:glyphs')
   const K0 = useDsK()
@@ -247,8 +247,8 @@ function ClassicHpBox({ side, mine, exp, gender, k, nameFont = 2 }: { side: Side
   const frac = side.maxHp > 0 ? Math.max(0, Math.min(1, shownHp / side.maxHp)) : 0
   const fillPx = shownHp > 0 ? Math.max(1, Math.min(48, Math.floor(48 * frac))) : 0
   const gaugeBase = frac > 0.5 ? 0 : frac > 0.2 ? 9 : 18
-  const lo = side.level ** 3, hi = (side.level + 1) ** 3
-  const expPx = exp === undefined ? 0 : Math.max(0, Math.min(80, Math.floor((80 * (exp - lo)) / Math.max(1, hi - lo))))
+  const lo = expForLevel(side.level), hi = expForLevel(side.level + 1)
+  const expPx = expFrac !== undefined ? Math.max(0, Math.min(80, Math.floor(80 * expFrac))) : exp === undefined ? 0 : Math.max(0, Math.min(80, Math.floor((80 * (exp - lo)) / Math.max(1, hi - lo))))
   // positions (DS pixels, relative to the box): foe box origin = screen (6, 31), yours = screen (145, 112)
   const G = mine ? { strip: [0, 11], name: [9, 1.4], gender: [63.3, 2.3], lv: [70.2, 2.4], lvl: [79, 3.3], gauge: [46.8, 9.5], hp: [47.5, 16], exp: [23.2, 24.1], w: 124, h: 36 } : { strip: [0, 10.5], name: [13.7, 1.1], gender: [68, 1.8], lv: [76.1, 3.1], lvl: [84.1, 2.1], gauge: [37.3, 10.1], hp: [0, 0], exp: [0, 0], w: 112, h: 24 }
   const hpText = `${String(Math.max(0, Math.ceil(shownHp))).padStart(3, ' ')}/${side.maxHp}`
@@ -277,13 +277,13 @@ function ClassicHpBox({ side, mine, exp, gender, k, nameFont = 2 }: { side: Side
 }
 
 /** The HP box in the modern look: a light slanted card with the name, level, the HP gauge (and the numbers and the EXP gauge for yours). */
-function ModernHpBox({ side, mine, exp, gender, k }: { side: Side; mine: boolean; exp?: number; gender?: 'M' | 'F' | 'N'; k?: number }) {
+function ModernHpBox({ side, mine, exp, expFrac, gender, k }: { side: Side; mine: boolean; exp?: number; expFrac?: number; gender?: 'M' | 'F' | 'N'; k?: number }) {
   const K0 = useDsK()
   const K = k ?? K0
   const shownHp = useDrain(side.hp, side.maxHp)
   const frac = side.maxHp > 0 ? Math.max(0, Math.min(1, shownHp / side.maxHp)) : 0
-  const lo = side.level ** 3, hi = (side.level + 1) ** 3
-  const expFrac = exp === undefined ? 0 : Math.max(0, Math.min(1, (exp - lo) / Math.max(1, hi - lo)))
+  const lo = expForLevel(side.level), hi = expForLevel(side.level + 1)
+  const expF = expFrac !== undefined ? Math.max(0, Math.min(1, expFrac)) : exp === undefined ? 0 : Math.max(0, Math.min(1, (exp - lo) / Math.max(1, hi - lo)))
   const color = frac > 0.5 ? '#19c37d' : frac > 0.2 ? '#f0a800' : '#e03a4c'
   return (
     <div className={`hp2 mxh ${mine ? 'mine' : 'foe'}`} style={{ width: (mine ? 124 : 112) * K, height: (mine ? 40 : 30) * K, ['--k' as string]: `${K}px`, fontSize: 6.6 * K }}>
@@ -296,16 +296,17 @@ function ModernHpBox({ side, mine, exp, gender, k }: { side: Side; mine: boolean
         </div>
         <div className="mxh-row"><span className="mxh-lab">PS</span><span className="mxh-bar"><i style={{ width: `${frac * 100}%`, background: color }} /></span></div>
         {mine && <div className="mxh-num">{Math.max(0, Math.ceil(shownHp))} / {side.maxHp}</div>}
-        {mine && <div className="mxh-row"><span className="mxh-lab">EXP</span><span className="mxh-bar exp"><i style={{ width: `${expFrac * 100}%` }} /></span></div>}
+        {mine && <div className="mxh-row"><span className="mxh-lab">EXP</span><span className="mxh-bar exp"><i style={{ width: `${expF * 100}%` }} /></span></div>}
       </div></div>
     </div>
   )
 }
 
 export function HpBox(props: Parameters<typeof ClassicHpBox>[0]) {
-  return useTheme() === 'modern' ? <ModernHpBox side={props.side} mine={props.mine} exp={props.exp} gender={props.gender} k={props.k} /> : <ClassicHpBox {...props} />
+  return useTheme() === 'modern' ? <ModernHpBox side={props.side} mine={props.mine} exp={props.exp} expFrac={props.expFrac} gender={props.gender} k={props.k} /> : <ClassicHpBox {...props} />
 }
 export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed, foeClass, pvp, spectate, stream, playerGirl, textSpeed = 'normal', onEnd }: Props) {
+  const lang = useLang()
   // the battle always looks classic (the game's own HP boxes, command and move screens), whatever the theme is; the theme comes back when the battle ends
   useEffect(() => { const prev = getTheme(); setTheme('classic'); return () => setTheme(prev) }, [])
   const playerTeam = useMemo(() => trainer.team.filter((m) => m.hp > 0).map((m) => ({ ...m, evs: { ...m.evs }, ivs: { ...m.ivs }, moves: [...m.moves] })), [])
@@ -321,6 +322,13 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
   const [trOut, setTrOut] = useState({ foe: false, me: false }) // sliding away
   const [trGone, setTrGone] = useState({ foe: false, me: false }) // gone
   const [throwKey, setThrowKey] = useState(0)
+  const [expFrac, setExpFrac] = useState<number | null>(null) // the EXP gauge of your Pokémon while it is filling (null: as it is)
+  const [lvWin, setLvWin] = useState<null | { name: string; rows: Array<{ label: string; inc: number; now: number }>; phase: 'inc' | 'now' }>(null) // the window of the stat gains after a level
+  const meUid = useRef('')
+  const faintedFoe = useRef(false) // a foe Pokémon fainted: the experience is given after its "fainted!" sentence
+  const faintCount = useRef(0)
+  const gains = useRef(new Map<string, { mon: Mon; grown: number }>()) // what your Pokémon gained in this battle (applied when it ends)
+  const leveled = useRef(new Set<string>())
   const catchRef = useRef<HTMLImageElement>(null)
   const trSent = useRef({ foe: false, me: false })
   const [hpOn, setHpOn] = useState({ foe: false, me: false }) // the HP boxes show once the Pokémon stand on their platform
@@ -400,7 +408,9 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
           else if (/not very effective/i.test(ev.text)) pendingHit.current = 'se:hitWeak'
           if (/ sent out /i.test(ev.text)) setRows(null)
           if (/^Go! /.test(ev.text) && !trSent.current.me) setRows('me')
-          await say(ev.text, 750); break
+          await say(ev.text, 750)
+          if (faintedFoe.current && / fainted!$/.test(ev.text)) { faintedFoe.current = false; await awardExp() }
+          break
         case 'switch': {
           const who = ev.side === 'p1' ? 'me' : 'foe'
           species.current[ev.side === 'p1' ? 'me' : 'foe'] = ev.species
@@ -501,6 +511,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
           break
         }
         case 'faint': {
+          if (ev.side === 'p2' && !pvp && !spectate) faintedFoe.current = true
           const upd = (s: Side | null): Side | null => (s && s.uid === ev.uid ? { ...s, fainted: true, hp: 0 } : s)
           if (ev.side === 'p1') setMe(upd); else setFoe(upd)
           void music.playSfx('se:faint')
@@ -838,6 +849,82 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
     return () => { cancelled = true; endedRef.current = true; s?.destroy(); unlisten?.(); unspec?.() }
   }, [])
 
+  // ---------------------------------------------------------------- experience (right after a foe Pokémon has fainted, like the game)
+  const STAT_LABELS = ['HP', 'Attack', 'Defense', 'Sp. Atk', 'Sp. Def', 'Speed'] as const
+  const STAT_KEYS = ['hp', 'atk', 'def', 'spa', 'spd', 'spe'] as const
+  /** the EXP gauge of the Pokémon that is out moves from one place to another (60 gauge pixels a second, the sound of the game plays while it moves) */
+  const animBar = async (from: number, to: number) => {
+    const ms = Math.abs(to - from) * (80 / 60) * 1000
+    if (ms < 30) { setExpFrac(to); return }
+    const stop = await music.loopSfx('se:exp')
+    await new Promise<void>((res) => {
+      const t0 = performance.now()
+      const tick = () => {
+        const k = Math.min(1, (performance.now() - t0) / ms)
+        setExpFrac(from + (to - from) * k)
+        if (k < 1) requestAnimationFrame(tick); else res()
+      }
+      tick()
+    })
+    stop()
+  }
+  /** the window of the stat gains: first how much each went up, then the new values (a tap or a few seconds each) */
+  const showStats = async (name: string, before: ReturnType<typeof statsOf>, after: ReturnType<typeof statsOf>) => {
+    const rows = STAT_KEYS.map((k, i) => ({ label: STAT_LABELS[i], inc: after[k] - before[k], now: after[k] }))
+    setLvWin({ name, rows, phase: 'inc' })
+    await wait(2600)
+    setLvWin({ name, rows, phase: 'now' })
+    await wait(2600)
+    setLvWin(null)
+  }
+  const awardExp = async () => {
+    const s0 = sessionRef.current
+    const d = s0?.defeated[faintCount.current++]
+    if (!s0 || !d) return
+    if (kind === 'wild') { music.stop(); void music.playSfx('win') } // (the victory music starts as the wild Pokémon faints)
+    const hasShare = (bagRef.current['Exp Share'] ?? 0) > 0
+    for (const m0 of teamRef.current) {
+      const took = d.by.includes(m0.uid)
+      if (!took && !hasShare) continue
+      if (s0.hpOf(m0.uid) <= 0) continue
+      const prev = gains.current.get(m0.uid)
+      let mon: Mon = addEvs(prev?.mon ?? m0, evYield(d.foe.species))
+      const amount = expGain(d.foe.species, d.foe.level, kind !== 'wild', took ? 1 : 0.5)
+      const active = meUid.current === m0.uid
+      await say(`${mon.species} gained ${amount} Exp. Points!`, active ? 300 : 600)
+      const lo = (lv: number) => expForLevel(lv)
+      const fracOf = (m: Mon) => Math.max(0, Math.min(1, (m.exp - lo(m.level)) / Math.max(1, lo(m.level + 1) - lo(m.level))))
+      let from = fracOf(mon)
+      if (active) setExpFrac(from)
+      mon = { ...mon, exp: mon.exp + amount }
+      let grown = prev?.grown ?? 0
+      // level by level: the gauge fills, the jingle, the new level, the stat window, the new moves
+      while (mon.level < 100 && mon.exp >= lo(mon.level + 1)) {
+        if (active) await animBar(from, 1)
+        const before = statsOf(mon), oldMax = maxHp(mon)
+        mon = { ...mon, level: mon.level + 1 }
+        const after = statsOf(mon)
+        const add = Math.max(0, maxHp(mon) - oldMax)
+        grown += add
+        leveled.current.add(mon.uid)
+        void music.playSfx('se:lvup')
+        if (active) { setMe((x) => (x && x.uid === mon.uid ? { ...x, level: mon.level, maxHp: maxHp(mon), hp: x.hp > 0 ? Math.min(maxHp(mon), x.hp + add) : x.hp } : x)); setExpFrac(0) }
+        await say(`${mon.species} grew to Lv. ${mon.level}!`, 500)
+        await showStats(mon.species, before, after)
+        const learned = (await levelUpMoves(mon.species)).filter((e) => e.level === mon.level).map((e) => e.move)
+        for (const mv of learned) {
+          if (mon.moves.includes(mv)) continue
+          if (mon.moves.length < 4) { mon = { ...mon, moves: [...mon.moves, mv] }; await say(`${mon.species} learned ${mv}!`, 700) }
+          else { const forget = await askForget(mon, mv); if (forget !== null) mon = { ...mon, moves: mon.moves.map((x, k) => (k === forget ? mv : x)) } }
+        }
+        from = 0
+      }
+      if (active) { await animBar(from, fracOf(mon)); setExpFrac(null) }
+      gains.current.set(mon.uid, { mon, grown })
+      teamRef.current = teamRef.current.map((x) => (x.uid === mon.uid ? { ...mon, hp: x.hp } : x)) // (the gauge and the level of the box come from here)
+    }
+  }
+
   // ---------------------------------------------------------------- after the battle
   const finish = async (winner: 'p1' | 'p2' | null) => {
     const s = sessionRef.current!
@@ -852,45 +939,24 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
     let t: Trainer = { ...trainer, bag: bagRef.current }
     const team = t.team.map((m) => playerTeam.find((p) => p.uid === m.uid) ?? m)
     let working = team.map((m) => ({ ...m }))
-    const hasShare = (t.bag['Exp Share'] ?? 0) > 0
 
     if (winner === 'p1') {
-      music.stop()
-      void music.playSfx('win')
-      for (const d of s.defeated) {
-        const alive = working.filter((m) => m.hp > 0)
-        for (let i = 0; i < working.length; i++) {
-          const m = working[i]
-          const took = d.by.includes(m.uid) && m.hp > 0
-          if (!took && !(hasShare && m.hp > 0)) continue
-          const share = took ? (hasShare || alive.length > 1 ? 1 : 1) : 0.5
-          let upd = addEvs(m, evYield(d.foe.species))
-          const amount = expGain(d.foe.species, d.foe.level, kind !== 'wild', share)
-          const res = await gainExp(upd, amount)
-          upd = res.mon
-          await say(`${upd.species} gained ${amount} Exp. Points!`, 600)
-          if (res.levelsGained > 0) {
-            void music.playSfx('se:lvup')
-            await say(`${upd.species} grew to Lv. ${upd.level}!`, 700)
-            for (const mv of res.newMoves) {
-              if (upd.moves.length < 4) {
-                upd = { ...upd, moves: [...upd.moves, mv] }
-                await say(`${upd.species} learned ${mv}!`, 700)
-              } else {
-                const forget = await askForget(upd, mv)
-                if (forget !== null) upd = { ...upd, moves: upd.moves.map((x, k) => (k === forget ? mv : x)) }
-              }
-            }
-            const to = levelEvolution(upd)
-            if (to) {
-              await say(`What? ${upd.species} is evolving!`, 900)
-              const from = upd.species
-              upd = evolve(upd, to)
-              await say(`${from} evolved into ${to}!`, 1000)
-            }
+      if (kind !== 'wild') { music.stop(); void music.playSfx('win') }
+      // (the experience was already given after every foe; what is left: the gains go into the team, then Pokémon that grew a level may evolve)
+      for (let i = 0; i < working.length; i++) {
+        const g = gains.current.get(working[i].uid)
+        if (!g) continue
+        let upd: Mon = { ...g.mon, hp: Math.min(maxHp(g.mon), Math.max(0, working[i].hp) + (working[i].hp > 0 ? g.grown : 0)) }
+        if (leveled.current.has(upd.uid)) {
+          const to = levelEvolution(upd)
+          if (to) {
+            await say(`What? ${upd.species} is evolving!`, 900)
+            const from = upd.species
+            upd = evolve(upd, to)
+            await say(`${from} evolved into ${to}!`, 1000)
           }
-          working[i] = upd
         }
+        working[i] = upd
       }
     }
     t = { ...t, team: working }
@@ -915,6 +981,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
   // ---------------------------------------------------------------- the player's actions
   const act = (fn: () => void) => { setMode('wait'); setReq(null); fn() }
   const s = () => sessionRef.current!
+  meUid.current = me?.uid ?? ''
   const activeMon = me ? teamRef.current.find((m) => m.uid === me.uid) : undefined
 
   const doMove = (i: number) => act(() => s().chooseMove(i + 1))
@@ -1123,12 +1190,22 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
       </div>
       {!transDone && <BattleTransition onBlack={() => setShowScene(true)} onFade={() => { /* (no opening fly-in: the battle starts with the usual camera, everything in view) */ setIntroOn(true); window.setTimeout(() => introResolve.current(), 1450) }} onDone={() => setTransDone(true)} />}
       {spectate && <button className="spec-leave" onClick={() => onEnd('ran', trainer)}>Stop watching · {spectate.who}</button>}
+      {lvWin && layout && (
+        <div className="lvwin" style={{ left: layout.frame.l + layout.frame.w * 0.55, top: layout.frame.t + layout.frame.h * 0.06, width: layout.frame.w * 0.43, padding: Kd * 3 }}>
+          {lvWin.rows.map((r) => (
+            <div key={r.label} className="lvrow">
+              <FontText text={lang === 'es' ? ({ HP: 'PS', Attack: 'Ataque', Defense: 'Defensa', 'Sp. Atk': 'At. Esp.', 'Sp. Def': 'Def. Esp.', Speed: 'Velocidad' } as Record<string, string>)[r.label] : r.label} k={Kd} font={2} color="#f8f8f8" shadow="#101010" />
+              <FontText text={lvWin.phase === 'inc' ? `+ ${r.inc}` : String(r.now)} k={Kd} font={2} color="#f8f8f8" shadow="#101010" />
+            </div>
+          ))}
+        </div>
+      )}
       {rows && <TeamBalls key={rows} side={rows} count={rows === 'foe' ? foeTeam.length : playerTeam.length} alive={rows === 'foe' ? foeTeam.map((m) => m.hp > 0) : playerTeam.map((m) => m.hp > 0)} K={Kd} />}
       <div className="foe-zone">
         {foe && hpOn.foe && <HpBox side={foe} mine={false} gender={foeCopies.find((m) => m.uid === foe.uid)?.gender} />}
       </div>
       <div className="me-zone">
-        {me && hpOn.me && <HpBox side={me} mine exp={teamRef.current.find((m) => m.uid === me.uid)?.exp} gender={teamRef.current.find((m) => m.uid === me.uid)?.gender} />}
+        {me && hpOn.me && <HpBox side={me} mine exp={teamRef.current.find((m) => m.uid === me.uid)?.exp} expFrac={expFrac ?? undefined} gender={teamRef.current.find((m) => m.uid === me.uid)?.gender} />}
       </div>
       <div className="battle-bottom">
         <div className="battle-band" style={{ cursor: 'pointer' }} onClick={() => { setSkip((k) => k + 1); wake.current?.() }}><TypedText text={text} ms={msPer} skip={skip} /></div>
