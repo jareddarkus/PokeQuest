@@ -97,15 +97,15 @@ function statMath(mon: Mon, s: StatId, lang: 'es' | 'en'): StatMath {
 function ChunkTip({ m, lang }: { m: StatMath; lang: 'es' | 'en' }) {
   const es = lang === 'es'
   const sign = (v: number) => (v > 0 ? '+' : '') + v
-  const col = (v: number) => (v > 0 ? '#7dff9a' : v < 0 ? '#ff8a95' : '#ffffff')
+  const col = (v: number) => (v > 0 ? '#4dff7c' : v < 0 ? '#ff5a6a' : '#ffffff')
   const rows = m.lines.filter((l) => l.v !== 0)
   const lossy = rows.some((l) => l.v < 0)
   return (
     <span style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 170 }}>
-      {rows.map((l, i) => <span key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 14 }}><GT t={l.label} k={2} color="#ffffff" /><GT t={sign(l.v)} k={2} color={col(l.v)} /></span>)}
+      {rows.map((l, i) => <span key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 14 }}><GT t={l.label} k={2} color={col(l.v)} /><GT t={sign(l.v)} k={2} color={col(l.v)} /></span>)}
       {rows.length === 0 && <GT t={es ? 'Solo la parte de la especie.' : 'Only the species part.'} k={2} color="#ffffff" />}
-      <span style={{ display: 'flex', justifyContent: 'space-between', gap: 14, borderTop: '1px solid rgba(255,255,255,.35)', paddingTop: 3 }}><GT t={es ? 'Total extra' : 'Extra total'} k={2} color="#ffffff" /><GT t={sign(m.net)} k={2} color={col(m.net)} /></span>
-      {lossy && <GT t={es ? 'Una naturaleza que baja esta estadística resta un 10% al total: se come parte de los puntos de IV y EV.' : 'A nature that lowers this stat takes 10% off the total: it eats part of the IV and EV points.'} k={1} color="#ffd0d5" maxWidth={190} />}
+      <span style={{ display: 'flex', justifyContent: 'space-between', gap: 14, borderTop: '1px solid rgba(255,255,255,.35)', paddingTop: 3 }}><GT t={es ? 'Total extra' : 'Extra total'} k={2} color={col(m.net)} /><GT t={sign(m.net)} k={2} color={col(m.net)} /></span>
+      {lossy && <GT t={es ? 'Una naturaleza que baja esta estadística resta un 10% al total: se come parte de los puntos de IV y EV.' : 'A nature that lowers this stat takes 10% off the total: it eats part of the IV and EV points.'} k={1} color="#ff5a6a" maxWidth={190} />}
     </span>
   )
 }
