@@ -7,8 +7,16 @@ compatibility_date = "2025-01-01"
 name = "MATCH"
 class_name = "Match"
 
+[[durable_objects.bindings]]
+name = "STATS"
+class_name = "Stats"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["Match"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["Stats"]
 
 # SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY are given at deploy time by scripts/deploy-server.ps1 (read from web/.env); nothing secret is written here.

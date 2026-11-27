@@ -2,6 +2,7 @@
 //  - "socket": our own small realtime server on Cloudflare (server/ folder), used by default;
 //  - "supabase": Supabase Realtime broadcast (the way it was before), used when the site is built with VITE_REALTIME_URL=off.
 import { supabase } from '../supabase'
+import { netStats } from './netStats'
 
 export interface Transport {
   /** listen to one kind of message ('pos', 'picked', 'busy', 'duel') */
@@ -20,8 +21,8 @@ function supabaseTransport(matchId: string): Transport {
   return {
     on: (event, cb) => { ch.on('broadcast', { event }, ({ payload }) => cb(payload)) },
     send: (event, payload) => { void ch.send({ type: 'broadcast', event, payload }) },
-    start: () => { ch.subscribe() },
-    close: () => { void supabase.removeChannel(ch) },
+    start: () => { ch.subscribe(); netStats.via = 'supabase'; netStats.ping = null },
+    close: () => { void supabase.removeChannel(ch); if (netStats.via === 'supabase') netStats.via = null },
   }
 }
 
@@ -34,6 +35,7 @@ function socketTransport(base: string, matchId: string, me: string, onGiveUp: ()
   let failures = 0 // connection attempts in a row that never opened
   let tries = 0
   let timer = 0
+  let pong: (() => void) | null = null
   const connect = async () => {
     if (closed) return
     const token = (await supabase.auth.getSession()).data.session?.access_token
@@ -42,8 +44,18 @@ function socketTransport(base: string, matchId: string, me: string, onGiveUp: ()
     const s = new WebSocket(`${base}/ws?match=${encodeURIComponent(matchId)}&name=${encodeURIComponent(me)}&token=${encodeURIComponent(token)}`)
     ws = s
     let opened = false
-    s.onopen = () => { opened = true; everOpen = true; tries = 0; failures = 0 }
+    s.onopen = () => {
+      opened = true; everOpen = true; tries = 0; failures = 0; netStats.via = 'cloudflare'
+      // the ping: the server answers "ping" with "pong" by itself (it costs nothing), the time between is our delay
+      let sentAt = 0
+      const ask = () => { if (s.readyState === WebSocket.OPEN) { sentAt = performance.now(); s.send('ping') } }
+      ask()
+      const iv = window.setInterval(ask, 2500)
+      pong = (): void => { const ms = Math.round(performance.now() - sentAt); netStats.ping = netStats.ping === null ? ms : Math.round(netStats.ping * 0.6 + ms * 0.4) }
+      s.addEventListener('close', () => { window.clearInterval(iv); pong = null; netStats.ping = null })
+    }
     s.onmessage = (e) => {
+      if (e.data === 'pong') { pong?.(); return }
       try {
         const m = JSON.parse(e.data as string) as { e?: string; p?: unknown }
         if (typeof m.e === 'string') for (const cb of handlers.get(m.e) ?? []) cb(m.p)
@@ -52,7 +64,7 @@ function socketTransport(base: string, matchId: string, me: string, onGiveUp: ()
     s.onclose = () => {
       ws = null
       if (closed) return
-      if (!opened && ++failures >= 3 && !everOpen) { closed = true; onGiveUp(); return }
+      if (!opened && ++failures >= (everOpen ? 8 : 3)) { closed = true; onGiveUp(); return } // (never let in: 3 tries; lost it later: about 20 s of failures)
       timer = window.setTimeout(() => void connect(), Math.min(5000, 300 * 2 ** tries++)) // (reconnects by itself, a little slower each time)
     }
   }
@@ -63,6 +75,9 @@ function socketTransport(base: string, matchId: string, me: string, onGiveUp: ()
     close: () => { closed = true; window.clearTimeout(timer); try { ws?.close() } catch { /* already closed */ } ws = null },
   }
 }
+
+/** where to read today's usage of the realtime server (null when the match does not use it) */
+export const statsUrl = (): string | null => (SOCKET_URL ? SOCKET_URL.replace(/^ws/, 'http') + '/stats' : null)
 
 export function makeTransport(matchId: string, me: string): Transport {
   if (!SOCKET_URL) return supabaseTransport(matchId)

@@ -1,3 +1,5 @@
+import NetPanel from './NetPanel'
+import { isWorldAdmin } from '../world/publish'
 import { useKeyAction } from '../game/keys'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { type GameEvents, type GameHandle } from '../game/GameView'
@@ -78,6 +80,9 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
   const collapseRef = useRef(false)
   collapseRef.current = collapseOn
   const [menuOpen, setMenuOpen] = useState(false)
+  const [isOwner, setIsOwner] = useState(false) // the owner's account sees the connection panel (ping, Cloudflare usage)
+  const devNet = import.meta.env.DEV && new URLSearchParams(location.search).has('net') // (developer test of the panel: ?net)
+  useEffect(() => { if (royale && username) void isWorldAdmin().then(setIsOwner) }, [])
   const [panel, setPanel] = useState<null | 'settings' | 'team' | 'bag' | 'pc' | 'chat'>(null)
   const [teamSel, setTeamSel] = useState<number | null>(null) // a Pokémon clicked in the side bar opens its summary straight away
   const [caughtMon, setCaughtMon] = useState<Mon | null>(null) // right after a catch: its summary
@@ -737,6 +742,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
         )}
       </div>
 
+      {((royale && isOwner && username) || devNet) && <NetPanel me={username ?? 'DevUser'} />}
       <PartyBar hidden={menuOpen} team={trainer.team} onOpen={(slot) => { setTeamSel(slot ?? null); setPanel('team') }} onReorder={(a, b) => { const team = [...trainerRef.current.team]; if (a === b || !team[a] || !team[b]) return; [team[a], team[b]] = [team[b], team[a]]; setTrainer({ ...trainerRef.current, team }) }} />
 
       {waiting && <div className="match-wait panel" style={hudFrame ?? undefined}><strong>Get ready!</strong><span>The match begins in {Math.max(0, Math.ceil((t0 - now) / 1000))} seconds. Everybody is picking a starter…</span></div>}

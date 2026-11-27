@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { makeTransport } from './transport'
+import { netStats } from './netStats'
 import type { Look } from '../game/character'
 import type { OtherPlayer } from '../game/GameView'
 import type { Dir } from '../game/world'
@@ -49,8 +50,9 @@ export function useMatchPlayers(matchId: string | null, me: string | null, look:
     if (!matchId || !me) return
     const tr = makeTransport(matchId, me)
     tr.on('pos', (payload) => {
-      const p = payload as { n?: string; x?: number; y?: number; d?: Dir; l?: Look }
+      const p = payload as { n?: string; x?: number; y?: number; d?: Dir; l?: Look; pg?: number }
       if (!p || typeof p.n !== 'string' || p.n === me || typeof p.x !== 'number' || typeof p.y !== 'number') return
+      if (typeof p.pg === 'number') netStats.peers.set(p.n, p.pg)
       const r = others.current.get(p.n)
       if (r) { r.tx = p.x; r.ty = p.y; r.dir = (p.d ?? 0) as Dir; r.seen = Date.now(); if (p.l) r.look = p.l }
       else others.current.set(p.n, { name: p.n, tx: p.x, ty: p.y, x: p.x, y: p.y, dir: (p.d ?? 0) as Dir, look: p.l as Look, seen: Date.now(), moving: false, t: Date.now() })
@@ -82,9 +84,9 @@ export function useMatchPlayers(matchId: string | null, me: string | null, look:
       lastSent = { x: pos.x, y: pos.y, d: pos.dir, at: now }
       const withLook = now - sentLook > 4000 // the look changes rarely, so send it every few seconds only
       if (withLook) sentLook = now
-      tr.send('pos', { n: me, x: pos.x, y: pos.y, d: pos.dir, ...(withLook ? { l: lookRef.current } : {}) })
+      tr.send('pos', { n: me, x: pos.x, y: pos.y, d: pos.dir, ...(netStats.ping !== null ? { pg: netStats.ping } : {}), ...(withLook ? { l: lookRef.current } : {}) })
     }, SEND_CHECK_MS)
-    return () => { window.clearInterval(id); tr.close(); others.current.clear(); picked.current.clear(); allDone.current = false; if (chanRef) chanRef.current = null }
+    return () => { window.clearInterval(id); tr.close(); others.current.clear(); netStats.peers.clear(); picked.current.clear(); allDone.current = false; if (chanRef) chanRef.current = null }
   }, [matchId, me])
 
   return (): OtherPlayer[] => {
