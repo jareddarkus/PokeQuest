@@ -78,7 +78,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
   const startRef = useRef(royale ? t0 + RULES.startDelaySeconds * 1000 : Date.now())
   const t0Ref = useRef(t0)
   t0Ref.current = t0
-  const [collapseOn, setCollapseOn] = useState(RULES.collapseOn > 0) // (the shrinking circle follows the owner's rules; on by default, also on the practice island)
+  const [collapseOn] = useState(RULES.collapseOn > 0) // (the shrinking circle follows the owner's rules; on by default, also on the practice island)
   const [now, setNow] = useState(Date.now())
   useEffect(() => { if (!royale) return; const id = window.setInterval(() => setNow(Date.now()), 500); return () => window.clearInterval(id) }, [])
   const waiting = !!royale && now < t0 // everybody waits for the others until the match really begins
@@ -729,7 +729,6 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
     return <StarterPick until={royale ? royale.startsAt + RULES.pickSeconds * 1000 - 1000 : undefined} onPick={pickStarter} />
   }
 
-  const alive = trainer.team.filter((m) => m.hp > 0).length
   return (
     <div className={`fullscreen ${settings.showDpad ? (settings.dpadSide === 'left' ? 'dpad-l' : 'dpad-r') : ''}`}>
       <GameView3D
@@ -752,17 +751,10 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
         follower={!eliminated && trainer.team[0] && trainer.team[0].hp > 0 ? { species: trainer.team[0].species, shiny: !!trainer.team[0].shiny } : null}
       />
 
-      <div className="hud-top-left panel" style={hudFrame ?? undefined}>
-        <strong>Ring {ring}</strong>
-        <span>
-          {waiting ? 'Island falls when the match starts' : collapseOn ? (clock.ring >= 4 ? (tourRound > 0 ? `Tournament · round ${tourRound}` : clock.seconds > 0 ? `Only the peak is left · the tournament starts in ${fmtClock(clock.seconds)}` : 'The tournament is about to begin…') : clock.falling ? `Ring ${clock.ring} is crumbling!` : `Ring ${clock.ring} falls in ${fmtClock(clock.seconds)}`) : 'Island collapse is off'}
-        </span>
-        <span>Team {alive}/{trainer.team.length} fit · {trainer.bag['Poke Ball'] ?? 0} Poké Balls</span>
-        {!royale && (
-          <label className="mini">
-            <input type="checkbox" checked={collapseOn} onChange={(e) => setCollapseOn(e.target.checked)} /> Test collapse
-          </label>
-        )}
+      {/* the clock: the countdown of the ring that falls next (top, in the middle, at the height of the Menu button) and under it that ring */}
+      <div className={`hud-clock ${collapseOn && !waiting && clock.falling && clock.ring < 4 ? 'falling' : ''}`} style={hudFrame ?? undefined}>
+        {collapseOn && !waiting && !(clock.ring >= 4 && tourRound > 0) && (clock.ring < 4 || clock.seconds > 0) && <strong>{fmtClock(clock.seconds)}</strong>}
+        <span>{clock.ring >= 4 ? (tourRound > 0 ? (langRef.current === 'es' ? `Torneo · ronda ${tourRound}` : `Tournament · round ${tourRound}`) : (langRef.current === 'es' ? 'Cima' : 'Peak')) : (langRef.current === 'es' ? `Anillo ${clock.ring}` : `Ring ${clock.ring}`)}</span>
       </div>
 
       <div className="hud-top-right">
@@ -785,13 +777,6 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
       <PartyBar hidden={menuOpen} team={trainer.team} onOpen={(slot) => { setTeamSel(slot ?? null); setPanel('team') }} onReorder={(a, b) => { const team = [...trainerRef.current.team]; if (a === b || !team[a] || !team[b]) return; [team[a], team[b]] = [team[b], team[a]]; setTrainer({ ...trainerRef.current, team }) }} />
 
       {waiting && <div className="match-wait panel" style={hudFrame ?? undefined}><strong>Get ready!</strong><span>The match begins in {Math.max(0, Math.ceil((t0 - now) / 1000))} seconds. Everybody is picking a starter…</span></div>}
-
-      {!battle && !royale && (
-        <div className="hud-practice panel" style={hudFrame ?? undefined}>
-          <small>Practice tools</small>
-          <button onClick={() => { void music.heal(); setTrainer({ ...trainer, team: trainer.team.map((m) => ({ ...m, hp: maxHp(m) })) }) }}>Heal team</button>
-        </div>
-      )}
 
       {speech && (
         <div

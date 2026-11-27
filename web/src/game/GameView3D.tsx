@@ -251,6 +251,37 @@ export default function GameView3D(props: Props) {
     const sea = new THREE.Mesh(new THREE.PlaneGeometry(600, 600).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: seaTex ? 0xffffff : '#3a7fc0', map: seaTex ?? undefined }))
     sea.position.set(SIZE / 2, built.waterY - 0.03, SIZE / 2)
     scene.add(sea)
+    // the shore: the game's own shore picture (sea_zanami, 1 x 4 tiles: white foam at the land side, fading into the blue of the sea) laid along the edge of the island, as a
+    // ring of four strips that follows the edge while the island sinks
+    const foamTex = built.textureNamed('sea_zanami', true)
+    const FOAM_W = 4
+    const foamPos = new Float32Array(4 * 4 * 3), foamUv = new Float32Array(4 * 4 * 2)
+    const foamGeo = new THREE.BufferGeometry()
+    foamGeo.setAttribute('position', new THREE.BufferAttribute(foamPos, 3))
+    foamGeo.setAttribute('uv', new THREE.BufferAttribute(foamUv, 2))
+    foamGeo.setIndex([0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7, 8, 9, 10, 8, 10, 11, 12, 13, 14, 12, 14, 15])
+    const foam = new THREE.Mesh(foamGeo, new THREE.MeshBasicMaterial({ map: foamTex ?? undefined, color: foamTex ? 0xffffff : 0xdff4ff, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3, side: THREE.DoubleSide }))
+    foam.frustumCulled = false; foam.renderOrder = 1
+    scene.add(foam)
+    const setFoam = (r: number): void => {
+      const e = r - 1.0, o = e + FOAM_W, y = built.waterY + 0.015, cc = SIZE / 2
+      // [x0, z0, x1, z1, x2, z2, x3, z3] of every strip: inner edge (x0,z0)-(x1,z1), outer edge (x2,z2)-(x3,z3); u runs along the strip, v from the land (0) outwards (1)
+      const strips = [
+        [cc - o, cc - e, cc + o, cc - e, cc + o, cc - o, cc - o, cc - o], // north
+        [cc - o, cc + e, cc + o, cc + e, cc + o, cc + o, cc - o, cc + o], // south
+        [cc - e, cc - o, cc - e, cc + o, cc - o, cc + o, cc - o, cc - o], // west (inner edge is x = cc - e)
+        [cc + e, cc - o, cc + e, cc + o, cc + o, cc + o, cc + o, cc - o], // east
+      ]
+      strips.forEach((q, s) => {
+        for (let k = 0; k < 4; k++) {
+          foamPos.set([q[k * 2], y, q[k * 2 + 1]], (s * 4 + k) * 3)
+          const along = s < 2 ? q[k * 2] : q[k * 2 + 1] // (north / south: along x; west / east: along z)
+          foamUv.set([along, k < 2 ? 0 : 1], (s * 4 + k) * 2)
+        }
+      })
+      foamGeo.attributes.position.needsUpdate = true; foamGeo.attributes.uv.needsUpdate = true
+    }
+    setFoam(79)
 
     const heightAt = (fx: number, fz: number): number => {
       const cx = Math.min(SIZE - 1.001, Math.max(0, fx - 0.5))
@@ -289,13 +320,17 @@ export default function GameView3D(props: Props) {
       const s = new THREE.Sprite(mat)
       s.center.set(0.5, 0)
       s.scale.set(3, 0.75, 1)
-      s.position.set(g.x + 0.5, gy + 0.2, g.y + 0.5)
+      s.position.set(g.x + 0.5, gy + 2.35, g.y + 0.5) // (right above the entrance, not lying on the ground in front of it)
       scene.add(s)
       const part = gymParts.find((q) => q.x === g.x && q.y === g.y)
       if (part) part.things.push(s); else gymParts.push({ x: g.x, y: g.y, things: [s] })
     })
 
     // the gym buildings just closed some tiles: open the ways again so that every ring can still be walked all the way round (a sand path over the map)
+    if (built.pathMask) { // every path is walkable: a path tile that is a tree, a rock or water (outside the gym buildings) is ground
+      const pm = built.pathMask
+      for (let i = 0; i < SIZE * SIZE; i++) if (pm[i] && (world.tiles[i] === T.Tree || world.tiles[i] === T.Water)) world.tiles[i] = T.Grass
+    }
     if (world.carved) {
       const more = connectRings(world.tiles)
       if (more.length) {
@@ -1066,6 +1101,7 @@ export default function GameView3D(props: Props) {
       const u = built.uniforms
       u.uTime.value = now / 1000
       u.uCut.value = elapsed === null ? 999 : collapseRadius(elapsedSec)
+      setFoam(elapsed === null ? 79 : Math.min(79, collapseRadius(elapsedSec)))
       u.uWarn.value = elapsed !== null && collapseWarn(elapsedSec) ? 1 : 0
 
       renderer.render(scene, camera)

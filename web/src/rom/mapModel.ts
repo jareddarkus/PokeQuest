@@ -48,8 +48,8 @@ export const animatedTextures: Array<{ tex: THREE.Texture; anim: MatAnim }> = []
 
 const textureCache = new WeakMap<object, Map<string, THREE.Texture>>()
 
-const SINK0 = 'transformed.y -= smoothstep(uCut - 2.5, uCut, pqd0) * 1.6;\n'
-const SINK1 = 'transformed.y -= smoothstep(uCut - 2.5, uCut, max(abs(vWPos.x - uCenter.x), abs(vWPos.z - uCenter.y))) * 1.6;\n'
+const SINK0 = 'transformed.y -= smoothstep(uCut - 1.2, uCut, pqd0) * 2.0;\n'
+const SINK1 = 'transformed.y -= smoothstep(uCut - 1.2, uCut, max(abs(vWPos.x - uCenter.x), abs(vWPos.z - uCenter.y))) * 2.0;\n'
 /** Lets a material of ours disappear with the collapsing island and glow red before it falls (same as the map). */
 export function applyClip(mat: THREE.Material, clip: ClipUniforms): void {
   mat.onBeforeCompile = (shader) => {

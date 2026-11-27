@@ -20,7 +20,7 @@ export function liftAt(d: number): number {
 const BEACH = 3 // the outermost tiles are sand
 const ROAD_R = 67 // ring distance of the ring road
 
-const SHOW_SIDE = !new URLSearchParams(location.search).has('noside')
+const SHOW_SIDE = new URLSearchParams(location.search).has('side') // (the upright side picture of the pines stretches into long streaks when a tree is far from the middle of the screen or the zoom is high: off)
 /** The 2 x 2 tile cells of ring 1 that are forest (top-left tile numbers), made by prepareMeadow. */
 let forestCells: number[] = []
 
@@ -140,6 +140,14 @@ export function carveCenterPaths(world: World, built: BuiltWorld): number[] {
       for (let k = 2; k <= 9; k++) { if (!open(sx, sy + k)) break; lay(sx, sy + k, g.ring) }
     }
   }
+  // single grass tiles that sit inside the paths (a notch with sand on three or four sides) become path too: no holes in a path
+  if (pm) {
+    for (let y = 1; y < SIZE - 1; y++) for (let x = 1; x < SIZE - 1; x++) {
+      const i = idx(x, y)
+      if (pm[i] || world.tiles[i] !== T.Grass || dist(x, y) < RING_INNER[0] || dist(x, y) > RADIUS - BEACH) continue
+      if (pm[i - 1] + pm[i + 1] + pm[i - SIZE] + pm[i + SIZE] >= 3) { pm[i] = 1; out.push(i); protectedTiles.add(i) }
+    }
+  }
   return out
 }
 
@@ -198,10 +206,17 @@ function groundMat(tex: THREE.Texture | null, color: number, built: BuiltWorld):
 
 /** A flat square strip (x0..x1, z0..z1) at height y with the picture repeating every 4 tiles. */
 function strip(pos: number[], uv: number[], idx: number[], x0: number, x1: number, z0: number, z1: number, y: number): void {
-  const b = pos.length / 3
-  pos.push(x0, y, z0, x1, y, z0, x1, y, z1, x0, y, z1)
-  uv.push(x0 / 4, z0 / 4, x1 / 4, z0 / 4, x1 / 4, z1 / 4, x0 / 4, z1 / 4)
-  idx.push(b, b + 1, b + 2, b, b + 2, b + 3)
+  // (cut into squares of about one tile: the ground that sinks into the sea at the edge of the island bends vertex by vertex, so long quads would tilt the whole ring)
+  const nx = Math.max(1, Math.ceil(x1 - x0)), nz = Math.max(1, Math.ceil(z1 - z0))
+  for (let j = 0; j < nz; j++) {
+    for (let i = 0; i < nx; i++) {
+      const xa = x0 + ((x1 - x0) * i) / nx, xb = x0 + ((x1 - x0) * (i + 1)) / nx, za = z0 + ((z1 - z0) * j) / nz, zb = z0 + ((z1 - z0) * (j + 1)) / nz
+      const b = pos.length / 3
+      pos.push(xa, y, za, xb, y, za, xb, y, zb, xa, y, zb)
+      uv.push(xa / 4, za / 4, xb / 4, za / 4, xb / 4, zb / 4, xa / 4, zb / 4)
+      idx.push(b, b + 1, b + 2, b, b + 2, b + 3)
+    }
+  }
 }
 /** A square ring of flat ground from ring distance a to b (four strips). */
 function squareRing(a: number, b: number, y: number): THREE.BufferGeometry {
@@ -276,6 +291,29 @@ function roadTile(sand: THREE.DataTexture | null, fringe: THREE.DataTexture | nu
   return t
 }
 
+/**
+ * The grass of the game's road-edge picture is a darker green than the meadow ground picture, so every path was framed by a dark band. The grass pixels of the edge are brightened by the
+ * difference of the two averages, so the path leads into the meadow without a seam.
+ */
+function matchFringeToMeadow(fringe: THREE.DataTexture | null, meadow: THREE.DataTexture | null): THREE.DataTexture | null {
+  if (!fringe || !meadow) return fringe
+  const isGrass = (r: number, g: number, b: number) => g > r + 8 && g > b + 20
+  const md = meadow.image.data as unknown as Uint8Array, fd = fringe.image.data as unknown as Uint8Array
+  let mr = 0, mg = 0, mb = 0, mc = 0, fr = 0, fg = 0, fb = 0, fc = 0
+  for (let i = 0; i < meadow.image.width * meadow.image.height; i++) { mr += md[i * 4]; mg += md[i * 4 + 1]; mb += md[i * 4 + 2]; mc++ }
+  for (let i = 0; i < fringe.image.width * fringe.image.height; i++) if (fd[i * 4 + 3] >= 128 && isGrass(fd[i * 4], fd[i * 4 + 1], fd[i * 4 + 2])) { fr += fd[i * 4]; fg += fd[i * 4 + 1]; fb += fd[i * 4 + 2]; fc++ }
+  if (!mc || !fc) return fringe
+  const dr = mr / mc - fr / fc, dg = mg / mc - fg / fc, db = mb / mc - fb / fc
+  const out = new Uint8Array(fd)
+  for (let i = 0; i < fringe.image.width * fringe.image.height; i++) {
+    if (out[i * 4 + 3] < 128 || !isGrass(out[i * 4], out[i * 4 + 1], out[i * 4 + 2])) continue
+    out[i * 4] = Math.min(255, Math.max(0, out[i * 4] + dr)); out[i * 4 + 1] = Math.min(255, Math.max(0, out[i * 4 + 1] + dg)); out[i * 4 + 2] = Math.min(255, Math.max(0, out[i * 4 + 2] + db))
+  }
+  const t = new THREE.DataTexture(out, fringe.image.width, fringe.image.height, THREE.RGBAFormat)
+  t.needsUpdate = true
+  return t
+}
+
 /** The pictures of the meadow: ground, beach, road tiles with grass edges, tall grass and the cliffs between the rings. */
 export function buildMeadowVisuals(world: World, built: BuiltWorld, extra: number[]): THREE.Group {
   const g = new THREE.Group()
@@ -285,7 +323,7 @@ export function buildMeadowVisuals(world: World, built: BuiltWorld, extra: numbe
   const grass = built.textureNamed('grass01ax', true, green)
   const sand = built.textureNamed('sea_jimen', true, sandy)
   const roadSand = built.textureNamed('michi01b', false, sandy)
-  const roadEdge = built.textureNamed('michi01a', false, sandy)
+  const roadEdge = matchFringeToMeadow(built.textureNamed('michi01a', false, sandy), grass)
   const leaf1 = built.textureNamed('kusa_ec1', true, green), leaf2 = built.textureNamed('kusa_ec2', true, green), leaf3 = built.textureNamed('kusa_ec3', true, green)
   const mesh = (geo: THREE.BufferGeometry, mat: THREE.Material, y = 0) => { const m = new THREE.Mesh(geo, mat); m.position.y = y; m.frustumCulled = false; g.add(m) }
   mesh(squareRing(RING_INNER[0] - 0.2, RADIUS - BEACH, hm), groundMat(grass, 0x59b84a, built))
