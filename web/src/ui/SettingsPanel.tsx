@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useLang } from '../i18n'
 import type { Settings } from '../game/settings'
+import AdminSettings from './AdminSettings'
+import { isWorldAdmin } from '../world/publish'
 import { bindKey, capture, KEY_ACTIONS, keyLabel, resetKeys, useKeyBindings, type KeyAction } from '../game/keys'
 
 interface Props {
@@ -20,6 +22,9 @@ export default function SettingsPanel({ settings, onChange, onClose, onCustomize
   const lang = useLang()
   const names = ACTION_NAMES[lang]
   const [listen, setListen] = useState<KeyAction | null>(null)
+  const [tab, setTab] = useState<'general' | 'admin'>('general')
+  const [admin, setAdmin] = useState(false) // (the owner's account sees the Admin tab)
+  useEffect(() => { void isWorldAdmin().then((a) => setAdmin(a || (import.meta.env.DEV && new URLSearchParams(location.search).has('devadmin')))).catch(() => setAdmin(false)) }, [])
   useEffect(() => {
     if (!listen) return
     capture.on = true
@@ -34,8 +39,15 @@ export default function SettingsPanel({ settings, onChange, onClose, onCustomize
   }, [listen])
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="panel modal" onClick={(e) => e.stopPropagation()}>
+      <div className={`panel modal${tab === 'admin' ? ' wide' : ''}`} onClick={(e) => e.stopPropagation()}>
         <h2>Settings</h2>
+        {admin && (
+          <div className="seg">
+            <button className={tab === 'general' ? 'on' : ''} onClick={() => setTab('general')}>{lang === 'es' ? 'General' : 'General'}</button>
+            <button className={tab === 'admin' ? 'on' : ''} onClick={() => setTab('admin')}>Admin</button>
+          </div>
+        )}
+        {tab === 'admin' && admin ? <AdminSettings /> : (<>
 
         <div className="row">
           <span>Theme</span>
@@ -109,6 +121,7 @@ export default function SettingsPanel({ settings, onChange, onClose, onCustomize
           </div>
         ))}
         <div className="btn-row"><button onClick={() => { setListen(null); resetKeys() }}>{lang === 'es' ? 'Restablecer teclas' : 'Reset keys'}</button></div>
+        </>)}
 
         <div className="btn-row">
           {onCustomize && <button onClick={onCustomize}>Customize character</button>}

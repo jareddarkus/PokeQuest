@@ -1,4 +1,5 @@
 import type { StatId } from './dex'
+import { RULES } from '../game/rules'
 
 export type ItemKind = 'ball' | 'heal' | 'revive' | 'stone' | 'vitamin' | 'held' | 'candy' | 'passive' | 'pp'
 
@@ -89,5 +90,11 @@ export function rollPickup(ring: number, rng: () => number): Record<string, numb
   return out
 }
 
-/** What every player starts a match with. */
-export const STARTING_BAG: Record<string, number> = { 'Poke Ball': 5, 'Great Ball': 5, Potion: 3, Revive: 5 }
+/** What every player starts a match with (the owner's rules: Settings → Admin). */
+export function startingBag(): Record<string, number> {
+  const r = RULES
+  const all: Record<string, number> = { 'Poke Ball': r.startPokeBalls, 'Great Ball': r.startGreatBalls, 'Ultra Ball': r.startUltraBalls, Potion: r.startPotions, 'Super Potion': r.startSuperPotions, Revive: r.startRevives }
+  const out: Record<string, number> = {}
+  for (const [k, v] of Object.entries(all)) if (v > 0) out[k] = Math.round(v)
+  return out
+}

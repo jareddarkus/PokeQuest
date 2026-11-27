@@ -72,7 +72,7 @@ export function expGain(foeSpecies: string, foeLevel: number, trainer: boolean, 
   const bs = Dex.species.get(foeSpecies).baseStats
   const bst = bs.hp + bs.atk + bs.def + bs.spa + bs.spd + bs.spe
   const base = bst / 5
-  return Math.max(1, Math.floor(((base * foeLevel) / 7) * RULES.expMultiplier * (trainer ? 1.5 : 1) * share))
+  return Math.max(1, Math.floor(((base * foeLevel) / 7) * RULES.expMultiplier * (trainer ? RULES.trainerExpPercent / 100 : 1) * share))
 }
 
 export async function gainExp(m: Mon, amount: number): Promise<LevelUpResult> {

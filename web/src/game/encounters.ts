@@ -1,8 +1,9 @@
 import { createMon, ringLevels, ringPool, type Mon } from '../data/dex'
 import type { PokeGroup } from '../world/events'
+import { RULES } from './rules'
 
 /** Chance of a wild Pokémon appearing on each step in tall grass. */
-export const ENCOUNTER_RATE = import.meta.env.DEV && new URLSearchParams(location.search).has('enc') ? 1 : 0.11 // ?enc = test switch (dev only)
+export const encounterRate = (): number => (import.meta.env.DEV && new URLSearchParams(location.search).has('enc') ? 1 : RULES.encounterPercent / 100) // ?enc = test switch (dev only)
 
 const pickOne = <T,>(list: T[], rng: () => number): T => list[Math.floor(rng() * list.length)]
 
@@ -10,7 +11,7 @@ export async function wildEncounter(ring: number, rng: () => number = Math.rando
   const [lo, hi] = ringLevels(ring)
   const level = lo + Math.floor(rng() * (hi - lo + 1))
   // legendaries only start to show up in ring 3 and are rare
-  const legendary = ring >= 3 && rng() < (ring === 3 ? 0.03 : 0.06)
+  const legendary = ring >= 3 && rng() < (ring === 3 ? RULES.legendary3Percent : RULES.legendary4Percent) / 100
   const pool = ringPool(Math.min(3, Math.max(1, ring)), legendary)
   const species = pickOne(pool.length ? pool : ringPool(1, false), rng)
   return createMon(species.name, legendary ? Math.max(level, 30) : level, rng)

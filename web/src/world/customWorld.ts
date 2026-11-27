@@ -104,6 +104,12 @@ const KEY = 'pq.world.custom.v1'
 export function saveLocal(cw: CustomWorld): boolean {
   try { localStorage.setItem(KEY, encodeWorld(cw)); return true } catch { return false }
 }
+/** The draft that was in this browser before the editor loaded the world that is really in use (kept so nothing is lost). */
+const BACKUP = 'pq.world.custom.backup.v1'
+export function saveBackup(cw: CustomWorld): void { try { localStorage.setItem(BACKUP, encodeWorld(cw)) } catch { /* no room: ignore */ } }
+export function loadBackup(): CustomWorld | null {
+  try { const t = localStorage.getItem(BACKUP); return t ? decodeWorld(t) : null } catch { return null }
+}
 export function loadLocal(): CustomWorld | null {
   try { const t = localStorage.getItem(KEY); return t ? decodeWorld(t) : null } catch { return null }
 }

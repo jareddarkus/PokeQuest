@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '../supabase'
 import type { Look } from '../game/character'
+import { DEFAULT_RULES, RULES, type Rules } from '../game/rules'
+import { fetchGameConfig } from '../world/gameConfig'
 
 export interface LobbyPlayer { name: string; ready: boolean; joined: number; look: Look }
 /** What every player gets when the match starts. */
-export interface MatchInfo { id: string; seed: number; players: string[]; startsAt: number }
+export interface MatchInfo { id: string; seed: number; players: string[]; startsAt: number; /** the owner's rules at the moment the match was created: every player of the match uses these */ rules?: Partial<Rules> }
 
 /**
  * The waiting room: everybody who is on the "lobby:main" channel is listed (Supabase presence). When there are at least 2 players and all of them
@@ -66,11 +68,15 @@ export function useLobby(username: string, look: Look) {
 
   // the host (first to join) starts the match when everyone is ready
   useEffect(() => {
-    if (arenaBusy || matchRef.current || announced.current || players.length < 2) return
+    if (arenaBusy || matchRef.current || announced.current || players.length < RULES.minPlayers) return
     if (players[0].name !== username || !players.every((p) => p.ready)) return
     announced.current = true
-    const info: MatchInfo = { id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, seed: Math.floor(Math.random() * 1e9), players: players.map((p) => p.name), startsAt: Date.now() + 6000 }
-    void chan.current?.send({ type: 'broadcast', event: 'start', payload: info })
+    void (async () => {
+      const rules = (await fetchGameConfig()) ?? undefined // (read now, so everybody in this match plays with exactly the same rules)
+      const secs = Math.max(1, Number(rules?.lobbySeconds ?? DEFAULT_RULES.lobbySeconds))
+      const info: MatchInfo = { id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, seed: Math.floor(Math.random() * 1e9), players: players.map((p) => p.name), startsAt: Date.now() + secs * 1000, rules }
+      void chan.current?.send({ type: 'broadcast', event: 'start', payload: info })
+    })()
   }, [players, username, arenaBusy])
 
   return { players, match, status, arenaBusy, setReady, me: players.find((p) => p.name === username) }

@@ -1,6 +1,6 @@
 // The Battle Royale island: 5 x 5 real Pokémon White 2 map chunks (160 x 160 tiles) cut into a circle of 4 rings.
 // The ground, trees, water and tall grass come from the game file; this file adds rings, gyms, trainers and items.
-import { RULES } from './rules'
+import { RULES, tournamentStart } from './rules'
 import { hash2, mulberry32, pick } from './rng'
 import type { PokeGroup } from '../world/events'
 
@@ -22,8 +22,6 @@ export const RADIUS = 78 // the island edge
 export const RING_WIDTH = 20
 /** Distances (in tiles from the centre) where ring 1, 2, 3, 4 start. Ring 4 is the peak. */
 export const RING_INNER = [60, 40, 20, 0] as const
-/** one Poké Ball for every square of this many tiles per side (smaller = more balls) */
-export const PICKUP_CELL = 13
 
 export const TYPES = [
   'Normal', 'Fire', 'Water', 'Electric', 'Grass', 'Ice', 'Fighting', 'Poison', 'Ground',
@@ -230,7 +228,7 @@ export function generateWorld(seed: number, ground: Uint8Array, opts: { barriers
   }
 
   // a Pokémon Center in each ring (1 - 3), on the north-east: it heals your team, and it is where you wake up when your whole team has fainted in that ring
-  for (let ring = 1; ring <= 3; ring++) {
+  for (let ring = 1; ring <= 3 && RULES.centersOn > 0; ring++) {
     let spot: { x: number; y: number } | null = null
     // the north-east first, then around the ring (the walkable ground of a ring is not everywhere)
     for (const deg of [0, 12, -12, 24, -24, 36, -36, 48, -48, 60, -60, 90, -90, 120, -120, 150, -150, 180]) {
@@ -284,6 +282,7 @@ export function generateWorld(seed: number, ground: Uint8Array, opts: { barriers
   // over the whole island: a bigger ring gets more of them, a small one fewer, and there are no empty places or heaps
   const pickups: PickupSpec[] = []
   const perRing = [0, 0, 0, 0]
+  const PICKUP_CELL = RULES.pickupCell // (one item in every square of this many tiles per side: a smaller number = more items)
   for (let cy = 0; cy * PICKUP_CELL < SIZE; cy++) {
     for (let cx = 0; cx * PICKUP_CELL < SIZE; cx++) {
       for (let tries = 0; tries < 40; tries++) {
@@ -350,12 +349,14 @@ export function generateWorld(seed: number, ground: Uint8Array, opts: { barriers
  * on it is sent to the next ring; after twice that time ring 2, after three times ring 3. Then only the peak is left.
  */
 /** Tiles further than this (from the centre) have fallen into the sea after `elapsed` seconds. */
+const ringStarts = (): number[] => [RULES.ring1Seconds, RULES.ring2Seconds, RULES.ring3Seconds]
+const ringFalls = (): number[] => [RULES.fall1Seconds, RULES.fall2Seconds, RULES.fall3Seconds]
 export function collapseRadius(elapsedSeconds: number): number {
-  const T0 = RULES.ringSeconds, F = Math.max(1, RULES.fallSeconds)
+  const S = ringStarts(), Fs = ringFalls()
   const outer = [RADIUS + 1, RING_INNER[0], RING_INNER[1]] // where ring 1, 2, 3 start from the outside
   let r = RADIUS + 1
   for (let k = 0; k < 3; k++) {
-    const start = (k + 1) * T0, target = RING_INNER[k]
+    const start = S[k], F = Math.max(1, Fs[k]), target = RING_INNER[k]
     if (elapsedSeconds >= start + F) r = Math.min(r, target)
     else if (elapsedSeconds > start) r = Math.min(r, outer[k] - (outer[k] - target) * ((elapsedSeconds - start) / F))
   }
@@ -364,19 +365,19 @@ export function collapseRadius(elapsedSeconds: number): number {
 
 /** What the clock says: which ring falls next and in how many seconds (or that it is falling now); after ring 3 only the peak is left. */
 export function collapseInfo(elapsedSeconds: number): { ring: number; seconds: number; falling: boolean } {
-  const T0 = RULES.ringSeconds, F = Math.max(1, RULES.fallSeconds)
+  const S = ringStarts(), Fs = ringFalls()
   for (let k = 0; k < 3; k++) {
-    const start = (k + 1) * T0
+    const start = S[k], F = Math.max(1, Fs[k])
     if (elapsedSeconds < start) return { ring: k + 1, seconds: start - elapsedSeconds, falling: false }
     if (elapsedSeconds < start + F) return { ring: k + 1, seconds: start + F - elapsedSeconds, falling: true }
   }
-  return { ring: 4, seconds: Math.max(0, 4 * T0 - elapsedSeconds), falling: false }
+  return { ring: 4, seconds: Math.max(0, tournamentStart() - elapsedSeconds), falling: false }
 }
 
 /** The warning (the ground shakes / reddens) shows for the last 20 seconds before a ring falls and while it falls. */
 export function collapseWarn(elapsedSeconds: number): boolean {
-  const T0 = RULES.ringSeconds, F = Math.max(1, RULES.fallSeconds)
-  for (let k = 0; k < 3; k++) { const start = (k + 1) * T0; if (elapsedSeconds > start - 20 && elapsedSeconds < start + F) return true }
+  const S = ringStarts(), Fs = ringFalls()
+  for (let k = 0; k < 3; k++) { const start = S[k]; if (RULES.warnSeconds > 0 && elapsedSeconds > start - RULES.warnSeconds && elapsedSeconds < start + Math.max(1, Fs[k])) return true }
   return false
 }
 

@@ -10,9 +10,9 @@ import { randomLook, type Look } from '../game/character'
 import { OW_TO_CLASS } from '../data/trainerClasses'
 import { useLang } from '../i18n'
 import type { Settings } from '../game/settings'
-import { ENCOUNTER_RATE, groupMon, groupTeam, gymTeam, trainerTeam, wildEncounter } from '../game/encounters'
+import { encounterRate, groupMon, groupTeam, gymTeam, trainerTeam, wildEncounter } from '../game/encounters'
 import { addItems, emptyTrainer, makeStarter, type Trainer } from '../game/state'
-import { ITEMS, STARTING_BAG, rollPickup } from '../data/items'
+import { ITEMS, startingBag, rollPickup } from '../data/items'
 import ItemIcon from './ItemIcon'
 import { createMon, maxHp, newUid, type Mon } from '../data/dex'
 import {
@@ -22,8 +22,9 @@ import BattleScreen, { CHAR_MS, TypedText, type BattleKind, type BattleOutcome, 
 import { addExtraGrass, buildMeadowVisuals, prepareMeadow } from '../game/meadow'
 import { buildCustomVisuals, type CustomWorld } from '../world/customWorld'
 import { fetchPublishedWorld } from '../world/publish'
+import { fetchGameConfig } from '../world/gameConfig'
 import { applyCustomEvents } from '../world/applyEvents'
-import { applyRules, RULES } from '../game/rules'
+import { applyRules, RULES, tournamentStart, type Rules } from '../game/rules'
 import { busyLine, leaderLine, lossLine, preBattleLine } from '../data/npcLines'
 import { BagPanel, CaughtPanel, PcPanel, TeamPanel } from './MenuPanels'
 import SettingsPanel from './SettingsPanel'
@@ -44,7 +45,7 @@ import { useChat } from './useChat'
 import { music } from '../audio/music'
 import { ProgressBar, type Progress } from './ProgressBar'
 
-export interface RoyaleInfo { id: string; seed: number; players: string[]; startsAt: number }
+export interface RoyaleInfo { id: string; seed: number; players: string[]; startsAt: number; rules?: Partial<Rules> }
 
 interface Props {
   /** set when this is a real match (from the waiting room) */
@@ -70,10 +71,10 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
   const [t0, setT0] = useState(royale ? royale.startsAt + 30_000 : 0)
   const handleRef = useRef<GameHandle | null>(null)
   if (import.meta.env.DEV) (globalThis as { __pqTp?: unknown }).__pqTp = (x: number, y: number) => handleRef.current?.teleport(x, y) // developer hook
-  const startRef = useRef(royale ? t0 : Date.now())
+  const startRef = useRef(royale ? t0 + RULES.startDelaySeconds * 1000 : Date.now())
   const t0Ref = useRef(t0)
   t0Ref.current = t0
-  const [collapseOn, setCollapseOn] = useState(true) // (the shrinking circle is on by default, also on the practice island)
+  const [collapseOn, setCollapseOn] = useState(RULES.collapseOn > 0) // (the shrinking circle follows the owner's rules; on by default, also on the practice island)
   const [now, setNow] = useState(Date.now())
   useEffect(() => { if (!royale) return; const id = window.setInterval(() => setNow(Date.now()), 500); return () => window.clearInterval(id) }, [])
   const waiting = !!royale && now < t0 // everybody waits for the others until the match really begins
@@ -137,7 +138,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
   const [ring, setRing] = useState(1)
   const [clock, setClock] = useState<{ ring: number; seconds: number; falling: boolean }>({ ring: 1, seconds: 300, falling: false })
   const [radius, setRadius] = useState(RADIUS)
-  const [trainer, setTrainerState] = useState<Trainer>(() => ({ ...emptyTrainer(), bag: { ...STARTING_BAG } }))
+  const [trainer, setTrainerState] = useState<Trainer>(() => ({ ...emptyTrainer(), bag: startingBag() }))
   const trainerRef = useRef(trainer)
   const langRef = useRef('en')
   langRef.current = useLang()
@@ -212,7 +213,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
     pickedMe: trainer.team.length > 0 || trainer.pc.length > 0,
     expected: royale.players,
     started: Date.now() >= t0Ref.current,
-    onAllPicked: () => { const nt = Date.now() + 1500; if (nt < t0Ref.current) { startRef.current = nt; t0Ref.current = nt; setT0(nt) } }, // everybody is ready: start right away
+    onAllPicked: () => { const nt = Date.now() + 1500; if (nt < t0Ref.current) { startRef.current = nt + RULES.startDelaySeconds * 1000; t0Ref.current = nt; setT0(nt) } }, // everybody is ready: start right away
     onBusy: (npc, by, on) => { if (on) busyNpcs.current.set(npc, { by, until: Date.now() + 9000 }); else busyNpcs.current.delete(npc) },
     onDuel: (m) => {
       if (m.type === 'ann') { const a = m.data as Announcement; if (a && typeof a.k === 'string') showAnnRef.current(a); return }
@@ -301,7 +302,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
       const pos = handleRef.current?.getPos()
       if (pos) setRing(ringAt(pos.x, pos.y))
       const el = (Date.now() - startRef.current) / 1000
-      if (royale && Date.now() >= t0Ref.current) for (let k = 1; k <= 3; k++) if (el >= k * RULES.ringSeconds + Math.max(1, RULES.fallSeconds) && !goneRings.current.has(k)) { goneRings.current.add(k); showAnnRef.current({ k: 'gone', n: k }) }
+      if (royale && Date.now() >= t0Ref.current) for (let k = 1; k <= 3; k++) if (el >= RULES[`ring${k}Seconds` as 'ring1Seconds'] + Math.max(1, RULES[`fall${k}Seconds` as 'fall1Seconds']) && !goneRings.current.has(k)) { goneRings.current.add(k); showAnnRef.current({ k: 'gone', n: k }) }
       if (pos && royale && !eliminatedRef.current) { // walking into a ring nearer the peak (higher number): announced (being pushed there by the storm is announced on its own)
         const rr = ringAt(pos.x, pos.y)
         if (prevRing.current && rr && rr > prevRing.current && Date.now() - pushedAt.current > 3000 && Date.now() >= t0Ref.current) announceRef.current({ k: 'ring', a: username ?? '', n: rr })
@@ -361,8 +362,10 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
   /** A Pokémon with all its HP and PP back. */
   const healedCopy = (m: Mon): Mon => { const { pp: _pp, ...rest } = m; void _pp; return JSON.parse(JSON.stringify({ ...rest, hp: maxHp(m) })) as Mon }
   /** Before two players fight each other, every Pokémon of both teams gets all its HP and PP back (items already used stay used): it is announced, and the healed team is returned. */
+  const duelTeam = (): Mon[] => (RULES.duelHeal > 0 ? trainerRef.current.team.map(healedCopy) : trainerRef.current.team) // (the owner can turn the full heal before duels off)
   const restoreForDuel = (): Mon[] => {
     const t = trainerRef.current
+    if (RULES.duelHeal <= 0) return t.team
     const team = t.team.map(healedCopy)
     setTrainer({ ...t, team })
     say('Before the fight your Pokémon were fully restored (HP and PP). Items you already used stay used.')
@@ -427,7 +430,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
       else if (outcome === 'win') { outPlayers.current.add(b.name ?? ''); applyLoss(tour.current, b.name ?? ''); announceRef.current({ k: 'beat', a: username ?? '', b: b.name ?? '', s: t.team.filter((m) => m.hp > 0).length }); say(`You beat ${b.name}! They are out of the match.`) }
       return
     }
-    if (outcome === 'lose') blackOut()
+    if (outcome === 'lose') { if (royale && RULES.respawnOnWipe <= 0) eliminateMe('wipe'); else blackOut() }
   }
 
   // two players that touch each other at the peak fight at once (the one whose name comes first asks)
@@ -437,7 +440,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
       if (battleRef.current || busy.current || eliminatedRef.current || duelPending.current || Date.now() < t0Ref.current || tour.current.round > 0) return
       const me = handleRef.current?.getPos()
       if (!me || ringAt(me.x, me.y) !== 4) return
-      const team = trainerRef.current.team.map(healedCopy)
+      const team = duelTeam()
       if (!team.length) return
       for (const o of players()) {
         if (outPlayers.current.has(o.id) || !(username < o.id)) continue
@@ -520,7 +523,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
     const me = username
     const id = window.setInterval(() => {
       const T = tour.current, now = Date.now()
-      if (now < t0Ref.current || now < startRef.current + 4 * RULES.ringSeconds * 1000 || T.champion) return
+      if (now < t0Ref.current || RULES.tournamentOn <= 0 || now < startRef.current + tournamentStart() * 1000 || T.champion) return
       const seen = new Set(players().map((o) => o.id)); seen.add(me)
       const everyone = royale.players.filter((n) => (n === me ? !eliminatedRef.current : !outPlayers.current.has(n)) && !T.losers.has(n))
       const present = everyone.filter((n) => seen.has(n))
@@ -543,7 +546,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
       // my own fight: the one whose name comes first asks (again every second until the other one is ready)
       const opp = opponentOf(T, me)
       if (opp && isPaired(T, me) && !eliminatedRef.current && me < opp && !battleRef.current && !busy.current && !duelPending.current && seen.has(opp)) {
-        const team = trainerRef.current.team.map(healedCopy)
+        const team = duelTeam()
         if (!team.length) return
         duelPending.current = opp
         void music.playSfx('fld:07')
@@ -587,7 +590,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
           else if (trig.type === 7 && trig.tx !== undefined && trig.ty !== undefined) { void music.playSfx('fld:KAIDAN'); handleRef.current?.teleport(trig.tx, trig.ty) }
           else if (trig.type === 8 && trig.text) say(trig.text)
         }
-        if (tile === T.Tall && Math.random() < ENCOUNTER_RATE && trainerRef.current.team.length > 0) {
+        if (tile === T.Tall && Math.random() < encounterRate() && trainerRef.current.team.length > 0) {
           const pos = handleRef.current?.getPos()
           const r = pos ? ringAt(pos.x, pos.y) : 1
           const gid = pos ? world.encGroup?.[Math.round(pos.y) * SIZE + Math.round(pos.x)] ?? 0 : 0
@@ -888,7 +891,9 @@ export default function PlayScreen(props: Props) {
       // the world the owner published (everybody plays the same one) unless a world is being tested from the editor
       const custom = props.custom ?? (await fetchPublishedWorld())
       if (!live) return
-      applyRules(custom?.rules) // the rules of that world (ring timing, legendary limit, items per battle)
+      // the rules: an old world's own rules (weakest), then the owner's saved settings. In a real match everybody uses the settings the match was created with.
+      applyRules(custom?.rules, props.royale ? props.royale.rules ?? (await fetchGameConfig()) : await fetchGameConfig())
+      if (!live) return
       let world: World
       if (custom) { // a world from the editor: its own ground, heights and models replace the real map
         setProg({ text: 'Drawing your world…', frac: 0.8, step: 4, steps: 5, done: 0, total: 1, unit: 'step' })

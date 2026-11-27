@@ -6,17 +6,16 @@ import { buildChunkWorld, type BuiltWorld } from '../rom/chunkWorld'
 import { loadWorldData } from '../rom/store'
 import { ProgressBar } from './ProgressBar'
 import { signIn } from '../supabase'
-import { claimWorldAdmin, currentUserId, isWorldAdmin, publishWorld, publishedInfo, unpublishWorld } from '../world/publish'
+import { claimWorldAdmin, currentUserId, fetchPublishedWorld, isWorldAdmin, publishWorld, publishedInfo, unpublishWorld } from '../world/publish'
 import { SIZE, T } from '../game/world'
-import { DEFAULT_RULES, type Rules } from '../game/rules'
 import { Dex } from '@pkmn/sim'
 import { EVENT_KINDS, EV, groupColor, kindOf, newEvent, newGroup, type GameEvent, type PokeGroup } from '../world/events'
 import {
-  DEFAULT_TEXTURE, MAX_LEVEL, buildCustomVisuals, cloneWorld, decodeWorld, emptyWorld, encodeWorld, heightOf, loadLocal, saveLocal, texIndex,
+  DEFAULT_TEXTURE, MAX_LEVEL, buildCustomVisuals, cloneWorld, decodeWorld, emptyWorld, encodeWorld, heightOf, loadBackup, loadLocal, saveBackup, saveLocal, texIndex,
   type CustomWorld,
 } from '../world/customWorld'
 
-type Tool = 'paint' | 'kind' | 'height' | 'model' | 'pine' | 'move' | 'erase' | 'event' | 'zones' | 'rules'
+type Tool = 'paint' | 'kind' | 'height' | 'model' | 'pine' | 'move' | 'erase' | 'event' | 'zones'
 
 const KINDS: Array<{ code: number; label: string; hint: string }> = [
   { code: T.Grass, label: 'Hierba', hint: 'Se puede andar' },
@@ -62,6 +61,7 @@ function thumbOfModel(obj: THREE.Object3D): string {
 
 export default function WorldEditor({ onExit, onPlay }: { onExit: () => void; onPlay: (cw: CustomWorld) => void }) {
   const [built, setBuilt] = useState<BuiltWorld | null>(null)
+  const [start, setStart] = useState<{ cw: CustomWorld; live: { name: string; at: string } | null } | null>(null)
   const [loadText, setLoadText] = useState('Leyendo el mapa de tu archivo del juego…')
   useEffect(() => {
     let live = true
@@ -73,16 +73,24 @@ export default function WorldEditor({ onExit, onPlay }: { onExit: () => void; on
       setLoadText('Preparando el editor…')
       await new Promise((r) => setTimeout(r, 30))
       setBuilt(buildChunkWorld(data))
+      // what the editor shows first is the world that is REALLY used to play (the published one); the draft that was in this browser is kept as a backup
+      const [pub, info] = await Promise.all([fetchPublishedWorld(), publishedInfo()])
+      const draft = loadLocal()
+      if (pub && draft && encodeWorld(draft) !== encodeWorld(pub)) saveBackup(draft)
+      if (!live) return
+      setStart({ cw: pub ?? draft ?? emptyWorld(), live: pub ? info : null })
     })()
     return () => { live = false }
   }, [])
-  if (!built) return <div className="fullscreen center menu-bg"><div className="panel card"><p className="sub">{loadText}</p><ProgressBar indeterminate p={{ text: 'Cargando…', frac: 0 }} /></div></div>
-  return <Editor built={built} onExit={onExit} onPlay={onPlay} />
+  if (!built || !start) return <div className="fullscreen center menu-bg"><div className="panel card"><p className="sub">{built ? 'Cargando el mundo que se está usando…' : loadText}</p><ProgressBar indeterminate p={{ text: 'Cargando…', frac: 0 }} /></div></div>
+  return <Editor built={built} initial={start.cw} initialLive={start.live} onExit={onExit} onPlay={onPlay} />
 }
 
-function Editor({ built, onExit, onPlay }: { built: BuiltWorld; onExit: () => void; onPlay: (cw: CustomWorld) => void }) {
+function Editor({ built, initial, initialLive, onExit, onPlay }: { built: BuiltWorld; initial: CustomWorld; initialLive: { name: string; at: string } | null; onExit: () => void; onPlay: (cw: CustomWorld) => void }) {
   const mountRef = useRef<HTMLDivElement>(null)
-  const cwRef = useRef<CustomWorld>(loadLocal() ?? emptyWorld())
+  const cwRef = useRef<CustomWorld>(initial)
+  const [live, setLive] = useState(initialLive) // the world that is in use right now (null: the normal island)
+  const [hasBackup, setHasBackup] = useState(() => !!loadBackup())
   const [tool, setTool] = useState<Tool>('paint')
   const [brush, setBrush] = useState(2)
   const [selTex, setSelTex] = useState(DEFAULT_TEXTURE)
@@ -160,6 +168,24 @@ function Editor({ built, onExit, onPlay }: { built: BuiltWorld; onExit: () => vo
     setSaved(saveLocal(cwRef.current) ? 'Guardado en este navegador ✓' : 'No se pudo guardar (poco espacio): usa Exportar')
   }, [name, barriers])
   useEffect(() => { cwRef.current.name = name; cwRef.current.barriers = barriers }, [name, barriers])
+  /** "Guardar": this world becomes the one everybody plays, from the NEXT match on (a match already playing keeps the one it started with). */
+  const saveWorld = async () => {
+    const cw = { ...cwRef.current, name, barriers }
+    saveLocal(cw)
+    if (!(await isWorldAdmin())) { setSaved(''); setShowPub(true); return } // (not signed in / not the owner: the account window)
+    setSaved('Guardando…')
+    const err = await publishWorld(cw)
+    if (err) { setSaved(err); return }
+    setLive(await publishedInfo())
+    setSaved('Guardado ✓ Se usará desde la próxima partida')
+  }
+  const restoreBackup = () => {
+    const b = loadBackup()
+    if (!b || !window.confirm('¿Cargar tu borrador anterior de este navegador? (Puedes deshacerlo con Ctrl+Z)')) return
+    snapshot()
+    cwRef.current = b; setName(b.name); setBarriers(b.barriers)
+    redraw.current(); force((n) => n + 1); setSaved('Borrador anterior cargado (aún sin guardar)')
+  }
 
   // ------------------------------------------------------------ the 3D view
   useEffect(() => {
@@ -509,21 +535,23 @@ function Editor({ built, onExit, onPlay }: { built: BuiltWorld; onExit: () => vo
         <input className="we-name" value={name} onChange={(e) => setName(e.target.value)} aria-label="Nombre del mundo" />
         <button onClick={doUndo} title="Ctrl+Z">Deshacer</button>
         <button onClick={doRedo} title="Ctrl+Y">Rehacer</button>
-        <button onClick={save}>Guardar</button>
+        <button className="we-play" onClick={() => void saveWorld()} title="Este mundo se usará desde la próxima partida">💾 Guardar</button>
         <button onClick={exportFile}>Exportar</button>
         <button onClick={importFile}>Importar</button>
         <button onClick={newWorld}>Mundo nuevo</button>
         <label className="we-check"><input type="checkbox" checked={showEvents} onChange={(e) => setShowEvents(e.target.checked)} /> Ver eventos</label>
         <label className="we-check"><input type="checkbox" checked={showBlocked} onChange={(e) => setShowBlocked(e.target.checked)} /> Ver bloqueos</label>
         <label className="we-check" title="El juego añade muros entre los anillos (hace falta ganar un gimnasio para pasar)"><input type="checkbox" checked={barriers} onChange={(e) => setBarriers(e.target.checked)} /> Muros de anillo</label>
-        <button onClick={() => setShowPub(true)}>Publicar…</button>
+        <button onClick={() => setShowPub(true)}>Cuenta / quitar mundo…</button>
+        {hasBackup && <button onClick={() => { restoreBackup(); setHasBackup(!!loadBackup()) }} title="El borrador que tenías en este navegador antes de cargar el mundo en uso">Mi borrador anterior</button>}
         <button className="we-play" onClick={() => { save(); onPlay({ ...cwRef.current, name, barriers }) }}>▶ Probar mundo</button>
         <span className="we-saved">{saved}</span>
+        <span className="we-saved" title="El mundo que se está usando para jugar ahora mismo">{live ? `En uso: «${live.name}» (${new Date(live.at).toLocaleString()})` : 'En uso: la isla normal (no hay mundo guardado)'}</span>
       </div>
       <div className="we-body">
         <div className="we-side">
           <div className="we-tools">
-            {([['paint', 'Pintar suelo'], ['kind', 'Tipo de casilla'], ['height', 'Altura'], ['model', 'Modelos 3D'], ['pine', 'Pino'], ['move', 'Mover objeto'], ['erase', 'Borrar objeto'], ['event', 'Eventos (números)'], ['zones', 'Zonas de Pokémon'], ['rules', 'Reglas']] as Array<[Tool, string]>).map(([k, l]) => (
+            {([['paint', 'Pintar suelo'], ['kind', 'Tipo de casilla'], ['height', 'Altura'], ['model', 'Modelos 3D'], ['pine', 'Pino'], ['move', 'Mover objeto'], ['erase', 'Borrar objeto'], ['event', 'Eventos (números)'], ['zones', 'Zonas de Pokémon']] as Array<[Tool, string]>).map(([k, l]) => (
               <button key={k} className={tool === k ? 'on' : ''} onClick={() => setTool(k)}>{l}</button>
             ))}
           </div>
@@ -572,7 +600,6 @@ function Editor({ built, onExit, onPlay }: { built: BuiltWorld; onExit: () => vo
               </div>
             </>
           )}
-          {tool === 'rules' && <RulesPanel cw={cwRef.current} onChange={() => { force((n) => n + 1); setSaved('') }} />}
           {tool === 'pine' && <p className="we-help">Clic en el mapa para plantar un pino (ocupa 2 × 2 casillas y bloquea el paso).</p>}
           {tool === 'move' && <p className="we-help">Arrastra un modelo o pino para moverlo. Con uno elegido: R lo gira, Supr lo borra.</p>}
           {tool === 'erase' && <p className="we-help">Clic junto a un modelo o pino para quitarlo.</p>}
@@ -585,7 +612,7 @@ function Editor({ built, onExit, onPlay }: { built: BuiltWorld; onExit: () => vo
         </div>
         <div className="we-view" ref={mountRef} />
       </div>
-      {showPub && <PublishPanel getWorld={() => ({ ...cwRef.current, name, barriers })} onClose={() => setShowPub(false)} />}
+      {showPub && <PublishPanel getWorld={() => ({ ...cwRef.current, name, barriers })} onClose={() => { setShowPub(false); void publishedInfo().then(setLive) }} />}
       <div className="we-status">{info || 'Rueda: zoom · WASD o botón derecho: mover la vista · Ctrl+Z: deshacer'}</div>
     </div>
   )
@@ -608,8 +635,9 @@ function PublishPanel({ getWorld, onClose }: { getWorld: () => CustomWorld; onCl
   return (
     <div className="we-modal" onClick={onClose}>
       <div className="we-modal-box" onClick={(e) => e.stopPropagation()}>
-        <h3>Publicar el mundo</h3>
+        <h3>Cuenta del propietario y mundo en uso</h3>
         <p className="we-help">Publicado: {info ? `“${info.name}” (${new Date(info.at).toLocaleString()})` : 'ningún mundo (se juega la isla normal)'}</p>
+        <p className="we-help">El botón 💾 Guardar de arriba hace que este mundo se use desde la próxima partida.</p>
         {state === 'loading' && <p>Comprobando tu cuenta…</p>}
         {state === 'out' && (
           <>
@@ -628,7 +656,7 @@ function PublishPanel({ getWorld, onClose }: { getWorld: () => CustomWorld; onCl
         )}
         {state === 'admin' && (
           <>
-            <button className="we-play" onClick={async () => { setMsg('Publicando…'); const err = await publishWorld(getWorld()); setMsg(err ?? 'Publicado ✓ Todos jugarán este mundo.'); void refresh() }}>Publicar este mundo para todos</button>
+            <button className="we-play" onClick={async () => { setMsg('Publicando…'); const err = await publishWorld(getWorld()); setMsg(err ?? 'Guardado ✓ Todos jugarán este mundo desde la próxima partida.'); void refresh() }}>Guardar este mundo para la próxima partida</button>
             <button onClick={async () => { if (!window.confirm('¿Quitar el mundo publicado? Volverá la isla normal.')) return; const err = await unpublishWorld(); setMsg(err ?? 'Quitado ✓'); void refresh() }}>Quitar el mundo publicado</button>
           </>
         )}
@@ -690,28 +718,6 @@ function EventPanel({ cw, selType, setSelType, selId, onChange, onSelect }: { cw
       )}
       <p className="we-help">Eventos puestos: {cw.events.length}. Sin ningún evento, el juego pone entrenadores, gimnasios y objetos solo; con eventos, solo salen los tuyos.</p>
     </>
-  )
-}
-
-/** The rules of the world: how long the rings last, how many legendary Pokémon a team may have, how many items a battle allows. */
-function RulesPanel({ cw, onChange }: { cw: CustomWorld; onChange: () => void }) {
-  const cur = { ...DEFAULT_RULES, ...(cw.rules ?? {}) }
-  const set = (k: keyof Rules, v: number) => { cw.rules = { ...(cw.rules ?? {}), [k]: Math.max(0, Math.round(v)) }; onChange() }
-  const row = (k: keyof Rules, label: string, help: string, min = 0, max = 99999) => (
-    <label key={k}>{label}<input type="number" min={min} max={max} value={k === 'ringSeconds' ? Math.round(cur.ringSeconds / 60 * 10) / 10 : cur[k]} onChange={(e) => set(k, k === 'ringSeconds' ? Number(e.target.value) * 60 : Number(e.target.value))} /><small>{help}</small></label>
-  )
-  return (
-    <div className="we-form">
-      <p className="we-help">Estas reglas se guardan con el mundo y se aplican a todos los jugadores que lo cargan.</p>
-      {row('ringSeconds', 'Minutos entre caídas de anillo', 'Cada tantos minutos se hunde un anillo y manda a los que estén en él al siguiente (5 por defecto).', 0.1, 120)}
-      {row('fallSeconds', 'Segundos que tarda en hundirse', 'Lo que dura la caída de un anillo (30 por defecto).', 1, 600)}
-      {row('maxLegendary', 'Legendarios por equipo', 'Máximo de Pokémon legendarios en el equipo (1 por defecto).', 0, 6)}
-      {row('itemsPerBattle', 'Objetos por combate', 'Cuántos objetos se pueden usar en un solo combate (4 por defecto).', 0, 99)}
-      {row('watchAlive', 'Los jugadores vivos pueden ver combates', '1 = sí, 0 = no. Pulsando a un jugador que combate se ve su combate (y su equipo).', 0, 1)}
-      {row('watchEliminated', 'Los eliminados pueden ver combates', '1 = sí, 0 = no. Un eliminado que sigue a un jugador puede ver su combate (y su equipo).', 0, 1)}
-      {row('expMultiplier', 'Multiplicador de experiencia', 'La experiencia de cada combate ganado se multiplica por esto (10 por defecto).', 1, 1000)}
-      <button onClick={() => { cw.rules = undefined; onChange() }}>Volver a las reglas por defecto</button>
-    </div>
   )
 }
 

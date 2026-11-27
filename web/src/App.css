@@ -651,3 +651,18 @@ img, canvas, svg { -webkit-user-drag: none; }
 .party-tip b { font-size: .9rem; }
 .tip-hp { display: block; width: 100%; height: 6px; margin-top: 2px; }
 .tip-item { display: flex; align-items: center; gap: 4px; }
+
+/* Settings → Admin (the owner's rules) */
+.adm { display: flex; flex-direction: column; gap: 8px; }
+.adm details { border: 1px solid rgba(255, 255, 255, .18); border-radius: 8px; padding: 6px 10px; }
+.adm summary { cursor: pointer; font-weight: 700; padding: 4px 0; }
+.adm-note, .adm-timeline, .adm-msg { font-size: .8rem; margin: 0; opacity: .85; }
+.adm-timeline { font-variant-numeric: tabular-nums; }
+.adm-row { padding: 4px 0; border-top: 1px solid rgba(255, 255, 255, .08); }
+.adm-row > span:first-child { flex: 1; display: flex; flex-direction: column; }
+.adm-help { opacity: .6; font-size: .72rem; font-weight: 400; }
+.adm-num { display: inline-flex; align-items: center; gap: 6px; }
+.adm-num input { width: 84px; padding: 6px 8px; text-align: right; }
+.adm-num em { font-style: normal; opacity: .7; width: 44px; font-variant-numeric: tabular-nums; }
+.adm-dot { color: #f0b429; }
+.adm-actions { flex-wrap: wrap; }

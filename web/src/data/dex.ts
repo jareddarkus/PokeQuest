@@ -2,6 +2,7 @@
 import { pixelOverride } from '../ui/pixelate'
 import { Dex } from '@pkmn/sim'
 import { mulberry32 } from '../game/rng'
+import { RULES } from '../game/rules'
 
 export type StatId = 'hp' | 'atk' | 'def' | 'spa' | 'spd' | 'spe'
 export const STAT_IDS: StatId[] = ['hp', 'atk', 'def', 'spa', 'spd', 'spe']
@@ -78,7 +79,8 @@ export function starterChoices(): SpeciesInfo[] {
 }
 
 export function ringLevels(ring: number): [number, number] {
-  return ring === 1 ? [2, 10] : ring === 2 ? [15, 20] : ring === 3 ? [25, 35] : [35, 45]
+  const r = RULES
+  return ring === 1 ? [r.lvl1Min, r.lvl1Max] : ring === 2 ? [r.lvl2Min, r.lvl2Max] : ring === 3 ? [r.lvl3Min, r.lvl3Max] : [r.lvl4Min, r.lvl4Max]
 }
 
 /** Which Pokémon can appear in the tall grass of each ring (first forms, then second forms, then final forms). */

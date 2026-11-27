@@ -5,6 +5,8 @@ import { owFrame } from '../game/ow'
 import { music } from '../audio/music'
 import { useLobby, type MatchInfo } from '../net/useLobby'
 import { useChat } from './useChat'
+import { RULES } from '../game/rules'
+import { refreshRules } from '../world/gameConfig'
 
 function Face({ look }: { look: Look }) {
   const [url, setUrl] = useState<string | null>(null)
@@ -22,6 +24,8 @@ export default function LobbyScreen({ username, look, onStart, onBack }: { usern
   const chat = useChat(username, true)
   const [text, setText] = useState('')
   const [left, setLeft] = useState<number | null>(null)
+  const [, setRulesLoaded] = useState(0)
+  useEffect(() => { void refreshRules().then(() => setRulesLoaded((n) => n + 1)) }, []) // (the owner's settings: least players ...)
 
   useEffect(() => {
     if (!lobby.match) return
@@ -37,7 +41,7 @@ export default function LobbyScreen({ username, look, onStart, onBack }: { usern
 
   const players = lobby.players
   const ready = lobby.me?.ready ?? false
-  const enough = players.length >= 2
+  const enough = players.length >= RULES.minPlayers
   const send = () => { if (chat.send(text)) setText('') }
 
   return (
