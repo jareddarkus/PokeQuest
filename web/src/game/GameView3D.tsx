@@ -49,6 +49,8 @@ interface Props {
   nameColor?: (name: string) => string
   /** false when all your Pokémon have fainted: trainers do not challenge you then, so you can still walk (to find a Revive) */
   canBattle?: boolean
+  /** true while this trainer must leave you alone (you just woke up at a Center, or this trainer has just beaten you) */
+  noChallenge?: (npcId: string) => boolean
 }
 
 const WALK_SECONDS = 16 / 60 // one tile = 16 pictures at 60 a second when walking (like the DS games)
@@ -635,7 +637,7 @@ export default function GameView3D(props: Props) {
     const held = new Set<string>()
 
     const handle: GameHandle = {
-      teleport: (x, y) => { me.x = x; me.y = y; me.fromX = x; me.fromY = y; me.t = 1; const f1 = followerSpot(x, y, me.dir); fol.x = f1.x; fol.y = f1.y; fol.fromX = f1.x; fol.fromY = f1.y; fol.t = 1 },
+      teleport: (x, y) => { alert = null; if (bubble) bubble.visible = false; /* (a "!" that was on its way ends with the jump) */ me.x = x; me.y = y; me.fromX = x; me.fromY = y; me.t = 1; const f1 = followerSpot(x, y, me.dir); fol.x = f1.x; fol.y = f1.y; fol.fromX = f1.x; fol.fromY = f1.y; fol.t = 1 },
       getPos: () => ({ x: me.x, y: me.y, dir: me.dir }),
       showEmote,
       screenOf: (npc, tx, ty) => {
@@ -857,7 +859,7 @@ export default function GameView3D(props: Props) {
               const sx = n.x + DX[n.dir] * k
               const sy = n.y + DY[n.dir] * k
               if (!isWalkable(world, sx, sy) && tileAt(world, sx, sy) !== T.GymDoor) break
-              if (sx === me.x && sy === me.y && me.t >= 1 && !alert && p.canBattle !== false && !busyMap.has(n.spec.id)) { // (trainers leave you alone when none of your Pokémon can fight)
+              if (sx === me.x && sy === me.y && me.t >= 1 && !alert && p.canBattle !== false && !p.noChallenge?.(n.spec.id) && !busyMap.has(n.spec.id)) { // (trainers leave you alone when none of your Pokémon can fight)
                 if (bubble && (realBubble || owEmote(15))) { alert = { n, t: realBubble ? ALERT_FRAMES * ALERT_FRAME : 0.9 }; bubble.visible = true; p.events.onAlert?.(); break }
                 p.events.onNpcSpotted?.(n.spec.id)
                 break

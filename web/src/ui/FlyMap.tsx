@@ -14,8 +14,8 @@ const outerOf = (ring: number): number => (ring <= 1 ? 78 : RING_INNER[ring - 2]
  * Fly: the map of the ring you are in, as big as the screen allows. Tap where you want to land: if that place cannot be stood on, the nearest place that can is used
  * (grass is fine). You can only fly inside your own ring, and never to ground that has already sunk.
  */
-export default function FlyMap({ world, ring, radius, getMe, others, onPick, onClose }: {
-  world: World; ring: number; radius: number; getMe: () => { x: number; y: number } | null; others: () => OtherPlayer[]
+export default function FlyMap({ world, ring, radius, getMe, others, onPick, onClose, colorOf }: {
+  world: World; ring: number; radius: number; getMe: () => { x: number; y: number } | null; others: () => OtherPlayer[]; colorOf?: (name: string) => string
   onPick: (x: number, y: number) => void; onClose: () => void
 }) {
   const es = useLang() === 'es'
@@ -62,14 +62,14 @@ export default function FlyMap({ world, ring, radius, getMe, others, onPick, onC
         }
       }
       if (radius < 78) { ctx.strokeStyle = '#ff3030'; ctx.lineWidth = 2; ctx.strokeRect((C - radius - C + outer) * k, (C - radius - C + outer) * k, radius * 2 * k, radius * 2 * k) }
-      for (const o of others()) { if (ringAt(Math.round(o.x), Math.round(o.y)) !== ring) continue; ctx.fillStyle = '#ffd23a'; ctx.beginPath(); ctx.arc((o.x + 0.5 - C + outer) * k, (o.y + 0.5 - C + outer) * k, Math.max(3, k * 1.4), 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = '#000'; ctx.lineWidth = 1; ctx.stroke() }
+      for (const o of others()) { if (ringAt(Math.round(o.x), Math.round(o.y)) !== ring) continue; ctx.fillStyle = colorOf ? colorOf(o.name) : '#ffd23a'; ctx.beginPath(); ctx.arc((o.x + 0.5 - C + outer) * k, (o.y + 0.5 - C + outer) * k, Math.max(3, k * 1.4), 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.6; ctx.stroke() }
       const me = getMe()
       if (me) { ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc((me.x + 0.5 - C + outer) * k, (me.y + 0.5 - C + outer) * k, Math.max(4, k * 1.6), 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = '#000'; ctx.lineWidth = 1.5; ctx.stroke() }
     }
     draw()
     const id = window.setInterval(draw, 250)
     return () => window.clearInterval(id)
-  }, [world, ring, radius, outer, k, spots, getMe, others])
+  }, [world, ring, radius, outer, k, spots, getMe, others, colorOf])
 
   const pick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const r = e.currentTarget.getBoundingClientRect()

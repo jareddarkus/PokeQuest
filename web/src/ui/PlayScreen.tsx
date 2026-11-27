@@ -197,6 +197,8 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
   const eliminatedRef = useRef(false)
   const capturedCount = useRef(0)
   const pushedAt = useRef(0)
+  const graceUntil = useRef(0) // (no trainer challenges you until then: you have just woken up at a Center)
+  const lostTo = useRef(new Map<string, number>()) // (trainers that have just beaten you leave you alone for a while)
   const prevRing = useRef(0)
   const goneRings = useRef(new Set<number>())
   const outPlayers = useRef(new Set<string>()) // players that are out of the match
@@ -350,6 +352,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
   }
   /** Your whole team fainted: you wake up, healed, at the Pokémon Center of the ring you are in (in the peak, where there is none, right where you are). */
   const blackOut = () => {
+    graceUntil.current = Date.now() + 6000 // (a few quiet seconds after waking up)
     const t = trainerRef.current
     setTrainer({ ...t, team: t.team.map(healedCopy) })
     const pos = handleRef.current?.getPos()
@@ -420,6 +423,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
     setBattle(null)
     busy.current = false
     handleRef.current?.setNpcFreeze(null)
+    if (outcome === 'lose' && b?.npcId) lostTo.current.set(b.npcId, Date.now() + 45_000) // (the trainer who beat you does not challenge you again at once)
     if (outcome === 'win' && b) {
       if (b.npcId) { defeatedNpcs.current.add(b.npcId); handleRef.current?.defeatNpc(b.npcId); say(`${b.name ?? 'Trainer'}: “${lossLine(b.npcId)}”`) }
       b.onWin?.()
@@ -678,7 +682,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
       onBump: () => { void music.playSfx('fld:WALL_HIT') },
       onNpcSpotted: (npcId) => {
         if (eliminatedRef.current) return
-        if (defeatedNpcs.current.has(npcId) || busy.current || talking.current || busyNpcs.current.has(npcId)) return
+        if (defeatedNpcs.current.has(npcId) || busy.current || talking.current || busyNpcs.current.has(npcId) || Date.now() < graceUntil.current || (lostTo.current.get(npcId) ?? 0) > Date.now()) return
         const npc = world.npcs.find((n) => n.id === npcId)
         if (!npc || npc.custom?.fights === false) return
         npcFight(npc, npcId)
@@ -744,6 +748,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
         fighting={fightingNow}
         nameColor={colorOf}
         canBattle={trainer.team.some((m) => m.hp > 0)}
+        noChallenge={(id) => Date.now() < graceUntil.current || (lostTo.current.get(id) ?? 0) > Date.now()}
         follower={!eliminated && trainer.team[0] && trainer.team[0].hp > 0 ? { species: trainer.team[0].species, shiny: !!trainer.team[0].shiny } : null}
       />
 
@@ -810,7 +815,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
           ) : toast}
         </div>
       )}
-      {!battle && <MiniMap world={world} getMe={() => handleRef.current?.getPos() ?? null} others={playersVisible} radius={radius} collapseOn={collapseOn} mobile={mobile} />}
+      {!battle && <MiniMap world={world} getMe={() => handleRef.current?.getPos() ?? null} others={playersVisible} radius={radius} collapseOn={collapseOn} mobile={mobile} colorOf={royale ? colorOf : undefined} />}
       {!battle && <ChatDock chat={chat} canChat={!!chatUser} open={chatOpen} setOpen={setChatOpen} colorOf={royale ? colorOf : undefined} names={royale?.players} onName={(n, x, y) => setPmenu({ name: n, x, y, fromChat: true })} />}
       {panel === 'settings' && <SettingsPanel settings={settings} onChange={onSettings} onClose={() => setPanel(null)} onCustomize={onCustomize} />}
       {panel === 'team' && <TeamPanel initial={teamSel} trainer={trainer} setTrainer={setTrainer} onClose={() => setPanel(null)} onMessage={say} />}
@@ -831,7 +836,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
       )}
       {cardOf && <TrainerCard name={cardOf} onClose={() => setCardOf(null)} />}
       {flyOpen && !eliminated && !battle && (
-        <FlyMap world={world} ring={Math.max(1, ring || 1)} radius={collapseOn ? radius : 999} getMe={() => handleRef.current?.getPos() ?? null} others={playersVisible}
+        <FlyMap world={world} ring={Math.max(1, ring || 1)} radius={collapseOn ? radius : 999} getMe={() => handleRef.current?.getPos() ?? null} others={playersVisible} colorOf={royale ? colorOf : undefined}
           onClose={() => setFlyOpen(false)} onPick={(x, y) => { setFlyOpen(false); void music.playSfx('fld:KAIDAN'); handleRef.current?.teleport(x, y) }} />
       )}
       {pmenu && pmenu.name === null && (

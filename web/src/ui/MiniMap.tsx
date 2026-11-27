@@ -15,8 +15,8 @@ export function useIsMobile(): boolean {
   return m
 }
 
-export default function MiniMap({ world, getMe, others, radius, collapseOn, mobile }: {
-  world: World; getMe: () => { x: number; y: number } | null; others: () => OtherPlayer[]; radius: number; collapseOn: boolean; mobile: boolean
+export default function MiniMap({ world, getMe, others, radius, collapseOn, mobile, colorOf }: {
+  world: World; getMe: () => { x: number; y: number } | null; others: () => OtherPlayer[]; radius: number; collapseOn: boolean; mobile: boolean; colorOf?: (name: string) => string
 }) {
   const [big, setBig] = useState(false) // the map zoomed to the whole screen (a click on the little map; a click anywhere closes it)
   const bigRef = useRef<HTMLCanvasElement>(null)
@@ -43,18 +43,20 @@ export default function MiniMap({ world, getMe, others, radius, collapseOn, mobi
         ctx.strokeStyle = '#ff3030'; ctx.lineWidth = 2
         ctx.strokeRect((C - radius) * k, (C - radius) * k, radius * 2 * k, radius * 2 * k)
       }
-      for (const o of others()) { ctx.fillStyle = dotColor(o.name); ctx.beginPath(); ctx.arc((o.x + 0.5) * k, (o.y + 0.5) * k, Math.max(2.5, k * 1.6), 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = '#000'; ctx.lineWidth = 1; ctx.stroke() }
+      for (const o of others()) { // the other players: a dot in their colour of this match (the one of their name in the chat) with a white border
+        ctx.fillStyle = colorOf ? colorOf(o.name) : dotColor(o.name); ctx.beginPath(); ctx.arc((o.x + 0.5) * k, (o.y + 0.5) * k, Math.max(2.5, k * 1.6), 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.6; ctx.stroke()
+      }
       const me = getMe()
       if (me) {
-        const pulse = 3 + (Math.sin(performance.now() / 250) + 1) * 1.5
-        ctx.strokeStyle = 'rgba(255,255,255,.8)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc((me.x + 0.5) * k, (me.y + 0.5) * k, Math.max(4, k * 2) + pulse * 0.4, 0, Math.PI * 2); ctx.stroke()
-        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc((me.x + 0.5) * k, (me.y + 0.5) * k, Math.max(3, k * 1.6), 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = '#000'; ctx.lineWidth = 1.2; ctx.stroke()
+        // you: a white dot, a little bigger than the others, that pulses gently (no ring, nothing loud)
+        const pulse = 1 + Math.sin(performance.now() / 420) * 0.1
+        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc((me.x + 0.5) * k, (me.y + 0.5) * k, Math.max(3.6, k * 2.1) * pulse, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = 'rgba(0,0,0,.45)'; ctx.lineWidth = 1; ctx.stroke()
       }
     }
     draw()
-    const id = window.setInterval(draw, 200)
+    const id = window.setInterval(draw, 90)
     return () => window.clearInterval(id)
-  }, [show, big, base, others, getMe, radius, collapseOn])
+  }, [show, big, base, others, getMe, radius, collapseOn, colorOf])
   const size = 176
   const bigSize = Math.max(240, Math.min(window.innerWidth - 20, window.innerHeight - 20))
   return (

@@ -530,3 +530,7 @@ Seen in the recording but NOT done: the trainers' battle sprites (the foe traine
 - Minimap: a click opens it as big as the screen (PC and phone); a click anywhere closes it.
 - Not checked: trees (ring 1 pines at 2 places and ring 2 palms looked normal; the ones the owner means were not found), the flight/smoke animation by eye, the lobby warning with a real older build.
 - Round 36b: peak grass leftovers (dark dashes = map pictures `kusa_ec*s`, small tufts = `ue_grass*`) are hidden over the WHOLE peak (mask value 128 = "grass pictures only", `addGrassOnly` in `rom/mapModel.ts`; trees and rocks stay); any picture with "kusa" in its name counts as grass. Paths cut through water cost more (40) so they prefer forest.
+
+## Round 37 — quiet time after waking up, minimap dots
+- After a blackout: 6 s with no trainer challenges (`graceUntil`), the trainer who beat you leaves you alone for 45 s (`lostTo`), and a "!" that was on its way is cancelled by any teleport (`GameView3D` `teleport`, prop `noChallenge`). I could NOT reproduce the owner's "challenged again at the Center by a trainer that is not there"; these are safeguards for the likely causes (a pending alert, line of sight from a trainer still facing the old spot).
+- Minimap / Fly map: other players are dots in their match colour (the one of their chat name) with a white border; you are a slightly bigger white dot with a gentle pulse (no ring).
