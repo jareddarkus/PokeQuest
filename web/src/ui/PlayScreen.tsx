@@ -19,7 +19,8 @@ import {
   C, collapseInfo, squareTile, RADIUS, RING_INNER, SIZE, T, collapseRadius, generateWorld, isWalkable, ringAt, type Dir, type World,
 } from '../game/world'
 import BattleScreen, { CHAR_MS, TypedText, type BattleKind, type BattleOutcome, type PvpLink } from './BattleScreen'
-import { addExtraGrass, buildMeadowVisuals, prepareMeadow } from '../game/meadow'
+import { setNoGrass } from '../rom/mapModel'
+import { addExtraGrass, buildMeadowVisuals, clearPeakGrass, prepareMeadow } from '../game/meadow'
 import { buildCustomVisuals, type CustomWorld } from '../world/customWorld'
 import { fetchPublishedWorld } from '../world/publish'
 import { fetchGameConfig } from '../world/gameConfig'
@@ -899,6 +900,7 @@ export default function PlayScreen(props: Props) {
       if (custom) { // a world from the editor: its own ground, heights and models replace the real map
         setProg({ text: 'Drawing your world…', frac: 0.8, step: 4, steps: 5, done: 0, total: 1, unit: 'step' })
         await pause()
+        setNoGrass([])
         built.group.clear()
         built.uniforms.uHide.value = 9999
         const vis = buildCustomVisuals(custom, built)
@@ -910,6 +912,7 @@ export default function PlayScreen(props: Props) {
         setProg({ text: 'Placing gyms, trainers and items…', frac: 0.8, step: 4, steps: 5, done: 0, total: 1, unit: 'step' })
         await pause()
         world = generateWorld(seed, built.ground)
+        setNoGrass(clearPeakGrass(world)) // (nothing grows at the peak: the tiles become plain grass and the map's own grass pictures there are hidden)
         const extra = addExtraGrass(world, built, seed) // and more tall grass in the inner rings
         setProg({ text: 'Drawing the island…', frac: 0.9, step: 5, steps: 5, done: 0, total: 1, unit: 'step' })
         await pause()

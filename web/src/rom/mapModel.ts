@@ -16,6 +16,22 @@ export interface ClipUniforms {
   uHide: { value: number } // the real map is not drawn further than this from the centre (the outer ring is a meadow made by us)
 }
 
+/**
+ * Tiles where the real map's tall grass is NOT drawn (the owner's rule: no grass at the peak). One byte per tile of the 160 x 160 island, read by the grass materials of the map.
+ * Call setNoGrass with the tile numbers (y * 160 + x) to hide, or with an empty list to show all grass again.
+ */
+const GRID = 160
+const noGrassData = new Uint8Array(GRID * GRID)
+const noGrassTex = new THREE.DataTexture(noGrassData, GRID, GRID, THREE.RedFormat, THREE.UnsignedByteType)
+noGrassTex.magFilter = THREE.NearestFilter; noGrassTex.minFilter = THREE.NearestFilter; noGrassTex.needsUpdate = true
+export function setNoGrass(tiles: number[]): void {
+  noGrassData.fill(0)
+  for (const i of tiles) noGrassData[i] = 255
+  noGrassTex.needsUpdate = true
+}
+/** the pictures of the map that are tall grass (leaves drawn over the ground) */
+const isGrassPicture = (name: string | null | undefined): boolean => !!name && (name.startsWith('kusa') || name.startsWith('nagakusa'))
+
 /** Textures that move (water, rivers, fountains) with the animation the game file gives them. */
 export const animatedTextures: Array<{ tex: THREE.Texture; anim: MatAnim }> = []
 
@@ -91,8 +107,10 @@ export function buildModelObject(model: Model, tex: NonNullable<ReturnType<typeo
       color: map ? 0xffffff : 0x999999,
     })
     mat.name = `${m?.name ?? '?'}|${m?.texture ?? '-'}|${m?.palette ?? '-'}|a${m?.alpha ?? 1}`
+    const grassPic = isGrassPicture(m?.texture)
     if (clip) {
       mat.onBeforeCompile = (shader) => {
+        shader.uniforms.uNoGrass = { value: noGrassTex }
         shader.uniforms.uCut = clip.uCut
         shader.uniforms.uCenter = clip.uCenter
         shader.uniforms.uTime = clip.uTime
@@ -103,11 +121,11 @@ export function buildModelObject(model: Model, tex: NonNullable<ReturnType<typeo
           .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;\nuniform float uLift;\nuniform vec2 uCenter;')
           .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWPos = (modelMatrix * vec4(position, 1.0)).xyz;\nfloat pqd0 = max(abs(vWPos.x - uCenter.x), abs(vWPos.z - uCenter.y));\ntransformed.y += uLift * ((1.0 - smoothstep(59.0, 60.0, pqd0)) + (1.0 - smoothstep(39.0, 40.0, pqd0)) + (1.0 - smoothstep(19.0, 20.0, pqd0)));')
         shader.fragmentShader = shader.fragmentShader
-          .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;\nuniform float uCut;\nuniform vec2 uCenter;\nuniform float uTime;\nuniform float uWarn;\nuniform float uHide;')
-          .replace('#include <clipping_planes_fragment>', '#include <clipping_planes_fragment>\nfloat pqD = max(abs(vWPos.x - uCenter.x), abs(vWPos.z - uCenter.y));\nif (pqD > uCut || pqD > uHide) discard;')
+          .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;\nuniform float uCut;\nuniform vec2 uCenter;\nuniform float uTime;\nuniform float uWarn;\nuniform float uHide;\nuniform sampler2D uNoGrass;')
+          .replace('#include <clipping_planes_fragment>', '#include <clipping_planes_fragment>\nfloat pqD = max(abs(vWPos.x - uCenter.x), abs(vWPos.z - uCenter.y));\nif (pqD > uCut || pqD > uHide) discard;' + (grassPic ? '\nif (texture2D(uNoGrass, (floor(vWPos.xz) + 0.5) / 160.0).r > 0.5) discard;' : ''))
           .replace('#include <dithering_fragment>', 'if (uWarn > 0.5 && pqD > uCut - 1.0) gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(1.0, 0.2, 0.2), 0.35 + 0.15 * sin(uTime * 8.0));\n#include <dithering_fragment>')
       }
-      mat.customProgramCacheKey = () => 'pq-clip'
+      mat.customProgramCacheKey = () => (grassPic ? 'pq-clip-grass' : 'pq-clip')
     }
     matCache.set(mi, mat)
     return mat

@@ -6,6 +6,7 @@ import { applyClip } from '../rom/mapModel'
 import type { BuiltWorld } from '../rom/chunkWorld'
 import { C, RADIUS, RING_INNER, SIZE, T, dist, isWalkable, ringAt, type World } from './world'
 import { hash2, valueNoise } from './rng'
+import { RULES } from './rules'
 
 /** How much higher each ring is than the ring outside it (tiles). */
 export const RING_LIFT = 2.4
@@ -100,6 +101,14 @@ export function prepareMeadow(built: BuiltWorld, seed: number): void {
   for (let y = 0; y < SIZE; y++) for (let x = 0; x < SIZE; x++) { const d = dist(x, y); if (d < RING_INNER[0]) built.height[y * SIZE + x] += liftAt(d) }
 }
 
+/** The peak has no tall grass (unless the owner turned wild Pokémon at the peak on): its tall-grass tiles become plain grass. Returns the tile numbers that were changed. */
+export function clearPeakGrass(world: World): number[] {
+  const changed: number[] = []
+  if (RULES.peakWildOn > 0) return changed
+  for (let i = 0; i < SIZE * SIZE; i++) if (world.tiles[i] === T.Tall && ringAt(i % SIZE, (i / SIZE) | 0) === 4) { world.tiles[i] = T.Grass; changed.push(i) }
+  return changed
+}
+
 /** More tall grass in the inner rings: scattered patches on the plain grass tiles of the real map (returns the tile numbers that were changed). */
 export function addExtraGrass(world: World, built: BuiltWorld, seed: number): number[] {
   const changed: number[] = []
@@ -107,7 +116,7 @@ export function addExtraGrass(world: World, built: BuiltWorld, seed: number): nu
     for (let x = 1; x < SIZE - 1; x++) {
       const i = y * SIZE + x
       if (world.tiles[i] !== T.Grass) continue
-      if (ringAt(x, y) < 2) continue
+      if (ringAt(x, y) < 2 || (ringAt(x, y) === 4 && RULES.peakWildOn <= 0)) continue
       // never on stairs or slopes: the ground there is not level
       const h0 = built.height[i]
       let steep = false

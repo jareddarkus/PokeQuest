@@ -180,7 +180,7 @@ export const RULE_GROUPS: RuleGroup[] = [
     b('respawnOnWipe', 'Wake up at a Center when the team faints', 'Despertar en un Centro al caer el equipo', 'Off = a player whose whole team fainted is eliminated.', 'Apagado = quien pierde a todo su equipo queda eliminado.'),
   ] },
   { id: 'wild', en: 'Wild Pokémon and trainers', es: 'Pokémon salvajes y entrenadores', rules: [
-    b('peakWildOn', 'Wild Pokémon at the peak', 'Pokémon salvajes en la cima', 'Off = nothing wild at the peak: only the players, waiting for each other.', 'Apagado = nada salvaje en la cima: solo los jugadores, esperándose.'),
+    b('peakWildOn', 'Wild Pokémon at the peak', 'Pokémon salvajes en la cima', 'Off = no tall grass and nothing wild at the peak: only the players, waiting for each other.', 'Apagado = sin hierba alta ni nada salvaje en la cima: solo los jugadores, esperándose.'),
     b('peakNpcsOn', 'Trainers and people at the peak', 'Entrenadores y gente en la cima', 'Off = nobody stands at the peak (normal island).', 'Apagado = nadie está en la cima (isla normal).'),
     n('encounterPercent', 'Wild Pokémon chance per step in grass (%)', 'Probabilidad de salvaje por paso en hierba (%)', 'The chance on every step in tall grass.', 'La probabilidad en cada paso en hierba alta.', 0, 100),
     n('legendary3Percent', 'Legendary chance in ring 3 (%)', 'Probabilidad de legendario en el anillo 3 (%)', '', '', 0, 100),
