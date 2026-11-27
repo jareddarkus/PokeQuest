@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { supabase } from '../supabase'
+import { makeTransport } from './transport'
 import type { Look } from '../game/character'
 import type { OtherPlayer } from '../game/GameView'
 import type { Dir } from '../game/world'
@@ -47,34 +47,34 @@ export function useMatchPlayers(matchId: string | null, me: string | null, look:
 
   useEffect(() => {
     if (!matchId || !me) return
-    const ch = supabase.channel(`match:${matchId}`, { config: { private: true, broadcast: { self: false } } })
-    ch.on('broadcast', { event: 'pos' }, ({ payload }) => {
+    const tr = makeTransport(matchId, me)
+    tr.on('pos', (payload) => {
       const p = payload as { n?: string; x?: number; y?: number; d?: Dir; l?: Look }
       if (!p || typeof p.n !== 'string' || p.n === me || typeof p.x !== 'number' || typeof p.y !== 'number') return
       const r = others.current.get(p.n)
       if (r) { r.tx = p.x; r.ty = p.y; r.dir = (p.d ?? 0) as Dir; r.seen = Date.now(); if (p.l) r.look = p.l }
       else others.current.set(p.n, { name: p.n, tx: p.x, ty: p.y, x: p.x, y: p.y, dir: (p.d ?? 0) as Dir, look: p.l as Look, seen: Date.now(), moving: false, t: Date.now() })
     })
-    ch.on('broadcast', { event: 'picked' }, ({ payload }) => {
+    tr.on('picked', (payload) => {
       const n = (payload as { n?: string } | null)?.n
       if (typeof n === 'string') { picked.current.add(n); checkAll() }
     })
-    ch.on('broadcast', { event: 'busy' }, ({ payload }) => {
+    tr.on('busy', (payload) => {
       const p = payload as { npc?: string; by?: string; on?: boolean } | null
       if (p && typeof p.npc === 'string' && typeof p.by === 'string' && p.by !== me) syncRef.current?.onBusy?.(p.npc, p.by, !!p.on)
     })
-    ch.on('broadcast', { event: 'duel' }, ({ payload }) => {
+    tr.on('duel', (payload) => {
       const m = payload as { to?: string; from?: string; type?: string; data?: unknown } | null
       if (m && typeof m.from === 'string' && m.from !== me && typeof m.type === 'string' && (!m.to || m.to === me)) syncRef.current?.onDuel?.({ to: m.to, from: m.from, type: m.type, data: m.data })
     })
-    if (chanRef) chanRef.current = { send: (npcId, on) => { void ch.send({ type: 'broadcast', event: 'busy', payload: { npc: npcId, by: me, on } }) }, duel: (msg) => { void ch.send({ type: 'broadcast', event: 'duel', payload: { ...msg, from: me } }) } }
-    ch.subscribe()
+    if (chanRef) chanRef.current = { send: (npcId, on) => { tr.send('busy', { npc: npcId, by: me, on }) }, duel: (msg) => { tr.send('duel', { ...msg, from: me }) } }
+    tr.start()
     let sentLook = 0
     let pickTick = 0
     let lastSent = { x: NaN, y: NaN, d: NaN, at: 0 }
     const id = window.setInterval(() => {
       const sy = syncRef.current
-      if (sy?.pickedMe && !sy.started && Date.now() - pickTick > 2000) { pickTick = Date.now(); picked.current.add(me); checkAll(); void ch.send({ type: 'broadcast', event: 'picked', payload: { n: me } }) }
+      if (sy?.pickedMe && !sy.started && Date.now() - pickTick > 2000) { pickTick = Date.now(); picked.current.add(me); checkAll(); tr.send('picked', { n: me }) }
       const pos = getRef.current()
       if (!pos) return
       const now = Date.now()
@@ -82,9 +82,9 @@ export function useMatchPlayers(matchId: string | null, me: string | null, look:
       lastSent = { x: pos.x, y: pos.y, d: pos.dir, at: now }
       const withLook = now - sentLook > 4000 // the look changes rarely, so send it every few seconds only
       if (withLook) sentLook = now
-      void ch.send({ type: 'broadcast', event: 'pos', payload: { n: me, x: pos.x, y: pos.y, d: pos.dir, ...(withLook ? { l: lookRef.current } : {}) } })
+      tr.send('pos', { n: me, x: pos.x, y: pos.y, d: pos.dir, ...(withLook ? { l: lookRef.current } : {}) })
     }, SEND_CHECK_MS)
-    return () => { window.clearInterval(id); void supabase.removeChannel(ch); others.current.clear(); picked.current.clear(); allDone.current = false; if (chanRef) chanRef.current = null }
+    return () => { window.clearInterval(id); tr.close(); others.current.clear(); picked.current.clear(); allDone.current = false; if (chanRef) chanRef.current = null }
   }, [matchId, me])
 
   return (): OtherPlayer[] => {

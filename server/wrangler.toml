@@ -1,0 +1,14 @@
+# The realtime server of PokeQuest (Cloudflare Workers + one Durable Object per match). See server/README.md.
+name = "pokequest-realtime"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+
+[[durable_objects.bindings]]
+name = "MATCH"
+class_name = "Match"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Match"]
+
+# SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY are given at deploy time by scripts/deploy-server.ps1 (read from web/.env); nothing secret is written here.
