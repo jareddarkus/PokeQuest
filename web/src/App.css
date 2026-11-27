@@ -697,3 +697,12 @@ img, canvas, svg { -webkit-user-drag: none; }
 .hud-clock span { font-family: 'Unbounded', system-ui, sans-serif; font-weight: 900; font-size: .62rem; letter-spacing: .06em; text-transform: uppercase; color: #9a9fa8; line-height: 1.2; margin-top: 5px; }
 .hud-clock strong { color: #fff; }
 .hud-clock.falling strong { color: #ff4d4d; } /* red only while the ring is really crumbling */
+
+/* the world slots screen of the world builder */
+.slot-picker { max-width: 980px; width: min(980px, 94vw); text-align: left; }
+.slot-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin: 14px 0; }
+.slot-card { display: flex; flex-direction: column; gap: 8px; padding: 14px; border-radius: 12px; background: rgba(255, 255, 255, .08); border: 2px solid rgba(255, 255, 255, .15); }
+.slot-card.active { border-color: #ffd84a; box-shadow: 0 0 0 2px rgba(255, 216, 74, .35); }
+.slot-card h3 { margin: 0; }
+.slot-default { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; border-radius: 10px; background: rgba(255, 255, 255, .06); margin-bottom: 10px; }
+@media (max-width: 760px) { .slot-grid { grid-template-columns: 1fr; } }

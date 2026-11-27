@@ -29,6 +29,10 @@ export interface BuiltWorld {
   bridge?: Uint8Array
   /** 1 = a tile under a solid object (rock, sign, house ...): never walkable, never carved through */
   solid?: Uint8Array
+  /** the picture name of the top ground surface of every tile (index + 1 into `names`; 0 = none) */
+  topTex?: { names: string[]; idx: Uint16Array }
+  /** the map data this world was built from (the editor's copy of the island needs the placed buildings) */
+  chunkInfo?: WorldData
 }
 
 const TALL = new Set([4, 5, 6, 7, 8, 9, 0x21, 0x22])
@@ -50,11 +54,15 @@ const NOT_GROUND = ['ki', 'kusa', 'plant', 'hana', 'saku', 'fence', 'nagakusa', 
 const isGroundMaterial = (name: string) => !NOT_GROUND.some((p) => name.startsWith(p))
 
 /** Looks straight down at every tile centre of a chunk and records the height of the ground. */
-function rasterHeights(model: Model, out: Float32Array, ox: number, oz: number, size: number): void {
+function rasterHeights(model: Model, out: Float32Array, ox: number, oz: number, size: number, tex?: { names: string[]; idx: Uint16Array }): void {
   const best = new Float32Array(32 * 32).fill(-1e9)
+  const bestTex = new Uint16Array(32 * 32)
   for (const mesh of model.meshes) {
     const name = model.materials[mesh.material]?.name ?? ''
     if (!isGroundMaterial(name)) continue
+    const texName = model.materials[mesh.material]?.texture || name
+    let texNo = 0
+    if (tex) { texNo = tex.names.indexOf(texName) + 1; if (texNo === 0) { tex.names.push(texName); texNo = tex.names.length } }
     const v = mesh.verts
     for (let t = 0; t + 2 < v.length; t += 3) {
       const a = v[t], b = v[t + 1], c = v[t + 2]
@@ -75,7 +83,7 @@ function rasterHeights(model: Model, out: Float32Array, ox: number, oz: number, 
           const l3 = 1 - l1 - l2
           if (l1 < -0.001 || l2 < -0.001 || l3 < -0.001) continue
           const y = l1 * a.y + l2 * b.y + l3 * c.y
-          if (y > best[tz * 32 + tx]) best[tz * 32 + tx] = y
+          if (y > best[tz * 32 + tx]) { best[tz * 32 + tx] = y; bestTex[tz * 32 + tx] = texNo }
         }
       }
     }
@@ -83,6 +91,7 @@ function rasterHeights(model: Model, out: Float32Array, ox: number, oz: number, 
   for (let tz = 0; tz < 32; tz++) for (let tx = 0; tx < 32; tx++) {
     const y = best[tz * 32 + tx]
     out[(oz + tz) * size + ox + tx] = y > -1e8 ? y / 16 : 0
+    if (tex) tex.idx[(oz + tz) * size + ox + tx] = y > -1e8 ? bestTex[tz * 32 + tx] : 0
   }
 }
 
@@ -141,6 +150,7 @@ export function buildChunkWorld(data: WorldData): BuiltWorld {
     return best
   }
   const waterHeights: number[] = []
+  const topTex = { names: [] as string[], idx: new Uint16Array(size * size) } // the picture of the highest ground surface of every tile (1 = names[0])
   const bridge = new Uint8Array(size * size) // 1 = walkable only because of the upper level (a bridge)
   const raw = import.meta.env.DEV ? { size, a: new Uint16Array(size * size), b: new Uint16Array(size * size), beh: new Uint16Array(size * size), fl: new Uint16Array(size * size) } : null
 
@@ -183,7 +193,7 @@ export function buildChunkWorld(data: WorldData): BuiltWorld {
         }
       }
     }
-    rasterHeights(model, height, ox, oz, size)
+    rasterHeights(model, height, ox, oz, size, topTex)
     if (raw) ((globalThis as { __pqChunks?: unknown[] }).__pqChunks ??= []).push({ ox, oz, offs, map: c.map })
     if (raw) { // (developer tool: which non-ground pictures / models lie over each tile)
       const mats = ((raw as unknown as { mats?: Map<number, Set<string>> }).mats ??= new Map())
@@ -275,5 +285,5 @@ export function buildChunkWorld(data: WorldData): BuiltWorld {
   if (import.meta.env.DEV) (globalThis as { __pqTex?: () => string[] }).__pqTex = () => [...new Set(Object.values(data.textures).flatMap((raw) => readTexFile(raw)?.texs.map((x) => x.name) ?? []))]
   const textureNames = () => [...new Set(Object.values(data.textures).flatMap((raw) => readTexFile(raw)?.texs.map((x) => x.name) ?? []))].sort()
   const packModels = () => Object.keys(data.packs ?? {}).map((k) => { const raw = data.packs?.[Number(k)]; const parsed = raw ? parsePack(raw.bld) : null; return { pack: Number(k), count: parsed ? parsed.models.length : 0 } })
-  return { group, size, ground, height, waterY, uniforms, makeBuilding, textureNamed, textureNames, packModels, bridge, solid }
+  return { group, size, ground, height, waterY, uniforms, makeBuilding, textureNamed, textureNames, packModels, bridge, solid, topTex, chunkInfo: data }
 }

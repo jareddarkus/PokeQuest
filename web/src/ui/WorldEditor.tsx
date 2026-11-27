@@ -6,12 +6,14 @@ import { buildChunkWorld, type BuiltWorld } from '../rom/chunkWorld'
 import { loadWorldData } from '../rom/store'
 import { ProgressBar } from './ProgressBar'
 import { signIn } from '../supabase'
-import { claimWorldAdmin, currentUserId, fetchPublishedWorld, isWorldAdmin, publishWorld, publishedInfo, unpublishWorld } from '../world/publish'
-import { SIZE, T } from '../game/world'
+import { claimWorldAdmin, currentUserId, isWorldAdmin, publishedInfo } from '../world/publish'
+import { SLOTS, clearSlot, fetchSlot, getActive, saveSlot, setActive, slotInfos, type Active, type Slot, type SlotInfo } from '../world/slots'
+import { snapshotIsland } from '../world/snapshot'
+import { RADIUS, RING_INNER, SIZE, T } from '../game/world'
 import { Dex } from '@pkmn/sim'
 import { EVENT_KINDS, EV, groupColor, kindOf, newEvent, newGroup, type GameEvent, type PokeGroup } from '../world/events'
 import {
-  DEFAULT_TEXTURE, MAX_LEVEL, buildCustomVisuals, cloneWorld, decodeWorld, emptyWorld, encodeWorld, heightOf, loadBackup, loadLocal, saveBackup, saveLocal, texIndex,
+  DEFAULT_TEXTURE, MAX_LEVEL, buildCustomVisuals, cloneWorld, decodeWorld, emptyWorld, encodeWorld, heightOf, loadBackup, loadLocal, saveBackup, saveLocal, setLocalSlot, texIndex,
   type CustomWorld,
 } from '../world/customWorld'
 
@@ -60,9 +62,59 @@ function thumbOfModel(obj: THREE.Object3D): string {
 }
 
 export default function WorldEditor({ onExit, onPlay }: { onExit: () => void; onPlay: (cw: CustomWorld) => void }) {
+  const [slot, setSlot] = useState<Slot | null>(null)
+  if (slot === null) return <SlotPicker onPick={(n) => { setLocalSlot(n); setSlot(n) }} onExit={onExit} />
+  return <SlotEditor slot={slot} onBack={() => setSlot(null)} onPlay={onPlay} />
+}
+
+/** The three world slots: which one the next Battle Royales are played on, and which one to edit. */
+function SlotPicker({ onPick, onExit }: { onPick: (n: Slot) => void; onExit: () => void }) {
+  const [infos, setInfos] = useState<SlotInfo[] | null>(null)
+  const [active, setAct] = useState<Active | null>(null)
+  const [msg, setMsg] = useState('')
+  const refresh = useCallback(async () => { const [i, a] = await Promise.all([slotInfos(), getActive()]); setInfos(i); setAct(a) }, [])
+  useEffect(() => { void refresh() }, [refresh])
+  const use = async (a: Active) => { setMsg('Cambiando…'); const err = await setActive(a); setMsg(err ?? (a === 'default' ? 'Listo ✓ Las próximas partidas usan la isla normal.' : `Listo ✓ Las próximas partidas usan el mundo ${a}.`)); void refresh() }
+  return (
+    <div className="fullscreen center menu-bg">
+      <div className="panel card slot-picker">
+        <h2>Mundos</h2>
+        <p className="sub">Elige el mundo que se editará. El que lleva ★ es el que usan las próximas partidas.</p>
+        {!infos || active === null ? <p className="sub">Cargando…</p> : (
+          <div className="slot-grid">
+            {SLOTS.map((n) => {
+              const info = infos.find((x) => x.slot === n)!
+              const isActive = active === n
+              return (
+                <div key={n} className={`slot-card ${isActive ? 'active' : ''}`}>
+                  <h3>{isActive ? '★ ' : ''}Mundo {n}</h3>
+                  <p className="sub">{info.empty ? (n === 1 ? 'Copia de la isla actual (aún sin guardar)' : 'Vacío') : `«${info.name}» · ${info.at ? new Date(info.at).toLocaleString() : ''}`}</p>
+                  <p className="sub">{isActive ? 'EN USO en las próximas partidas' : 'No se usa ahora'}</p>
+                  <button className="primary" onClick={() => onPick(n)}>Editar</button>
+                  {!isActive && !info.empty && <button onClick={() => void use(n)}>Usar en las partidas</button>}
+                  {!info.empty && <button onClick={async () => { if (!window.confirm(`¿Vaciar el mundo ${n}? No se puede deshacer.`)) return; if (isActive) await setActive('default'); const err = await clearSlot(n); setMsg(err ?? 'Vaciado ✓'); void refresh() }}>Vaciar</button>}
+                </div>
+              )
+            })}
+          </div>
+        )}
+        <div className="slot-default">
+          <span>{active === 'default' ? '★ ' : ''}Isla del juego (la normal, hecha con el mapa original)</span>
+          {active !== 'default' && <button onClick={() => void use('default')}>Usar la isla normal</button>}
+        </div>
+        {msg && <p className="sub">{msg}</p>}
+        <p className="sub">Hace falta la cuenta del propietario para guardar y para cambiar el mundo en uso.</p>
+        <button onClick={onExit}>← Volver</button>
+      </div>
+    </div>
+  )
+}
+
+function SlotEditor({ slot, onBack, onPlay }: { slot: Slot; onBack: () => void; onPlay: (cw: CustomWorld) => void }) {
   const [built, setBuilt] = useState<BuiltWorld | null>(null)
-  const [start, setStart] = useState<{ cw: CustomWorld; live: { name: string; at: string } | null } | null>(null)
+  const [start, setStart] = useState<{ cw: CustomWorld; active: Active } | null>(null)
   const [loadText, setLoadText] = useState('Leyendo el mapa de tu archivo del juego…')
+  const onExit = onBack
   useEffect(() => {
     let live = true
     void (async () => {
@@ -72,24 +124,32 @@ export default function WorldEditor({ onExit, onPlay }: { onExit: () => void; on
       if (!data) { setLoadText('Faltan las piezas del mapa. Importa tu archivo del juego otra vez.'); return }
       setLoadText('Preparando el editor…')
       await new Promise((r) => setTimeout(r, 30))
-      setBuilt(buildChunkWorld(data))
-      // what the editor shows first is the world that is REALLY used to play (the published one); the draft that was in this browser is kept as a backup
-      const [pub, info] = await Promise.all([fetchPublishedWorld(), publishedInfo()])
-      const draft = loadLocal()
-      if (pub && draft && encodeWorld(draft) !== encodeWorld(pub)) saveBackup(draft)
+      const b = buildChunkWorld(data)
+      setBuilt(b)
+      // what the editor shows first: what is saved in this slot; else the draft kept in this browser for it; else (slot 1) a copy of the island that is really played, (slots 2 and 3) an empty world
+      const [saved, act] = await Promise.all([fetchSlot(slot), getActive()])
+      const draft0 = loadLocal()
+      const draft = draft0 && encodeWorld(draft0) !== encodeWorld({ ...emptyWorld(), name: draft0.name }) ? draft0 : null // (an untouched empty draft is not a draft)
+      if (saved && draft && encodeWorld(draft) !== encodeWorld(saved)) saveBackup(draft)
       if (!live) return
-      setStart({ cw: pub ?? draft ?? emptyWorld(), live: pub ? info : null })
+      let cw = saved ?? draft
+      if (!cw) {
+        if (slot === 1) { setLoadText('Copiando la isla actual…'); await new Promise((r) => setTimeout(r, 30)); cw = snapshotIsland(data) } else cw = emptyWorld()
+      }
+      if (!live) return
+      setStart({ cw, active: act })
     })()
     return () => { live = false }
   }, [])
   if (!built || !start) return <div className="fullscreen center menu-bg"><div className="panel card"><p className="sub">{built ? 'Cargando el mundo que se está usando…' : loadText}</p><ProgressBar indeterminate p={{ text: 'Cargando…', frac: 0 }} /></div></div>
-  return <Editor built={built} initial={start.cw} initialLive={start.live} onExit={onExit} onPlay={onPlay} />
+  return <Editor built={built} initial={start.cw} initialActive={start.active} slot={slot} onExit={onExit} onPlay={onPlay} />
 }
 
-function Editor({ built, initial, initialLive, onExit, onPlay }: { built: BuiltWorld; initial: CustomWorld; initialLive: { name: string; at: string } | null; onExit: () => void; onPlay: (cw: CustomWorld) => void }) {
+function Editor({ built, initial, initialActive, slot, onExit, onPlay }: { built: BuiltWorld; initial: CustomWorld; initialActive: Active; slot: Slot; onExit: () => void; onPlay: (cw: CustomWorld) => void }) {
   const mountRef = useRef<HTMLDivElement>(null)
   const cwRef = useRef<CustomWorld>(initial)
-  const [live, setLive] = useState(initialLive) // the world that is in use right now (null: the normal island)
+  const [active, setActiveState] = useState<Active>(initialActive) // which world the next matches use
+  const [showRings, setShowRings] = useState(true)
   const [hasBackup, setHasBackup] = useState(() => !!loadBackup())
   const [tool, setTool] = useState<Tool>('paint')
   const [brush, setBrush] = useState(2)
@@ -168,16 +228,22 @@ function Editor({ built, initial, initialLive, onExit, onPlay }: { built: BuiltW
     setSaved(saveLocal(cwRef.current) ? 'Guardado en este navegador ✓' : 'No se pudo guardar (poco espacio): usa Exportar')
   }, [name, barriers])
   useEffect(() => { cwRef.current.name = name; cwRef.current.barriers = barriers }, [name, barriers])
-  /** "Guardar": this world becomes the one everybody plays, from the NEXT match on (a match already playing keeps the one it started with). */
-  const saveWorld = async () => {
+  /** "Guardar": saves this world in its slot (online). If this slot is the one in use, it is the world of the NEXT match (a match already playing keeps the one it started with). */
+  const saveWorld = async (andUse = false) => {
     const cw = { ...cwRef.current, name, barriers }
     saveLocal(cw)
     if (!(await isWorldAdmin())) { setSaved(''); setShowPub(true); return } // (not signed in / not the owner: the account window)
     setSaved('Guardando…')
-    const err = await publishWorld(cw)
+    const err = await saveSlot(slot, cw)
     if (err) { setSaved(err); return }
-    setLive(await publishedInfo())
-    setSaved('Guardado ✓ Se usará desde la próxima partida')
+    if (andUse) {
+      const e2 = await setActive(slot)
+      if (e2) { setSaved(e2); return }
+      setActiveState(slot)
+      setSaved(`Guardado ✓ El mundo ${slot} se usará desde la próxima partida`)
+      return
+    }
+    setSaved(active === slot ? `Guardado ✓ El mundo ${slot} está en uso: se juega desde la próxima partida` : `Guardado ✓ (el mundo ${slot} aún no se usa en las partidas)`)
   }
   const restoreBackup = () => {
     const b = loadBackup()
@@ -199,6 +265,20 @@ function Editor({ built, initial, initialLive, onExit, onPlay }: { built: BuiltW
     const sea = new THREE.Mesh(new THREE.PlaneGeometry(900, 900).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: '#3a7fc0' }))
     sea.position.set(SIZE / 2, built.waterY - 0.03, SIZE / 2)
     scene.add(sea)
+    // the limits of the Battle Royale: where the shrinking circle starts (red) and the rings: 1|2 (orange), 2|3 (yellow), 3|peak (green)
+    const rings = new THREE.Group()
+    const ringBand = (half: number, color: number) => {
+      const y = built.waterY + 0.9, w = 0.45, a = SIZE / 2 - half, b = SIZE / 2 + half, pos: number[] = []
+      const q = (x0: number, z0: number, x1: number, z1: number) => pos.push(x0, y, z0, x1, y, z0, x1, y, z1, x0, y, z0, x1, y, z1, x0, y, z1)
+      q(a - w, a - w, b + w, a + w); q(a - w, b - w, b + w, b + w); q(a - w, a + w, a + w, b - w); q(b - w, a + w, b + w, b - w)
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
+      const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.55, depthTest: false, side: THREE.DoubleSide }))
+      m.renderOrder = 998; m.frustumCulled = false
+      rings.add(m)
+    }
+    ringBand(RADIUS + 1, 0xff2a2a); ringBand(RING_INNER[0], 0xff9a1f); ringBand(RING_INNER[1], 0xffe14a); ringBand(RING_INNER[2], 0x4ad66a)
+    scene.add(rings)
+    ;(redraw as unknown as { showRings: (b: boolean) => void }).showRings = (b) => { rings.visible = b }
     const look = { x: SIZE / 2, z: SIZE / 2, dist: 50 }
     const PITCH = (58 * Math.PI) / 180
     const place = () => {
@@ -492,6 +572,7 @@ function Editor({ built, initial, initialLive, onExit, onPlay }: { built: BuiltW
   doUndoRef.current = doUndo; doRedoRef.current = doRedo
   useEffect(() => { (redraw as unknown as { blocked?: (b: boolean) => void }).blocked?.(showBlocked) }, [showBlocked])
   useEffect(() => { (redraw as unknown as { showEvents?: (b: boolean) => void }).showEvents?.(showEvents) }, [showEvents, selEventId])
+  useEffect(() => { (redraw as unknown as { showRings?: (b: boolean) => void }).showRings?.(showRings) }, [showRings])
   // saved automatically a moment after every change
   useEffect(() => {
     const id = window.setInterval(() => { saveLocal({ ...cwRef.current, name, barriers }) }, 4000)
@@ -535,18 +616,20 @@ function Editor({ built, initial, initialLive, onExit, onPlay }: { built: BuiltW
         <input className="we-name" value={name} onChange={(e) => setName(e.target.value)} aria-label="Nombre del mundo" />
         <button onClick={doUndo} title="Ctrl+Z">Deshacer</button>
         <button onClick={doRedo} title="Ctrl+Y">Rehacer</button>
-        <button className="we-play" onClick={() => void saveWorld()} title="Este mundo se usará desde la próxima partida">💾 Guardar</button>
+        <button className="we-play" onClick={() => void saveWorld()} title="Guarda este mundo en su casilla">💾 Guardar</button>
+        {active !== slot && <button className="we-play" onClick={() => void saveWorld(true)} title="Guarda y hace que las próximas partidas se jueguen en este mundo">★ Guardar y usar en las partidas</button>}
         <button onClick={exportFile}>Exportar</button>
         <button onClick={importFile}>Importar</button>
         <button onClick={newWorld}>Mundo nuevo</button>
         <label className="we-check"><input type="checkbox" checked={showEvents} onChange={(e) => setShowEvents(e.target.checked)} /> Ver eventos</label>
         <label className="we-check"><input type="checkbox" checked={showBlocked} onChange={(e) => setShowBlocked(e.target.checked)} /> Ver bloqueos</label>
         <label className="we-check" title="El juego añade muros entre los anillos (hace falta ganar un gimnasio para pasar)"><input type="checkbox" checked={barriers} onChange={(e) => setBarriers(e.target.checked)} /> Muros de anillo</label>
-        <button onClick={() => setShowPub(true)}>Cuenta / quitar mundo…</button>
+        <button onClick={() => setShowPub(true)}>Cuenta…</button>
         {hasBackup && <button onClick={() => { restoreBackup(); setHasBackup(!!loadBackup()) }} title="El borrador que tenías en este navegador antes de cargar el mundo en uso">Mi borrador anterior</button>}
         <button className="we-play" onClick={() => { save(); onPlay({ ...cwRef.current, name, barriers }) }}>▶ Probar mundo</button>
         <span className="we-saved">{saved}</span>
-        <span className="we-saved" title="El mundo que se está usando para jugar ahora mismo">{live ? `En uso: «${live.name}» (${new Date(live.at).toLocaleString()})` : 'En uso: la isla normal (no hay mundo guardado)'}</span>
+        <label className="we-check" title="Rojo: donde empieza a encogerse el círculo. Naranja / amarillo / verde: límites de los anillos 1|2, 2|3 y 3|cima."><input type="checkbox" checked={showRings} onChange={(e) => setShowRings(e.target.checked)} /> Ver anillos</label>
+        <span className="we-saved" title="Qué mundo juegan las próximas partidas">Mundo {slot}: {active === slot ? '★ EN USO' : active === 'default' ? 'no se usa (se juega la isla normal)' : `no se usa (se juega el mundo ${active})`}</span>
       </div>
       <div className="we-body">
         <div className="we-side">
@@ -612,14 +695,14 @@ function Editor({ built, initial, initialLive, onExit, onPlay }: { built: BuiltW
         </div>
         <div className="we-view" ref={mountRef} />
       </div>
-      {showPub && <PublishPanel getWorld={() => ({ ...cwRef.current, name, barriers })} onClose={() => { setShowPub(false); void publishedInfo().then(setLive) }} />}
-      <div className="we-status">{info || 'Rueda: zoom · WASD o botón derecho: mover la vista · Ctrl+Z: deshacer'}</div>
+      {showPub && <PublishPanel onClose={() => setShowPub(false)} />}
+      <div className="we-status">{info || 'Rueda: zoom · WASD o botón derecho: mover la vista · Ctrl+Z: deshacer · Líneas: 🟥 aquí empieza a encogerse el círculo · 🟧 anillo 1|2 · 🟨 anillo 2|3 · 🟩 anillo 3|cima'}</div>
     </div>
   )
 }
 
 /** Publishing the world for everybody (only the owner's account can do it). */
-function PublishPanel({ getWorld, onClose }: { getWorld: () => CustomWorld; onClose: () => void }) {
+function PublishPanel({ onClose }: { onClose: () => void }) {
   const [state, setState] = useState<'loading' | 'out' | 'user' | 'admin'>('loading')
   const [user, setUser] = useState('')
   const [pass, setPass] = useState('')
@@ -635,9 +718,9 @@ function PublishPanel({ getWorld, onClose }: { getWorld: () => CustomWorld; onCl
   return (
     <div className="we-modal" onClick={onClose}>
       <div className="we-modal-box" onClick={(e) => e.stopPropagation()}>
-        <h3>Cuenta del propietario y mundo en uso</h3>
-        <p className="we-help">Publicado: {info ? `“${info.name}” (${new Date(info.at).toLocaleString()})` : 'ningún mundo (se juega la isla normal)'}</p>
-        <p className="we-help">El botón 💾 Guardar de arriba hace que este mundo se use desde la próxima partida.</p>
+        <h3>Cuenta del propietario</h3>
+        <p className="we-help">En uso: {info ? `“${info.name}” (${new Date(info.at).toLocaleString()})` : 'la isla normal'}</p>
+        <p className="we-help">💾 Guardar guarda este mundo en su casilla; ★ Guardar y usar lo pone en las próximas partidas.</p>
         {state === 'loading' && <p>Comprobando tu cuenta…</p>}
         {state === 'out' && (
           <>
@@ -656,8 +739,7 @@ function PublishPanel({ getWorld, onClose }: { getWorld: () => CustomWorld; onCl
         )}
         {state === 'admin' && (
           <>
-            <button className="we-play" onClick={async () => { setMsg('Publicando…'); const err = await publishWorld(getWorld()); setMsg(err ?? 'Guardado ✓ Todos jugarán este mundo desde la próxima partida.'); void refresh() }}>Guardar este mundo para la próxima partida</button>
-            <button onClick={async () => { if (!window.confirm('¿Quitar el mundo publicado? Volverá la isla normal.')) return; const err = await unpublishWorld(); setMsg(err ?? 'Quitado ✓'); void refresh() }}>Quitar el mundo publicado</button>
+            <button onClick={async () => { if (!window.confirm('¿Usar la isla normal en las próximas partidas? (Tus mundos se quedan guardados.)')) return; const err = await setActive('default'); setMsg(err ?? 'Listo ✓ Se juega la isla normal.'); void refresh() }}>Usar la isla normal en las partidas</button>
           </>
         )}
         {msg && <p>{msg}</p>}

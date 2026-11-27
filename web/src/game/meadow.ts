@@ -24,6 +24,8 @@ const SHOW_SIDE = !new URLSearchParams(location.search).has('noside') // the upr
 const SHOW_CROSS = new URLSearchParams(location.search).has('cross')
 /** The 2 x 2 tile cells of ring 1 that are forest (top-left tile numbers), made by prepareMeadow. */
 let forestCells: number[] = []
+/** the 2 x 2 pine cells of ring 1 made by the last `prepareMeadow` (top-left tile numbers) */
+export const getForestCells = (): number[] => forestCells
 
 /** The flat height of the meadow (tile units). */
 export const meadowHeight = (built: BuiltWorld): number => built.waterY + 0.35

@@ -100,18 +100,22 @@ export function decodeWorld(text: string): CustomWorld | null {
   } catch { return null }
 }
 
-const KEY = 'pq.world.custom.v1'
+const KEY_BASE = 'pq.world.custom.v1'
+let slotSuffix = ''
+/** The browser draft belongs to the world slot being edited (1, 2 or 3). */
+export function setLocalSlot(n: number): void { slotSuffix = n === 1 ? '' : `.s${n}` } // (slot 1 keeps the key of the old single draft)
+const KEY = () => KEY_BASE + slotSuffix
 export function saveLocal(cw: CustomWorld): boolean {
-  try { localStorage.setItem(KEY, encodeWorld(cw)); return true } catch { return false }
+  try { localStorage.setItem(KEY(), encodeWorld(cw)); return true } catch { return false }
 }
 /** The draft that was in this browser before the editor loaded the world that is really in use (kept so nothing is lost). */
-const BACKUP = 'pq.world.custom.backup.v1'
-export function saveBackup(cw: CustomWorld): void { try { localStorage.setItem(BACKUP, encodeWorld(cw)) } catch { /* no room: ignore */ } }
+const BACKUP = () => `pq.world.custom.backup.v1${slotSuffix}`
+export function saveBackup(cw: CustomWorld): void { try { localStorage.setItem(BACKUP(), encodeWorld(cw)) } catch { /* no room: ignore */ } }
 export function loadBackup(): CustomWorld | null {
-  try { const t = localStorage.getItem(BACKUP); return t ? decodeWorld(t) : null } catch { return null }
+  try { const t = localStorage.getItem(BACKUP()); return t ? decodeWorld(t) : null } catch { return null }
 }
 export function loadLocal(): CustomWorld | null {
-  try { const t = localStorage.getItem(KEY); return t ? decodeWorld(t) : null } catch { return null }
+  try { const t = localStorage.getItem(KEY()); return t ? decodeWorld(t) : null } catch { return null }
 }
 
 // ---------------------------------------------------------------- drawing
