@@ -590,6 +590,7 @@ export default function GameView3D(props: Props) {
     // it hops for 7 frames (6, 10, 12, 12, 10, 6, 0 sixteenths of a tile) and stays 30 more; the frames of that effect are 1/30 s. Until it is loaded the round emote is used.
     let alert: { n: NpcRuntime; t: number; walk?: boolean } | null = null
     let bubble: THREE.Sprite | null = null
+    const spotCooldown = new Map<string, number>() // a trainer that has just spoken to you does not spot you again for a moment (the speech pauses the game a frame later)
     let realBubble = false
     const ALERT_FRAME = 1 / 30
     const ALERT_HOP = [6, 10, 12, 12, 10, 6, 0].map((h) => h / 16)
@@ -827,6 +828,7 @@ export default function GameView3D(props: Props) {
       }
 
       roam.free = !(paused || p.paused)
+      if (!alert && bubble && bubble.visible) bubble.visible = false // (the "!" never stays behind)
       if (paused || p.paused) { // nothing typed or pressed while a battle / menu is open may move the character afterwards
         held.clear(); tapRef.current = null; dpadRef.current = null; bRef.current = false; me.turn = 0
       }
@@ -862,6 +864,8 @@ export default function GameView3D(props: Props) {
               if (near || blocked || alert.t <= 0) {
                 const id = n.spec.id
                 alert = null
+                bubble!.visible = false
+                spotCooldown.set(id, now + 3000)
                 p.events.onNpcSpotted?.(id)
               } else { n.fromX = n.x; n.fromY = n.y; n.x = nx; n.y = ny; n.moving = 0.001; n.stp ^= 1 }
             }
@@ -917,7 +921,7 @@ export default function GameView3D(props: Props) {
               const sx = n.x + DX[n.dir] * k
               const sy = n.y + DY[n.dir] * k
               if (!isWalkable(world, sx, sy) && tileAt(world, sx, sy) !== T.GymDoor) break
-              if (sx === me.x && sy === me.y && me.t >= 1 && !alert && sameGround(n.x, n.y) && p.canBattle !== false && !p.noChallenge?.(n.spec.id) && !busyMap.has(n.spec.id)) { // (trainers leave you alone when none of your Pokémon can fight)
+              if (sx === me.x && sy === me.y && me.t >= 1 && !alert && (spotCooldown.get(n.spec.id) ?? 0) < now && sameGround(n.x, n.y) && p.canBattle !== false && !p.noChallenge?.(n.spec.id) && !busyMap.has(n.spec.id)) { // (trainers leave you alone when none of your Pokémon can fight)
                 if (bubble && (realBubble || owEmote(15))) { alert = { n, t: BUBBLE_SECONDS }; bubble.visible = true; p.events.onAlert?.(); break }
                 p.events.onNpcSpotted?.(n.spec.id)
                 break
