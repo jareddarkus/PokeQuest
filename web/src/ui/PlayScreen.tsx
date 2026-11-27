@@ -19,7 +19,7 @@ import {
   C, collapseInfo, squareTile, RADIUS, RING_INNER, SIZE, T, collapseRadius, generateWorld, isWalkable, ringAt, type Dir, type World,
 } from '../game/world'
 import BattleScreen, { CHAR_MS, TypedText, type BattleKind, type BattleOutcome, type PvpLink } from './BattleScreen'
-import { setNoGrass } from '../rom/mapModel'
+import { addGrassOnly, setNoGrass } from '../rom/mapModel'
 import { addExtraGrass, buildMeadowVisuals, carveCenterPaths, clearPeakGrass, prepareMeadow } from '../game/meadow'
 import { buildCustomVisuals, type CustomWorld } from '../world/customWorld'
 import { fetchPublishedWorld } from '../world/publish'
@@ -947,7 +947,8 @@ export default function PlayScreen(props: Props) {
         setProg({ text: 'Placing gyms, trainers and items…', frac: 0.8, step: 4, steps: 5, done: 0, total: 1, unit: 'step' })
         await pause()
         world = generateWorld(seed, built.ground, { connect: true })
-        setNoGrass([...clearPeakGrass(world), ...(world.carved ?? []), ...carveCenterPaths(world, built)]) // (nothing grows at the peak: the tiles become plain grass and the map's own grass pictures there are hidden)
+        setNoGrass([...clearPeakGrass(world), ...(world.carved ?? []), ...carveCenterPaths(world, built)])
+        if (RULES.peakWildOn <= 0) { const peak: number[] = []; for (let i = 0; i < SIZE * SIZE; i++) if (ringAt(i % SIZE, (i / SIZE) | 0) === 4) peak.push(i); addGrassOnly(peak) } // (no grass at all at the peak, not even the leftovers at the edges of the old patches) // (nothing grows at the peak: the tiles become plain grass and the map's own grass pictures there are hidden)
         const extra = addExtraGrass(world, built, seed) // and more tall grass in the inner rings
         setProg({ text: 'Drawing the island…', frac: 0.9, step: 5, steps: 5, done: 0, total: 1, unit: 'step' })
         await pause()

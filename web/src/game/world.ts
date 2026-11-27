@@ -165,7 +165,7 @@ export function connectRings(tiles: Uint8Array, debug?: unknown[]): number[] {
     const t = tiles[i]
     if (walk(t)) return t === T.GymDoor ? 6 : 1
     if (edgeRow(x, y) || t === T.GymWall) return Infinity
-    return t === T.Tree ? 4 : t === T.Cliff ? 30 : t === T.Water ? 14 : Infinity
+    return t === T.Tree ? 4 : t === T.Cliff ? 30 : t === T.Water ? 40 : Infinity
   }
   for (let ring = 2; ring <= 4; ring++) {
     for (let round = 0; round < 40; round++) {

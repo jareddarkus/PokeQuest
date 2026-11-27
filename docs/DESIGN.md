@@ -529,3 +529,4 @@ Seen in the recording but NOT done: the trainers' battle sprites (the foe traine
 - Chat: any player's name inside a message or an announcement is written in that player's match colour (`ChatPanel` `rich`).
 - Minimap: a click opens it as big as the screen (PC and phone); a click anywhere closes it.
 - Not checked: trees (ring 1 pines at 2 places and ring 2 palms looked normal; the ones the owner means were not found), the flight/smoke animation by eye, the lobby warning with a real older build.
+- Round 36b: peak grass leftovers (dark dashes = map pictures `kusa_ec*s`, small tufts = `ue_grass*`) are hidden over the WHOLE peak (mask value 128 = "grass pictures only", `addGrassOnly` in `rom/mapModel.ts`; trees and rocks stay); any picture with "kusa" in its name counts as grass. Paths cut through water cost more (40) so they prefer forest.
