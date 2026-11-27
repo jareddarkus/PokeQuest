@@ -29,7 +29,7 @@ import { backClassForSprite, playerBackClass, trainerClassFor } from '../data/tr
 import { MoveFx, FX_NAMES } from './moveFx'
 import { trText, useLang } from '../i18n'
 import FontText from './FontText'
-import { useTheme } from './theme'
+import { getTheme, setTheme, useTheme } from './theme'
 import { RULES } from '../game/rules'
 import { nameOf } from '../i18n'
 
@@ -301,7 +301,8 @@ export function HpBox(props: Parameters<typeof ClassicHpBox>[0]) {
 }
 export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed, foeClass, pvp, spectate, stream, playerGirl, playerSprite, textSpeed = 'normal', onEnd }: Props) {
   const lang = useLang()
-  // the Classic theme shows the game's own HP boxes, command and move screens; the Modern theme has its own (ui/ModernBattle.tsx)
+  // the battle always looks classic (the game's own HP boxes, command and move screens), whatever the theme is; the theme comes back when the battle ends
+  useEffect(() => { const prev = getTheme(); setTheme('classic'); return () => setTheme(prev) }, [])
   const playerTeam = useMemo(() => trainer.team.filter((m) => m.hp > 0).map((m) => ({ ...m, evs: { ...m.evs }, ivs: { ...m.ivs }, moves: [...m.moves] })), [])
   const foeCopies = useMemo(() => foeTeam.map((m) => ({ ...m, evs: { ...m.evs }, ivs: { ...m.ivs }, moves: [...m.moves] })), [])
   const [me, setMe] = useState<Side | null>(null)
