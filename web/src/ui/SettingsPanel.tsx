@@ -1,4 +1,6 @@
+import { useEffect, useState } from 'react'
 import type { Settings } from '../game/settings'
+import { bindKey, capture, KEY_ACTIONS, keyLabel, resetKeys, useKeyBindings, type KeyAction } from '../game/keys'
 
 interface Props {
   settings: Settings
@@ -7,7 +9,23 @@ interface Props {
   onCustomize?: () => void
 }
 
+const ACTION_NAMES: Record<KeyAction, string> = { up: 'Move up', down: 'Move down', left: 'Move left', right: 'Move right', a: 'A: talk, pick up, accept', b: 'B: cancel (hold to run)', x: 'X: open the menu' }
+
 export default function SettingsPanel({ settings, onChange, onClose, onCustomize }: Props) {
+  const keys = useKeyBindings()
+  const [listen, setListen] = useState<KeyAction | null>(null)
+  useEffect(() => {
+    if (!listen) return
+    capture.on = true
+    const on = (e: KeyboardEvent) => {
+      e.preventDefault(); e.stopImmediatePropagation()
+      if (['Dead', 'Meta', 'CapsLock', 'Unidentified'].includes(e.key)) return
+      bindKey(listen, e.key)
+      setListen(null)
+    }
+    window.addEventListener('keydown', on, true)
+    return () => { window.removeEventListener('keydown', on, true); capture.on = false }
+  }, [listen])
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="panel modal" onClick={(e) => e.stopPropagation()}>
@@ -74,6 +92,17 @@ export default function SettingsPanel({ settings, onChange, onClose, onCustomize
             <button className={settings.dpadSide === 'right' ? 'on' : ''} onClick={() => onChange({ dpadSide: 'right' })}>Right</button>
           </div>
         </div>
+
+        <h3 style={{ margin: '14px 0 4px' }}>Controls (keyboard)</h3>
+        {KEY_ACTIONS.map((a) => (
+          <div className="row" key={a}>
+            <span>{ACTION_NAMES[a]}</span>
+            <button className={listen === a ? 'on' : ''} onClick={() => setListen(listen === a ? null : a)} style={{ minWidth: 120 }}>
+              {listen === a ? 'Press a key…' : keys[a].map(keyLabel).join(' / ')}
+            </button>
+          </div>
+        ))}
+        <div className="btn-row"><button onClick={() => { setListen(null); resetKeys() }}>Reset keys</button></div>
 
         <div className="btn-row">
           {onCustomize && <button onClick={onCustomize}>Customize character</button>}

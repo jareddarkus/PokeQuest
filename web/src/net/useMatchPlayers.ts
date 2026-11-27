@@ -4,7 +4,11 @@ import type { Look } from '../game/character'
 import type { OtherPlayer } from '../game/GameView'
 import type { Dir } from '../game/world'
 
-interface Remote { name: string; tx: number; ty: number; x: number; y: number; dir: Dir; look: Look; seen: number; moving: boolean }
+interface Remote { name: string; tx: number; ty: number; x: number; y: number; dir: Dir; look: Look; seen: number; moving: boolean; t: number }
+
+const WALK_SPEED = 16 / 16 / (16 / 60) // tiles a second when walking (one tile = 16 frames at 60 a second, as in GameView3D)
+const SEND_CHECK_MS = 70 // how often we look whether we have moved (a message goes out only if we did, so the others hear about a step at once)
+const HEARTBEAT_MS = 1000 // ... and when we stand still, one message a second tells them we are still here
 
 /**
  * Shares your position with the other players of the match (private broadcast channel "match:<id>", about 7 messages a second) and
@@ -48,8 +52,8 @@ export function useMatchPlayers(matchId: string | null, me: string | null, look:
       const p = payload as { n?: string; x?: number; y?: number; d?: Dir; l?: Look }
       if (!p || typeof p.n !== 'string' || p.n === me || typeof p.x !== 'number' || typeof p.y !== 'number') return
       const r = others.current.get(p.n)
-      if (r) { r.moving = Math.abs(r.tx - p.x) + Math.abs(r.ty - p.y) > 0.01; r.tx = p.x; r.ty = p.y; r.dir = (p.d ?? 0) as Dir; r.seen = Date.now(); if (p.l) r.look = p.l }
-      else others.current.set(p.n, { name: p.n, tx: p.x, ty: p.y, x: p.x, y: p.y, dir: (p.d ?? 0) as Dir, look: p.l as Look, seen: Date.now(), moving: false })
+      if (r) { r.tx = p.x; r.ty = p.y; r.dir = (p.d ?? 0) as Dir; r.seen = Date.now(); if (p.l) r.look = p.l }
+      else others.current.set(p.n, { name: p.n, tx: p.x, ty: p.y, x: p.x, y: p.y, dir: (p.d ?? 0) as Dir, look: p.l as Look, seen: Date.now(), moving: false, t: Date.now() })
     })
     ch.on('broadcast', { event: 'picked' }, ({ payload }) => {
       const n = (payload as { n?: string } | null)?.n
@@ -67,16 +71,19 @@ export function useMatchPlayers(matchId: string | null, me: string | null, look:
     ch.subscribe()
     let sentLook = 0
     let pickTick = 0
+    let lastSent = { x: NaN, y: NaN, d: NaN, at: 0 }
     const id = window.setInterval(() => {
       const sy = syncRef.current
       if (sy?.pickedMe && !sy.started && Date.now() - pickTick > 2000) { pickTick = Date.now(); picked.current.add(me); checkAll(); void ch.send({ type: 'broadcast', event: 'picked', payload: { n: me } }) }
       const pos = getRef.current()
       if (!pos) return
       const now = Date.now()
+      if (pos.x === lastSent.x && pos.y === lastSent.y && pos.dir === lastSent.d && now - lastSent.at < HEARTBEAT_MS) return // (nothing new to tell)
+      lastSent = { x: pos.x, y: pos.y, d: pos.dir, at: now }
       const withLook = now - sentLook > 4000 // the look changes rarely, so send it every few seconds only
       if (withLook) sentLook = now
       void ch.send({ type: 'broadcast', event: 'pos', payload: { n: me, x: pos.x, y: pos.y, d: pos.dir, ...(withLook ? { l: lookRef.current } : {}) } })
-    }, 140)
+    }, SEND_CHECK_MS)
     return () => { window.clearInterval(id); void supabase.removeChannel(ch); others.current.clear(); picked.current.clear(); allDone.current = false; if (chanRef) chanRef.current = null }
   }, [matchId, me])
 
@@ -85,10 +92,20 @@ export function useMatchPlayers(matchId: string | null, me: string | null, look:
     const out: OtherPlayer[] = []
     for (const [k, r] of others.current) {
       if (now - r.seen > 6000) { others.current.delete(k); continue } // left the match or lost connection
-      r.x += (r.tx - r.x) * 0.25
-      r.y += (r.ty - r.y) * 0.25
+      // they walk towards the tile they were last seen on at a steady speed (like a real walk), a little faster the further behind they are; then
+      // the delay of the internet and the pauses between messages are not seen as jumps. (Measured with the clock, so it is the same on every screen.)
+      const dt = Math.min(0.1, Math.max(0, (now - r.t) / 1000))
+      r.t = now
+      const dx = r.tx - r.x, dy = r.ty - r.y
+      const d = Math.hypot(dx, dy)
+      if (d > 8) { r.x = r.tx; r.y = r.ty } // (far away: a push, a respawn... they simply are there)
+      else if (d > 1e-4) {
+        const step = Math.min(d, WALK_SPEED * Math.max(1, d * 1.5) * dt)
+        r.x += (dx / d) * step; r.y += (dy / d) * step
+      }
+      r.moving = Math.hypot(r.tx - r.x, r.ty - r.y) > 0.05
       if (!r.look) continue
-      out.push({ id: r.name, name: r.name, x: r.x, y: r.y, dir: r.dir, look: r.look, moving: r.moving && Math.abs(r.tx - r.x) + Math.abs(r.ty - r.y) > 0.02 })
+      out.push({ id: r.name, name: r.name, x: r.x, y: r.y, dir: r.dir, look: r.look, moving: r.moving })
     }
     return out
   }

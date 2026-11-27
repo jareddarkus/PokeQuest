@@ -2,6 +2,7 @@ import { lazy, StrictMode, Suspense } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
+import MenuNav from './ui/MenuNav'
 
 // developer tools (local test server only): ?mapview&map=1  and  ?worldmap
 const MapViewer = import.meta.env.DEV ? lazy(() => import('./dev/MapViewer')) : null
@@ -93,7 +94,10 @@ createRoot(document.getElementById('root')!).render(
         <WorldMap />
       </Suspense>
     ) : (
-      <App />
+      <>
+        <App />
+        <MenuNav />
+      </>
     )}
   </StrictMode>,
 )

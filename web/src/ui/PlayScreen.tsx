@@ -1,3 +1,4 @@
+import { useKeyAction } from '../game/keys'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { type GameEvents, type GameHandle } from '../game/GameView'
 import GameView3D from '../game/GameView3D'
@@ -120,6 +121,9 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
     const id = window.setTimeout(closeSpeech, speech.line.length * CHAR_MS[settings.textSpeed ?? 'normal'] + 2600)
     return () => window.clearTimeout(id)
   }, [speech])
+  /** a tap on the speech or the A button: first the sentence is finished, then it closes */
+  const advanceSpeech = () => { if (Date.now() < speechTyping.current) { speechTyping.current = 0; setSpeechSkip((k) => k + 1) } else closeSpeech() }
+  useKeyAction('a', advanceSpeech, speech !== null)
   const toastFrame = useFrameStyle('white', 2)
   const hudFrame2 = useFrameStyle('dark', 2)
   const hudFrame = useFrameStyle('dark', 1) // the game's own dark message window for the info boxes
@@ -744,9 +748,9 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
 
       {speech && (
         <div
-          className={`npc-speech ${bubble ? 'bubble' : 'panel'}`}
+          data-nonav className={`npc-speech ${bubble ? 'bubble' : 'panel'}`}
           style={bubble ? { left: Math.min(Math.max(bubble.x, 150), window.innerWidth - 150), top: Math.max(bubble.y, 90) } : hudFrame2 ?? undefined}
-          onClick={() => { if (Date.now() < speechTyping.current) { speechTyping.current = 0; setSpeechSkip((k) => k + 1) } else closeSpeech() }}
+          onClick={advanceSpeech}
         >
           <b>{speech.who}</b>
           <span><TypedText text={speech.line} ms={CHAR_MS[settings.textSpeed ?? 'normal']} skip={speechSkip} /></span>

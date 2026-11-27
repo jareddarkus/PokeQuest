@@ -3,6 +3,8 @@ import { maxHp, type Mon } from '../data/dex'
 import { MonIcon } from './MonSprite'
 import { useUiUrl } from './CmdButton'
 import { useTheme } from './theme'
+import ItemIcon from './ItemIcon'
+import { nameOf, useLang } from '../i18n'
 
 /**
  * Your six Pokémon on the right side of the screen (empty places included), like the party bar of PokeMMO: icon, level and HP bar.
@@ -19,6 +21,9 @@ export default function PartyBar({ team, onOpen, onReorder, hidden }: { team: Mo
   const pk = window.innerWidth <= 640 ? 0.58 : 1.05
   const drag = useRef<{ from: number; x: number; y: number; moved: boolean } | null>(null)
   const [dragging, setDragging] = useState<{ from: number; over: number | null; x: number; y: number } | null>(null)
+  const [tip, setTip] = useState<{ i: number; top: number; right: number } | null>(null) // the little card with the basics of the Pokémon under the mouse
+  const lang = useLang()
+  const es = lang === 'es'
   const slotAt = (x: number, y: number): number | null => {
     const el = document.elementFromPoint(x, y)?.closest('[data-slot]') as HTMLElement | null
     return el ? Number(el.dataset.slot) : null
@@ -59,12 +64,14 @@ export default function PartyBar({ team, onOpen, onReorder, hidden }: { team: Mo
             data-slot={i}
             className={`party-slot ${m.hp <= 0 ? 'fainted' : ''} ${dragging?.from === i ? 'lifted' : ''} ${over ? 'drop' : ''} ${i === 0 ? 'lead' : ''}`}
             onPointerDown={(e) => down(e, i)}
-            title={`${m.species} Lv${m.level} ${m.hp}/${max}`}
+            onPointerEnter={(e) => { if (e.pointerType === 'mouse' && !drag.current) { const r = e.currentTarget.getBoundingClientRect(); setTip({ i, top: r.top, right: window.innerWidth - r.left + 8 }) } }}
+            onPointerLeave={() => setTip(null)}
             style={{ touchAction: 'none', ...(art ? { ...box, position: 'relative', background: `url(${m.hp <= 0 ? faintedArt : normalArt}) 0 0 / 100% 100% no-repeat`, opacity: 1 } : null) }}
           >
             {art ? (
               <>
                 <span style={{ position: 'absolute', left: 5 * pk, top: 5 * pk, pointerEvents: 'none' }}><MonIcon species={m.species} shiny={m.shiny} size={32 * pk} /></span>
+                {m.item && <span style={{ position: 'absolute', left: 3 * pk, top: 24 * pk, pointerEvents: 'none', filter: 'drop-shadow(0 1px 0 #000)' }}><ItemIcon name={m.item} size={16 * pk} /></span>}
                 {pk > 0.8 && <small style={{ position: 'absolute', left: 44 * pk, top: 6 * pk, fontSize: 9 * pk, fontWeight: 700, textShadow: '0 1px 0 #000', pointerEvents: 'none' }}>Lv{m.level}</small>}
                 <span style={{ position: 'absolute', left: (pk > 0.8 ? 44 : 38) * pk, top: 27 * pk, width: (pk > 0.8 ? 72 : 80) * pk, height: 5 * pk, background: '#101018', boxShadow: '0 0 0 1px #000', pointerEvents: 'none' }}>
                   <span className="party-fill" style={{ display: 'block', height: '100%', width: `${f * 100}%`, background: color }} />
@@ -73,6 +80,7 @@ export default function PartyBar({ team, onOpen, onReorder, hidden }: { team: Mo
             ) : (
               <>
                 <MonIcon species={m.species} shiny={m.shiny} size={40} />
+                {m.item && <span style={{ position: 'absolute', left: 2, bottom: 1, pointerEvents: 'none', filter: 'drop-shadow(0 1px 0 #000)' }}><ItemIcon name={m.item} size={20} /></span>}
                 <span className="party-info">
                   <small>Lv{m.level}</small>
                   <span className="party-hp"><span style={{ width: `${f * 100}%`, background: color }} /></span>
@@ -82,6 +90,20 @@ export default function PartyBar({ team, onOpen, onReorder, hidden }: { team: Mo
           </button>
         )
       })}
+      {tip && !dragging && team[tip.i] && (() => {
+        const m = team[tip.i]
+        const max = maxHp(m)
+        const f = Math.max(0, Math.min(1, m.hp / max))
+        return (
+          <div className="party-tip" style={{ position: 'fixed', top: tip.top, right: tip.right }}>
+            <b>{nameOf(m.species)} <span style={{ opacity: 0.7 }}>{m.gender === 'M' ? '♂' : m.gender === 'F' ? '♀' : ''}</span></b>
+            <div>{es ? 'Nv.' : 'Lv.'} {m.level}</div>
+            <div>{es ? 'PS' : 'HP'} {Math.max(0, m.hp)} / {max}<span className="party-hp tip-hp"><span style={{ width: `${f * 100}%`, background: m.hp <= 0 ? '#777' : f > 0.5 ? '#2fdc5a' : f > 0.2 ? '#f0b000' : '#ee3d5e' }} /></span></div>
+            {m.item ? <div className="tip-item"><ItemIcon name={m.item} size={22} />{nameOf(m.item)}</div> : <div style={{ opacity: 0.6 }}>{es ? 'Sin objeto' : 'No item'}</div>}
+            <div style={{ opacity: 0.85 }}>{nameOf(m.ability)} · {nameOf(m.nature)}</div>
+          </div>
+        )
+      })()}
       {dragging && mon && (
         <div className="party-ghost" style={{ left: dragging.x - 20, top: dragging.y - 20 }}>
           <MonIcon species={mon.species} shiny={mon.shiny} size={40} />

@@ -1,3 +1,4 @@
+import { useKeyAction } from '../game/keys'
 import { SplFx } from '../rom/splFx'
 import { runEffScript, FIRST_EFFECT, type EffHost, type Side as MonSide } from '../rom/effVm'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -365,6 +366,10 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
   const wait = (ms: number) => new Promise<void>((res) => { const id = window.setTimeout(done, ms); function done() { window.clearTimeout(id); if (wake.current === done) wake.current = null; res() } wake.current = done })
   /** shows a sentence and waits until it has been typed and read */
   const say = async (t: string, hold = 800) => { setText(t); await wait(typeMs(t) + hold) }
+  const animSkip = useRef(false) // a tap / the A key while the exp gauge moves: it jumps to its end
+  /** the A button (or a tap on the message): finish typing, skip the wait and any gauge that is moving, go to the next thing */
+  const advance = () => { animSkip.current = true; setSkip((k) => k + 1); wake.current?.() }
+  useKeyAction('a', advance)
   const [mode, setMode] = useState<'wait' | 'menu' | 'fight' | 'switch' | 'bag' | 'done'>('wait')
   const S = dsScale()
   const KdBase = useDsK()
@@ -832,7 +837,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
       if (kind !== 'wild') { // "You are challenged by ...!" with the foe's row of balls (1.45 s after the picture fades in, like the recording)
         const t = `You are challenged by ${foeName ?? 'a trainer'}!`
         setText(t); setRows('foe')
-        await sleep(typeMs(t) + 2000)
+        await wait(typeMs(t) + 2000)
         if (cancelled) return
         setRows(null)
       }
@@ -854,7 +859,12 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
         }
         if (opening) {
           const a = evs.findIndex((e) => e.kind === 'switch' && e.side === 'p1'), b = evs.findIndex((e) => e.kind === 'switch' && e.side === 'p2')
-          if (a >= 1 && b === a + 2) { opening = false; evs = [...evs.slice(0, a - 1), evs[b - 1], evs[b], evs[a - 1], evs[a], ...evs.slice(b + 1)] }
+          if (a >= 0 && b > a) { // (each side comes as: its stat badges, its sentence, its switch: the whole foe block goes before the whole block of yours)
+            opening = false
+            let st = a
+            while (st > 0 && (evs[st - 1].kind === 'stages' || (evs[st - 1].kind === 'text' && /^Go! /.test((evs[st - 1] as { text: string }).text)))) st--
+            evs = [...evs.slice(0, st), ...evs.slice(a + 1, b + 1), ...evs.slice(st, a + 1), ...evs.slice(b + 1)]
+          }
         }
         queue.current.push(...evs); void pump()
       })
@@ -875,12 +885,13 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
   /** the EXP gauge of the Pokémon that is out moves from one place to another (60 gauge pixels a second, the sound of the game plays while it moves) */
   const animBar = async (from: number, to: number) => {
     const ms = Math.abs(to - from) * (80 / 60) * 1000
+    animSkip.current = false
     if (ms < 30) { setExpFrac(to); return }
     const stop = await music.loopSfx('se:exp')
     await new Promise<void>((res) => {
       const t0 = performance.now()
       const tick = () => {
-        const k = Math.min(1, (performance.now() - t0) / ms)
+        const k = animSkip.current ? 1 : Math.min(1, (performance.now() - t0) / ms)
         setExpFrac(from + (to - from) * k)
         if (k < 1) requestAnimationFrame(tick); else res()
       }
@@ -1230,7 +1241,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
         {me && hpOn.me && <StageBadges st={stages.me} es={lang === 'es'} K={Kd} side="me" />}
       </div>
       <div className="battle-bottom">
-        <div className="battle-band" style={{ cursor: 'pointer' }} onClick={() => { setSkip((k) => k + 1); wake.current?.() }}><TypedText text={text} ms={msPer} skip={skip} /></div>
+        <div className="battle-band" data-nonav style={{ cursor: 'pointer' }} onClick={advance}><TypedText text={text} ms={msPer} skip={skip} /></div>
 
         {mode === 'wait' && <IdleBall S={S} />}
         {mode === 'menu' && req && (

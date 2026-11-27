@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { isKey, roam } from './keys'
 import { hardEdges } from '../rom/anim'
 import * as THREE from 'three'
 import type { BuiltWorld } from '../rom/chunkWorld'
@@ -603,14 +604,12 @@ export default function GameView3D(props: Props) {
     }
     propsRef.current.handleRef.current = handle
 
-    // W A S D walk. The arrow keys are the buttons of the game: right = A (talk / pick up), down = B (hold to run), up = X (menu), left = Y.
+    // The keys come from game/keys.ts (every player can change them): by default W A S D walk; the arrows are the buttons of the game: right = A (talk / pick up), down = B (hold to run), up = X (menu).
     const keyDir = (k: string): Dir | null => {
-      switch (k) {
-        case 'w': return 3
-        case 's': return 0
-        case 'a': return 1
-        case 'd': return 2
-      }
+      if (isKey('up', k)) return 3
+      if (isKey('down', k)) return 0
+      if (isKey('left', k)) return 1
+      if (isKey('right', k)) return 2
       return null
     }
     const doAction = () => { // button A: use whatever is right in front of you (an item on the ground)
@@ -625,17 +624,19 @@ export default function GameView3D(props: Props) {
     const onKeyDown = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return
+      if (paused || propsRef.current.paused) return // (a menu / a battle / a speech has the keyboard: see ui/MenuNav.tsx)
       const k = e.key.toLowerCase()
       const kd = keyDir(k)
       if (kd !== null) { if (!held.has(k)) { held.add(k); tapRef.current = kd }; e.preventDefault(); return }
-      if (k === 'arrowdown' || k === 'shift') { held.add('b'); e.preventDefault(); return }
-      if (k === 'arrowright') { if (!e.repeat) doAction(); e.preventDefault(); return }
-      if (k === 'arrowup') { if (!e.repeat) propsRef.current.events.onMenuKey?.(); e.preventDefault(); return }
-      if (k === 'arrowleft') e.preventDefault() // Y: not used yet
+      if (isKey('b', k)) { held.add('b'); heldB.add(k); e.preventDefault(); return }
+      if (isKey('a', k)) { if (!e.repeat) doAction(); e.preventDefault(); return }
+      if (isKey('x', k)) { if (!e.repeat) propsRef.current.events.onMenuKey?.(); e.preventDefault(); return }
     }
+    const heldB = new Set<string>() // the keys of button B that are down (it keeps the run going while any of them is)
     const onKeyUp = (e: KeyboardEvent) => {
       const k = e.key.toLowerCase()
-      if (k === 'arrowdown' || k === 'shift') held.delete('b')
+      heldB.delete(k)
+      if (!heldB.size) held.delete('b')
       held.delete(k)
     }
     // leaving the page (another app, another tab) and coming back: a finger or key that was down when we left never reports being lifted, so forget every press
@@ -722,6 +723,7 @@ export default function GameView3D(props: Props) {
         p.events.onPushed?.(s.x, s.y, s.ring)
       }
 
+      roam.free = !(paused || p.paused)
       if (paused || p.paused) { // nothing typed or pressed while a battle / menu is open may move the character afterwards
         held.clear(); tapRef.current = null; dpadRef.current = null; bRef.current = false; me.turn = 0
       }
@@ -1001,6 +1003,7 @@ export default function GameView3D(props: Props) {
 
     return () => {
       cancelAnimationFrame(raf)
+      roam.free = false
       renderer.domElement.removeEventListener('pointerdown', onCanvasDown)
       renderer.domElement.removeEventListener('pointerup', onCanvasUp)
       window.removeEventListener('keydown', onKeyDown)

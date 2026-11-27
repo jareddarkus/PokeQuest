@@ -22,6 +22,8 @@ export const RADIUS = 78 // the island edge
 export const RING_WIDTH = 20
 /** Distances (in tiles from the centre) where ring 1, 2, 3, 4 start. Ring 4 is the peak. */
 export const RING_INNER = [60, 40, 20, 0] as const
+/** one Poké Ball for every square of this many tiles per side (smaller = more balls) */
+export const PICKUP_CELL = 13
 
 export const TYPES = [
   'Normal', 'Fire', 'Water', 'Electric', 'Grass', 'Ice', 'Fighting', 'Poison', 'Ground',
@@ -278,12 +280,19 @@ export function generateWorld(seed: number, ground: Uint8Array, opts: { barriers
     }
   }
 
+  // Poké Balls on the ground: ONE in every square of PICKUP_CELL x PICKUP_CELL tiles that has walkable ground (a random spot inside it), so they are spread evenly
+  // over the whole island: a bigger ring gets more of them, a small one fewer, and there are no empty places or heaps
   const pickups: PickupSpec[] = []
-  const pcounts = [40, 34, 28, 16] // Poké Balls on the ground: plenty in every ring
-  for (let ring = 1; ring <= 4; ring++) {
-    for (let i = 0; i < pcounts[ring - 1]; i++) {
-      const p = freeTile(ring)
-      pickups.push({ id: `p${ring}_${i}`, ring, x: p.x, y: p.y })
+  const perRing = [0, 0, 0, 0]
+  for (let cy = 0; cy * PICKUP_CELL < SIZE; cy++) {
+    for (let cx = 0; cx * PICKUP_CELL < SIZE; cx++) {
+      for (let tries = 0; tries < 40; tries++) {
+        const x = cx * PICKUP_CELL + Math.floor(rng() * PICKUP_CELL), y = cy * PICKUP_CELL + Math.floor(rng() * PICKUP_CELL)
+        if (!inBounds(x, y) || !walkable(x, y) || ringAt(x, y) < 1 || gyms.some((g) => Math.abs(g.x - x) < 3 && Math.abs(g.y - y) < 3)) continue
+        const ring = ringAt(x, y)
+        pickups.push({ id: `p${ring}_${perRing[ring - 1]++}`, ring, x, y })
+        break
+      }
     }
   }
 
