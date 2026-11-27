@@ -49,7 +49,7 @@ export const animatedTextures: Array<{ tex: THREE.Texture; anim: MatAnim }> = []
 const textureCache = new WeakMap<object, Map<string, THREE.Texture>>()
 
 const SINK0 = 'transformed.y -= smoothstep(uCut - 1.2, uCut, pqd0) * 2.0;\n'
-const SINK1 = '#ifdef PQ_UNIT\nfloat pqDs = max(abs(pqc.x - uCenter.x), abs(pqc.y - uCenter.y));\ntransformed.y -= smoothstep(uCut - 1.0, uCut - 0.3, pqDs) * 3.0;\n#elif defined(USE_INSTANCING)\nvec3 pqWc = (modelMatrix * (instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0))).xyz;\nfloat pqDs = max(abs(pqWc.x - uCenter.x), abs(pqWc.z - uCenter.y));\ntransformed.y -= smoothstep(uCut - 1.0, uCut - 0.3, pqDs) * 3.0;\n#else\nfloat pqDs = max(abs(vWPos.x - uCenter.x), abs(vWPos.z - uCenter.y));\ntransformed.y -= smoothstep(uCut - 1.2, uCut, pqDs) * 2.0;\n#endif\n' // (a mesh with a "pqc" attribute - a whole tree - and pictures drawn as copies - leaves, paths - sink as a whole and a little earlier, so they are gone under the sand before the ground itself dips; the ground bends vertex by vertex)
+const SINK1 = '#ifdef PQ_UNIT\nfloat pqDs = max(abs(pqc.x - uCenter.x), abs(pqc.y - uCenter.y));\nvPqGone = step(uCut - 0.65, pqDs);\n#elif defined(USE_INSTANCING)\nvec3 pqWc = (modelMatrix * (instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0))).xyz;\nfloat pqDs = max(abs(pqWc.x - uCenter.x), abs(pqWc.z - uCenter.y));\nvPqGone = step(uCut - 0.65, pqDs);\n#else\nfloat pqDs = max(abs(vWPos.x - uCenter.x), abs(vWPos.z - uCenter.y));\nvPqGone = 0.0;\ntransformed.y -= smoothstep(uCut - 1.2, uCut, pqDs) * 2.0;\n#endif\n' // (a whole tree (attribute "pqc") and pictures drawn as copies - leaves, paths - do not sink: they are simply gone a little before the ground dips; the ground bends vertex by vertex)
 /** Lets a material of ours disappear with the collapsing island and glow red before it falls (same as the map). */
 export function applyClip(mat: THREE.Material, clip: ClipUniforms): void {
   mat.onBeforeCompile = (shader) => {
@@ -58,14 +58,14 @@ export function applyClip(mat: THREE.Material, clip: ClipUniforms): void {
     shader.uniforms.uTime = clip.uTime
     shader.uniforms.uWarn = clip.uWarn
     // the ground that is about to fall sinks into the sea first (the last 2.5 tiles before the cut slope down under the water)
-    shader.vertexShader = shader.vertexShader.replace('#include <project_vertex>', SINK1 + '#include <project_vertex>').replace('#include <common>', '#include <common>\nuniform float uCut;\nuniform vec2 uCenter;\n#ifdef PQ_UNIT\nattribute vec2 pqc;\n#endif')
+    shader.vertexShader = shader.vertexShader.replace('#include <project_vertex>', SINK1 + '#include <project_vertex>').replace('#include <common>', '#include <common>\nuniform float uCut;\nuniform vec2 uCenter;\n#ifdef PQ_UNIT\nattribute vec2 pqc;\n#endif\nvarying float vPqGone;')
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;')
       // (flat pictures drawn as many copies in one go: each copy sits at its own place, so the clip must use the copy's matrix)
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvec4 pqP = vec4(transformed, 1.0);\n#ifdef USE_INSTANCING\npqP = instanceMatrix * pqP;\n#endif\nvWPos = (modelMatrix * pqP).xyz;')
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;\nuniform float uCut;\nuniform vec2 uCenter;\nuniform float uTime;\nuniform float uWarn;')
-      .replace('#include <clipping_planes_fragment>', '#include <clipping_planes_fragment>\nfloat pqD = max(abs(vWPos.x - uCenter.x), abs(vWPos.z - uCenter.y));\nif (pqD > uCut) discard;')
+      .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;\nvarying float vPqGone;\nuniform float uCut;\nuniform vec2 uCenter;\nuniform float uTime;\nuniform float uWarn;')
+      .replace('#include <clipping_planes_fragment>', '#include <clipping_planes_fragment>\nfloat pqD = max(abs(vWPos.x - uCenter.x), abs(vWPos.z - uCenter.y));\nif (pqD > uCut || vPqGone > 0.5) discard;')
       .replace('#include <dithering_fragment>', 'if (uWarn > 0.5 && pqD > uCut - 1.0) gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(1.0, 0.2, 0.2), 0.35 + 0.15 * sin(uTime * 8.0));\n#include <dithering_fragment>')
   }
   mat.customProgramCacheKey = () => 'pq-clip-ours'
