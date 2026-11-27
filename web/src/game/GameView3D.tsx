@@ -377,12 +377,16 @@ export default function GameView3D(props: Props) {
     }
     const pickupSprites = new Map<string, THREE.Sprite>()
     const pickupShadows = new Map<string, THREE.Mesh>()
+    // an item lying in tall grass is drawn ON TOP of the leaves (otherwise the three leaf layers cover it and only a red sliver shows)
+    const ballMatTop = ballMat.clone()
+    ballMatTop.depthTest = false
     for (const pk of world.pickups) {
-      const s = new THREE.Sprite(ballMat)
+      const inGrass = world.tiles[pk.y * SIZE + pk.x] === T.Tall
+      const s = new THREE.Sprite(inGrass ? ballMatTop : ballMat)
       s.center.set(0.5, 0.1)
       const bs = ballImg ? ballImg.width / 16 : 0.5 // the picture is drawn at its real size: 16 pixels = one tile
       s.scale.set(bs, bs, 1)
-      s.renderOrder = 3
+      s.renderOrder = inGrass ? 6 : 3
       s.position.set(pk.x + 0.5, heightAt(pk.x + 0.5, pk.y + 0.5) + 0.05, pk.y + 0.5)
       scene.add(s)
       const psh = makeShadow(scene, 1.0) // the ball on the ground has a little shadow under it (a little towards the camera so it shows under the ball)
