@@ -417,13 +417,16 @@ export default function GameView3D(props: Props) {
     let tuftTex: THREE.CanvasTexture[] | null = null
     void loadGrassTuft().then((frames) => {
       if (!frames) return
-      tuftTex = frames.map((c) => { const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.magFilter = THREE.NearestFilter; t.minFilter = THREE.NearestFilter; t.colorSpace = THREE.SRGBColorSpace; return t })
+      tuftTex = frames.map((c) => { const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.flipY = false /* (the game's pictures have v = 0 at the TOP row) */; t.magFilter = THREE.NearestFilter; t.minFilter = THREE.NearestFilter; t.colorSpace = THREE.SRGBColorSpace; return t })
     })
     let tuftSway: GrassSway | null = null
     void loadGrassSway().then((sw) => { tuftSway = sw })
-    const tuftGeo = new THREE.BufferGeometry() // the corners of the game's model (16 units = 1 tile): a little slanted, just above the ground at the legs
-    tuftGeo.setAttribute('position', new THREE.Float32BufferAttribute([-1, 0.05, 0.7, 1, 0.05, 0.7, 1, 0.2, -0.3, -1, 0.2, -0.3], 3)) // (the picture is 32 x 32: one picture pixel = one pixel of the map, so it is two tiles wide)
-    tuftGeo.setAttribute('uv', new THREE.Float32BufferAttribute([0, 1, 1, 1, 1, 0, 0, 0], 2))
+    // the corners of the game's model ee_kusa, exactly as the game file has them (16 units = 1 tile): ONE tile wide, a little slanted (its back edge 0.31 tile higher than the front one), 0.31 - 0.63 tile above the ground
+    // at the legs. Its picture is 32 x 32 but only 30 x 30 pixels are used (u 0 - 0.9375, v 0.0625 - 1); v = 0 is the TOP row of the picture and the front (south, lower) edge is v = 1: the picture stands as drawn.
+    const TUFT_UV = [0, 1, 0.9375, 1, 0.9375, 0.0625, 0, 0.0625]
+    const tuftGeo = new THREE.BufferGeometry()
+    tuftGeo.setAttribute('position', new THREE.Float32BufferAttribute([-9 / 16, 5 / 16, 6 / 16, 7 / 16, 5 / 16, 6 / 16, 7 / 16, 10 / 16, -9 / 16, -9 / 16, 10 / 16, -9 / 16], 3))
+    tuftGeo.setAttribute('uv', new THREE.Float32BufferAttribute(TUFT_UV, 2))
     tuftGeo.setIndex([0, 1, 2, 0, 2, 3])
     const makeCover = () => {
       const m = new THREE.Mesh(tuftGeo.clone(), new THREE.MeshBasicMaterial({ transparent: true, alphaTest: 0.1, depthWrite: false, depthTest: false, side: THREE.DoubleSide })) // (drawn right over its character)
@@ -440,9 +443,9 @@ export default function GameView3D(props: Props) {
       if (mat.map !== t) { mat.map = t; mat.needsUpdate = true }
       // the game's sway: the picture slides left / right and up / down for 45 frames of 1/30 s, then rests on its last position
       const sw = tuftSway, wi = sw ? Math.max(0, Math.min(sw.frames - 1, Math.floor(age / (1000 / 30)))) : 0
-      const du = sw ? -sw.s[wi] : 0, dv = sw ? sw.t[wi] : 0
+      const du = sw ? -sw.s[wi] : 0, dv = sw ? -sw.t[wi] : 0
       const uv = m.geometry.getAttribute('uv') as THREE.BufferAttribute
-      if (uv.getX(0) !== du || uv.getY(0) !== 1 + dv) { uv.array.set([du, 1 + dv, 1 + du, 1 + dv, 1 + du, dv, du, dv]); uv.needsUpdate = true }
+      if (uv.getX(0) !== TUFT_UV[0] + du || uv.getY(0) !== TUFT_UV[1] + dv) { uv.array.set(TUFT_UV.map((q, k) => q + (k % 2 === 0 ? du : dv))); uv.needsUpdate = true }
       m.position.set(x, ground, z)
       m.renderOrder = 3 + z * 0.001 + 0.0005 // right over its own character, under the characters further south
     }
