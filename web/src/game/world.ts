@@ -1,6 +1,7 @@
 // The Battle Royale island: 5 x 5 real Pokémon White 2 map chunks (160 x 160 tiles) cut into a circle of 4 rings.
 // The ground, trees, water and tall grass come from the game file; this file adds rings, gyms, trainers and items.
 import { RULES, tournamentStart } from './rules'
+import { LEADERS } from '../data/leaders'
 import { hash2, mulberry32, pick } from './rng'
 import type { PokeGroup } from '../world/events'
 
@@ -140,7 +141,6 @@ export function isWalkable(w: World, x: number, y: number): boolean {
   return t === T.Grass || t === T.Tall || t === T.Sand || t === T.GymDoor
 }
 
-const LEADER_NAMES = ['Aster', 'Borin', 'Cedar', 'Dara', 'Elio', 'Fenna', 'Gorm', 'Hale', 'Iris', 'Juno', 'Kade', 'Luma']
 const NPC_NAMES = [
   'Ada', 'Ben', 'Cleo', 'Dax', 'Eve', 'Finn', 'Gia', 'Hugo', 'Ivy', 'Jax', 'Kai', 'Lea', 'Max', 'Nia', 'Omar', 'Pia',
   'Quin', 'Rex', 'Sol', 'Tess', 'Uri', 'Vera', 'Wes', 'Xan', 'Yara', 'Zed',
@@ -288,6 +288,7 @@ export function generateWorld(seed: number, ground: Uint8Array, opts: { barriers
   }
   // gyms: 4 per ring (rings 1-3) at the north, east, south and west, on the nearest free ground inside the ring
   const gyms: Gym[] = []
+  const usedLeaders = new Set<string>() // (the real gym leaders of the games, each in one gym only)
   const dirs: Array<['N' | 'E' | 'S' | 'W', number, number]> = [['N', 0, -1], ['E', 1, 0], ['S', 0, 1], ['W', -1, 0]]
   for (let ring = 1; ring <= 3; ring++) {
     for (const [side, dx, dy] of dirs) {
@@ -303,7 +304,7 @@ export function generateWorld(seed: number, ground: Uint8Array, opts: { barriers
       tiles[spot.y * SIZE + spot.x] = T.GymDoor
       gyms.push({
         id: `g${ring}${side}`, ring, side, x: spot.x, y: spot.y, doorX: spot.x, doorY: spot.y,
-        type: pick(rng, TYPES), leader: pick(rng, LEADER_NAMES),
+        ...(() => { let l = pick(rng, LEADERS); for (let t = 0; t < 30 && usedLeaders.has(l.name); t++) l = pick(rng, LEADERS); usedLeaders.add(l.name); return { type: l.type, leader: l.name } })(),
       })
     }
   }

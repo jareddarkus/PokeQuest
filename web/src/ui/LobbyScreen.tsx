@@ -6,6 +6,7 @@ import { music } from '../audio/music'
 import { useLobby, type MatchInfo } from '../net/useLobby'
 import { useChat } from './useChat'
 import { RULES } from '../game/rules'
+import { BUILD } from '../build'
 import { refreshRules } from '../world/gameConfig'
 
 function Face({ look }: { look: Look }) {
@@ -43,6 +44,13 @@ export default function LobbyScreen({ username, look, onStart, onBack }: { usern
   const ready = lobby.me?.ready ?? false
   const enough = players.length >= RULES.minPlayers
   const send = () => { if (chat.send(text)) setText('') }
+  // somebody has a NEWER copy than mine: this page is the old one, so it reloads itself (at most once every 2 minutes)
+  useEffect(() => {
+    if (lobby.match || !players.some((p) => p.b !== undefined && p.b > BUILD && BUILD !== 'dev')) return
+    const last = Number(sessionStorage.getItem('pq.reloaded') ?? 0)
+    if (Date.now() - last < 120_000) return
+    sessionStorage.setItem('pq.reloaded', String(Date.now())); location.reload()
+  }, [players, lobby.match])
 
   return (
     <div className="fullscreen center menu-bg scroll">
@@ -56,7 +64,7 @@ export default function LobbyScreen({ username, look, onStart, onBack }: { usern
             <div key={p.name} className={`lobby-row ${p.ready ? 'ready' : ''}`}>
               <Face look={p.look} />
               <strong>{p.name}{p.name === username ? ' (you)' : ''}</strong>
-              <span className="lobby-state">{p.ready ? 'Ready' : 'Not ready'}</span>
+              <span className="lobby-state">{p.b !== BUILD ? (p.b === undefined || p.b < BUILD ? '⚠ old version: reload the page (Ctrl+F5)' : '⚠ newer version') : p.ready ? 'Ready' : 'Not ready'}</span>
             </div>
           ))}
           {players.length === 0 && <span className="muted">Nobody here yet…</span>}

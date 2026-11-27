@@ -10,7 +10,7 @@ import { randomLook, type Look } from '../game/character'
 import { OW_TO_CLASS } from '../data/trainerClasses'
 import { useLang } from '../i18n'
 import type { Settings } from '../game/settings'
-import { encounterRate, groupMon, groupTeam, gymTeam, trainerTeam, wildEncounter } from '../game/encounters'
+import { encounterRate, groupMon, groupTeam, leaderTeam, trainerTeam, wildEncounter } from '../game/encounters'
 import { addItems, emptyTrainer, makeStarter, type Trainer } from '../game/state'
 import { ITEMS, startingBag, rollPickup } from '../data/items'
 import ItemIcon from './ItemIcon'
@@ -72,7 +72,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
   const myIndex = royale && username ? Math.max(0, royale.players.indexOf(username)) : 0
   const spawn = royale ? world.spawns[Math.round((myIndex * world.spawns.length) / Math.max(1, royale.players.length)) % world.spawns.length] : world.spawns[0]
   // the match begins 30 seconds after the start at the latest (time to pick a starter), or at once when everybody has picked
-  const [t0, setT0] = useState(royale ? royale.startsAt + 30_000 : 0)
+  const [t0, setT0] = useState(royale ? royale.startsAt + RULES.pickSeconds * 1000 : 0)
   const handleRef = useRef<GameHandle | null>(null)
   if (import.meta.env.DEV) (globalThis as { __pqTp?: unknown }).__pqTp = (x: number, y: number) => handleRef.current?.teleport(x, y) // developer hook
   const startRef = useRef(royale ? t0 + RULES.startDelaySeconds * 1000 : Date.now())
@@ -221,7 +221,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
     expected: royale.players,
     net: royale.net,
     started: Date.now() >= t0Ref.current,
-    onAllPicked: () => { const nt = Date.now() + 1500; if (nt < t0Ref.current) { startRef.current = nt + RULES.startDelaySeconds * 1000; t0Ref.current = nt; setT0(nt) } }, // everybody is ready: start right away
+    onAllPicked: () => { const nt = Date.now() + RULES.allPickedSeconds * 1000; if (nt < t0Ref.current) { startRef.current = nt + RULES.startDelaySeconds * 1000; t0Ref.current = nt; setT0(nt) } }, // everybody is ready: start right away
     onBusy: (npc, by, on) => { if (on) busyNpcs.current.set(npc, { by, until: Date.now() + 9000 }); else busyNpcs.current.delete(npc) },
     onDuel: (m) => {
       if (m.type === 'ann') { const a = m.data as Announcement; if (a && typeof a.k === 'string') showAnnRef.current(a); return }
@@ -643,7 +643,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
         const cgrp = g.custom?.group ? world.groups?.get(g.custom.group) : undefined
         const gline = g.custom ? g.custom.lines[Math.floor(Math.random() * g.custom.lines.length)] : leaderLine(g.id)
         nextAt.current = { x: g.doorX, y: g.doorY }
-        speakThen(`Gym Leader ${g.leader}`, gline, () => void (cgrp && cgrp.entries.length ? groupTeam(cgrp) : gymTeam(g.type, g.ring)).then((team) =>
+        speakThen(`Gym Leader ${g.leader}`, gline, () => void (cgrp && cgrp.entries.length ? groupTeam(cgrp) : leaderTeam(g.leader, g.type, g.ring)).then((team) =>
           startBattle({
             kind: 'gym', foe: team, name: `Gym Leader ${g.leader}`,
             onWin: () => {
@@ -673,7 +673,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
         setToastItems(items); setToast('You found:' + Date.now()) // (the text is drawn from the items; the stamp makes every pick-up a new message)
       },
       onPlayerClick: (name, x, y) => { if (!battleRef.current && !talking.current && !eliminatedRef.current) setPmenu({ name, x, y }) },
-      onPushed: (_x, _y, r) => { pushedAt.current = Date.now(); announceRef.current({ k: 'pushed', a: username ?? '', n: r }); say(`The ground crumbled — you were pushed to ring ${r}!`) },
+      onPushed: (_x, _y, r) => { pushedAt.current = Date.now(); if (prevRing.current && prevRing.current === r) return /* (pushed inside the same ring: nothing to tell, there is still time to walk) */; announceRef.current({ k: 'pushed', a: username ?? '', n: r }); say(`The ground crumbled — you were pushed to ring ${r}!`) },
       onAlert: () => { void music.playSfx('fld:07') }, // a trainer noticed you
       onBump: () => { void music.playSfx('fld:WALL_HIT') },
       onNpcSpotted: (npcId) => {
@@ -722,7 +722,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
   }
 
   if (trainer.team.length === 0 && trainer.pc.length === 0 && !battle) {
-    return <StarterPick until={royale ? royale.startsAt + 30_000 - 1000 : undefined} onPick={pickStarter} />
+    return <StarterPick until={royale ? royale.startsAt + RULES.pickSeconds * 1000 - 1000 : undefined} onPick={pickStarter} />
   }
 
   const alive = trainer.team.filter((m) => m.hp > 0).length
@@ -811,7 +811,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
         </div>
       )}
       {!battle && <MiniMap world={world} getMe={() => handleRef.current?.getPos() ?? null} others={playersVisible} radius={radius} collapseOn={collapseOn} mobile={mobile} />}
-      {!battle && <ChatDock chat={chat} canChat={!!chatUser} open={chatOpen} setOpen={setChatOpen} colorOf={royale ? colorOf : undefined} onName={(n, x, y) => setPmenu({ name: n, x, y, fromChat: true })} />}
+      {!battle && <ChatDock chat={chat} canChat={!!chatUser} open={chatOpen} setOpen={setChatOpen} colorOf={royale ? colorOf : undefined} names={royale?.players} onName={(n, x, y) => setPmenu({ name: n, x, y, fromChat: true })} />}
       {panel === 'settings' && <SettingsPanel settings={settings} onChange={onSettings} onClose={() => setPanel(null)} onCustomize={onCustomize} />}
       {panel === 'team' && <TeamPanel initial={teamSel} trainer={trainer} setTrainer={setTrainer} onClose={() => setPanel(null)} onMessage={say} />}
       {panel === 'bag' && <BagPanel trainer={trainer} setTrainer={setTrainer} onClose={() => setPanel(null)} onMessage={say} />}

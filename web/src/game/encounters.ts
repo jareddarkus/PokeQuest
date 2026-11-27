@@ -1,6 +1,7 @@
 import { createMon, ringLevels, ringPool, type Mon } from '../data/dex'
 import type { PokeGroup } from '../world/events'
 import { RULES } from './rules'
+import { leaderDef } from '../data/leaders'
 
 /** Chance of a wild Pokémon appearing on each step in tall grass. */
 export const encounterRate = (): number => (import.meta.env.DEV && new URLSearchParams(location.search).has('enc') ? 1 : RULES.encounterPercent / 100) // ?enc = test switch (dev only)
@@ -26,6 +27,17 @@ export async function trainerTeam(ring: number, rng: () => number = Math.random)
     const level = lo + Math.floor(rng() * (hi - lo + 1))
     team.push(await createMon(pickOne(pool, rng).name, level, rng, { shiny: false }))
   }
+  return team
+}
+
+/** The team of a real gym leader of the games: his own Pokémon of the ring (levels like the gym leaders of that ring); a leader that is not known uses Pokémon of his type. */
+export async function leaderTeam(name: string, type: string, ring: number, rng: () => number = Math.random): Promise<Mon[]> {
+  const def = leaderDef(name)
+  if (!def) return gymTeam(type, ring, rng)
+  const [, hi] = ringLevels(ring)
+  const species = def.teams[Math.min(3, Math.max(1, ring)) - 1]
+  const team: Mon[] = []
+  for (let i = 0; i < species.length; i++) team.push(await createMon(species[i], hi + 2 + i, rng, { shiny: false }))
   return team
 }
 

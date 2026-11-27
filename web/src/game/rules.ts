@@ -77,6 +77,10 @@ export interface Rules {
   minPlayers: number
   /** seconds of countdown between "everybody ready" and the start of the match */
   lobbySeconds: number
+  /** seconds everybody has to pick a starter Pokémon at the start of a match */
+  pickSeconds: number
+  /** when everybody has picked, the match starts in this many seconds (only if more than that was left) */
+  allPickedSeconds: number
   /** seconds the players wait at the start of the match before the clock begins (the island is still whole) */
   startDelaySeconds: number
 }
@@ -92,7 +96,7 @@ export const DEFAULT_RULES: Rules = {
   encounterPercent: 11, legendary3Percent: 3,
   lvl1Min: 2, lvl1Max: 10, lvl2Min: 15, lvl2Max: 20, lvl3Min: 25, lvl3Max: 35, lvl4Min: 35, lvl4Max: 45,
   pickupCell: 13, pickupJingleOn: 1,
-  minPlayers: 2, lobbySeconds: 6, startDelaySeconds: 0,
+  minPlayers: 2, lobbySeconds: 6, pickSeconds: 30, allPickedSeconds: 5, startDelaySeconds: 0,
 }
 /** The rules in force right now (one object, changed in place). */
 export const RULES: Rules = { ...DEFAULT_RULES }
@@ -202,6 +206,8 @@ export const RULE_GROUPS: RuleGroup[] = [
   { id: 'lobby', en: 'Lobby and start', es: 'Sala de espera e inicio', rules: [
     n('minPlayers', 'Least players to start', 'Mínimo de jugadores para empezar', '1 lets you test a match alone.', '1 permite probar una partida a solas.', 1, 20),
     t('lobbySeconds', 'Countdown in the lobby', 'Cuenta atrás en la sala', 'Between "everybody ready" and the start.', 'Entre "todos listos" y el inicio.', 1, 60),
+    t('pickSeconds', 'Time to pick a starter', 'Tiempo para elegir inicial', 'At the start of a match, everybody picks their first Pokémon in this time.', 'Al empezar la partida, todos eligen su primer Pokémon en este tiempo.', 5, 300),
+    t('allPickedSeconds', 'Countdown once everybody has picked', 'Cuenta atrás cuando todos han elegido', 'The match starts after this, if more time than this was left.', 'La partida empieza tras esto, si quedaba más tiempo.', 1, 60),
     t('startDelaySeconds', 'Quiet time before the clock starts', 'Tiempo tranquilo antes de que corra el reloj', 'The island stays whole during this time.', 'La isla se mantiene entera durante este tiempo.', 0, 600),
   ] },
 ]

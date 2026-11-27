@@ -37,5 +37,6 @@ function devRom() {
 // https://vite.dev/config/
 export default defineConfig({
   base: '/PokeQuest/', // GitHub Pages serves the site under /PokeQuest/
+  define: { __BUILD__: JSON.stringify(new Date().toISOString().slice(0, 19)) }, // (the build number: see src/build.ts)
   plugins: [react(), devRom()],
 })

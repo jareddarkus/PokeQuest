@@ -18,7 +18,8 @@ export function useIsMobile(): boolean {
 export default function MiniMap({ world, getMe, others, radius, collapseOn, mobile }: {
   world: World; getMe: () => { x: number; y: number } | null; others: () => OtherPlayer[]; radius: number; collapseOn: boolean; mobile: boolean
 }) {
-  const [open, setOpen] = useState(false)
+  const [big, setBig] = useState(false) // the map zoomed to the whole screen (a click on the little map; a click anywhere closes it)
+  const bigRef = useRef<HTMLCanvasElement>(null)
   const base = useMemo(() => {
     const c = document.createElement('canvas'); c.width = SIZE; c.height = SIZE
     const ctx = c.getContext('2d')!
@@ -26,12 +27,13 @@ export default function MiniMap({ world, getMe, others, radius, collapseOn, mobi
     return c
   }, [world])
   const ref = useRef<HTMLCanvasElement>(null)
-  const show = !mobile || open
+  const show = !mobile
   useEffect(() => {
-    if (!show) return
+    if (!show && !big) return
     const draw = () => {
-      const c = ref.current
-      if (!c) return
+      for (const c of [ref.current, bigRef.current]) if (c) paint(c)
+    }
+    const paint = (c: HTMLCanvasElement) => {
       const ctx = c.getContext('2d')!
       ctx.imageSmoothingEnabled = false
       ctx.clearRect(0, 0, c.width, c.height)
@@ -52,15 +54,20 @@ export default function MiniMap({ world, getMe, others, radius, collapseOn, mobi
     draw()
     const id = window.setInterval(draw, 200)
     return () => window.clearInterval(id)
-  }, [show, base, others, getMe, radius, collapseOn])
-  const size = mobile ? Math.min(window.innerWidth - 32, window.innerHeight * 0.6, 420) : 176
+  }, [show, big, base, others, getMe, radius, collapseOn])
+  const size = 176
+  const bigSize = Math.max(240, Math.min(window.innerWidth - 20, window.innerHeight - 20))
   return (
     <div className={`minimap ${mobile ? 'mobile' : ''}`}>
-      {mobile && <button className="mm-btn" onClick={() => setOpen((o) => !o)} aria-label="Mapa">🗺</button>}
+      {mobile && <button className="mm-btn" onClick={() => setBig(true)} aria-label="Mapa">🗺</button>}
       {show && (
         <div className="mm-box">
-          <canvas ref={ref} width={size} height={size} style={{ width: size, height: size }} />
-          {mobile && <button className="mm-close" onClick={() => setOpen(false)} aria-label="Cerrar mapa">×</button>}
+          <canvas ref={ref} width={size} height={size} style={{ width: size, height: size, cursor: 'zoom-in' }} onClick={() => setBig(true)} />
+        </div>
+      )}
+      {big && (
+        <div className="pm-backdrop mm-big" onClick={() => setBig(false)} style={{ display: 'grid', placeItems: 'center', background: 'rgba(0,0,0,.72)', zIndex: 60 }}>
+          <canvas ref={bigRef} width={bigSize} height={bigSize} style={{ width: bigSize, height: bigSize, borderRadius: 10, boxShadow: '0 0 0 3px #fff' }} />
         </div>
       )}
     </div>

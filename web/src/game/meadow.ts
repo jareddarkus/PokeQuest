@@ -105,7 +105,7 @@ export function prepareMeadow(built: BuiltWorld, seed: number): void {
 const protectedTiles = new Set<number>()
 
 /**
- * Every Pokémon Center gets a path in front of its door, so that you do not walk out of it, healed, straight into tall grass: a small square of plain ground, and then
+ * Every gym and every Pokémon Center gets a path in front of its door, so that you do not walk out of it straight into tall grass: a small square of plain ground, and then
  * (ring 1) a path to the nearest road of the meadow, or (the inner rings) a path going away from the door. Returns the tile numbers that were changed.
  */
 export function carveCenterPaths(world: World, built: BuiltWorld): number[] {
@@ -122,8 +122,7 @@ export function carveCenterPaths(world: World, built: BuiltWorld): number[] {
     if (ring === 1 && pm) pm[i] = 1
     else (world.carved ??= []).push(i) // (the inner rings: drawn as a sand path over the map)
   }
-  for (const g of world.gyms) {
-    if (!g.center) continue
+  for (const g of world.gyms) { // (every gym and every Center)
     const sx = g.doorX, sy = g.doorY + 1
     for (let dy = 0; dy < 2; dy++) for (let dx = -1; dx <= 1; dx++) if (open(sx + dx, sy + dy)) lay(sx + dx, sy + dy, g.ring)
     if (g.ring === 1 && pm && pm0) {

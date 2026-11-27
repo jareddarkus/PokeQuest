@@ -3,10 +3,11 @@ import { supabase } from '../supabase'
 import type { Look } from '../game/character'
 import { DEFAULT_RULES, RULES, type Rules } from '../game/rules'
 import { fetchGameConfig } from '../world/gameConfig'
+import { BUILD } from '../build'
 
 /** 2 = this build can use the Cloudflare realtime server (older builds only know Supabase Realtime; a match whose players are not all 2 or more uses Supabase so nobody is left out) */
 const NET_VERSION = 2
-export interface LobbyPlayer { name: string; ready: boolean; joined: number; look: Look; v?: number }
+export interface LobbyPlayer { name: string; ready: boolean; joined: number; look: Look; v?: number; /** the build number of this player's copy of the game (missing: a very old copy) */ b?: string }
 /** What every player gets when the match starts. */
 export interface MatchInfo { id: string; seed: number; players: string[]; startsAt: number; /** how the messages of the match travel: 'cf' = Cloudflare server, 'sb' = Supabase Realtime (missing = an older build made the match: Supabase) */ net?: 'cf' | 'sb'; /** the owner's rules at the moment the match was created: every player of the match uses these */ rules?: Partial<Rules> }
 
@@ -20,19 +21,19 @@ export function useLobby(username: string, look: Look) {
   const [status, setStatus] = useState<'connecting' | 'on' | 'error'>('connecting')
   const [arenaBusy, setArenaBusy] = useState(false) // a match is being played right now: nobody can join it
   const chan = useRef<ReturnType<typeof supabase.channel> | null>(null)
-  const mine = useRef<LobbyPlayer>({ name: username, ready: false, joined: Date.now(), look, v: NET_VERSION })
+  const mine = useRef<LobbyPlayer>({ name: username, ready: false, joined: Date.now(), look, v: NET_VERSION, b: BUILD })
   const matchRef = useRef<MatchInfo | null>(null)
   const announced = useRef(false)
 
   useEffect(() => {
-    mine.current = { name: username, ready: false, joined: Date.now(), look, v: NET_VERSION }
+    mine.current = { name: username, ready: false, joined: Date.now(), look, v: NET_VERSION, b: BUILD }
     const ch = supabase.channel('lobby:main', { config: { private: true, presence: { key: username }, broadcast: { self: true } } })
     const sync = () => {
       const state = ch.presenceState() as Record<string, Array<Partial<LobbyPlayer>>>
       const list: LobbyPlayer[] = []
       for (const [key, metas] of Object.entries(state)) {
         const m = metas[metas.length - 1]
-        if (m) list.push({ name: key, ready: !!m.ready, joined: m.joined ?? 0, look: m.look as Look, v: typeof m.v === 'number' ? m.v : 1 })
+        if (m) list.push({ name: key, ready: !!m.ready, joined: m.joined ?? 0, look: m.look as Look, v: typeof m.v === 'number' ? m.v : 1, b: typeof m.b === 'string' ? m.b : undefined })
       }
       list.sort((a, b) => a.joined - b.joined || a.name.localeCompare(b.name))
       setPlayers(list)
@@ -72,6 +73,7 @@ export function useLobby(username: string, look: Look) {
   useEffect(() => {
     if (arenaBusy || matchRef.current || announced.current || players.length < RULES.minPlayers) return
     if (players[0].name !== username || !players.every((p) => p.ready)) return
+    if (!players.every((p) => p.b === BUILD)) return // (somebody has another copy of the game: the match waits until they reload)
     announced.current = true
     void (async () => {
       const rules = (await fetchGameConfig()) ?? undefined // (read now, so everybody in this match plays with exactly the same rules)

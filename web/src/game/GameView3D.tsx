@@ -262,6 +262,7 @@ export default function GameView3D(props: Props) {
 
     // gyms: the real gym buildings of the game (a sign at the entrance if the building is not available)
     let gymNo = 0
+    const gymParts: Array<{ x: number; y: number; things: THREE.Object3D[] }> = [] // (a gym goes into the sea together with its ring: building and sign disappear)
     world.gyms.forEach((g) => {
       const spec = g.center ? CENTER_MODEL : GYM_MODELS[gymNo++ % GYM_MODELS.length]
       const b = g.custom ? null : built.makeBuilding(spec.pack, spec.model) // (a gym made in the editor has the building the owner placed)
@@ -271,6 +272,7 @@ export default function GameView3D(props: Props) {
         const box = new THREE.Box3().setFromObject(b.obj)
         b.obj.position.set(g.x + 0.5 - (box.min.x + box.max.x) / 2, gy, g.y + 1 - box.max.z)
         scene.add(b.obj)
+        gymParts.push({ x: g.x, y: g.y, things: [b.obj] })
         // you cannot walk through the building (the door tile and the row in front of it stay open)
         const wb = new THREE.Box3().setFromObject(b.obj)
         for (let ty = Math.floor(wb.min.z + 0.2); ty < g.y; ty++) {
@@ -287,6 +289,8 @@ export default function GameView3D(props: Props) {
       s.scale.set(3, 0.75, 1)
       s.position.set(g.x + 0.5, gy + 0.2, g.y + 0.5)
       scene.add(s)
+      const part = gymParts.find((q) => q.x === g.x && q.y === g.y)
+      if (part) part.things.push(s); else gymParts.push({ x: g.x, y: g.y, things: [s] })
     })
 
     // the gym buildings just closed some tiles: open the ways again so that every ring can still be walked all the way round (a sand path over the map)
@@ -338,10 +342,28 @@ export default function GameView3D(props: Props) {
 
     const me = {
       x: propsRef.current.startTile.x, y: propsRef.current.startTile.y, fromX: 0, fromY: 0, t: 1, dir: 0 as Dir, step: 0,
-      stepSec: WALK_SECONDS, run: false, idle: 1, turn: 0, cycle: 0,
+      stepSec: WALK_SECONDS, run: false, idle: 1, turn: 0, cycle: 0, thrown: false,
     }
     me.fromX = me.x
     me.fromY = me.y
+    // the little smoke of a landing after the sea has thrown you onto safe ground: a few round puffs that grow, rise and fade (drawn by hand in the game's hard-pixel style)
+    const puffTex = (() => {
+      const c = document.createElement('canvas'); c.width = 16; c.height = 16
+      const g = c.getContext('2d')!
+      for (const [cx, cy, r, col] of [[8, 8, 7, '#b4b8c0'], [8, 8, 6, '#dfe2e8'], [6, 7, 3, '#f6f7fa']] as Array<[number, number, number, string]>) { g.fillStyle = col; for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) if ((x - cx + 0.5) ** 2 + (y - cy + 0.5) ** 2 <= r * r) g.fillRect(x, y, 1, 1) }
+      const t = new THREE.CanvasTexture(c); t.magFilter = THREE.NearestFilter; t.minFilter = THREE.NearestFilter; t.colorSpace = THREE.SRGBColorSpace
+      return t
+    })()
+    const puffs: Array<{ sp: THREE.Sprite; t0: number; vx: number; vy: number; x: number; y: number; z: number }> = []
+    const spawnPuff = (tx: number, ty: number, now: number) => {
+      for (let k = 0; k < 7; k++) {
+        const a = (k / 7) * Math.PI * 2 + Math.random() * 0.5
+        const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: puffTex, transparent: true, depthTest: false, depthWrite: false }))
+        sp.renderOrder = 999
+        scene.add(sp)
+        puffs.push({ sp, t0: now, vx: Math.cos(a) * (0.9 + Math.random() * 0.6), vy: 0.5 + Math.random() * 0.7, x: tx + 0.5, y: 0.15, z: ty + 0.5 + Math.sin(a) * 0.1 })
+      }
+    }
     const mySprite = new THREE.Sprite(charMaterial(propsRef.current.look, 0, 0))
     fit(mySprite)
     scene.add(mySprite)
@@ -747,7 +769,9 @@ export default function GameView3D(props: Props) {
 
       if (elapsed !== null && dist(me.x, me.y) > collapseRadius(elapsedSec) && me.t >= 1) {
         const s = safeTileFor(world, me.x, me.y, elapsedSec)
+        const ox = me.x, oy = me.y
         handle.teleport(s.x, s.y)
+        me.fromX = ox; me.fromY = oy; me.t = 0; me.stepSec = 0.6; me.thrown = true; me.run = false // (the sea throws you: you fly over to the safe ground and land in a puff of smoke)
         p.events.onPushed?.(s.x, s.y, s.ring)
       }
 
@@ -762,6 +786,7 @@ export default function GameView3D(props: Props) {
           spill = Math.max(0, raw - 1) * me.stepSec
           me.t = Math.min(1, raw)
           if (me.t >= 1) {
+            if (me.thrown) { me.thrown = false; me.stepSec = WALK_SECONDS; spawnPuff(me.x, me.y, now) }
             const tile = tileAt(world, me.x, me.y)
             p.events.onStep?.(me.x, me.y, tile)
             if (tile === T.GymDoor) {
@@ -859,13 +884,20 @@ export default function GameView3D(props: Props) {
       // walking: the foot picture for the first half of a tile, standing for the second half; the foot changes with every tile
       // walking: the foot picture for the first half of a tile, standing for the second half. Running changes its picture only once per
       // tile (half as often as before): foot, upright, other foot, upright ...
-      const myFrame = me.t >= 1 ? 0 : me.run ? [1, 0, 2, 0][me.cycle] : me.t < 0.5 ? 1 + me.step : 0
+      const myFrame = me.t >= 1 || me.thrown ? 0 : me.run ? [1, 0, 2, 0][me.cycle] : me.t < 0.5 ? 1 + me.step : 0
       mySprite.material = charMaterial(p.look, me.dir, myFrame, me.run && me.t < 1) // (standing still after a run: the normal standing picture)
       fit(mySprite)
-      place(mySprite, camera, px + 0.5, ph + lift(mySprite), py + 0.5, me.t < 1 ? (tallAt(me.t < 0.5 ? me.fromX : me.x, me.t < 0.5 ? me.fromY : me.y) ? TALL_PUSH : PUSH) : tallAt(me.x, me.y) ? TALL_PUSH : PUSH)
+      place(mySprite, camera, px + 0.5, ph + lift(mySprite) + (me.thrown ? Math.sin(Math.PI * me.t) * 1.6 : 0), py + 0.5, me.t < 1 ? (tallAt(me.t < 0.5 ? me.fromX : me.x, me.t < 0.5 ? me.fromY : me.y) ? TALL_PUSH : PUSH) : tallAt(me.x, me.y) ? TALL_PUSH : PUSH)
       order(mySprite, py + 0.5)
       cover(myCover, tallAt(px, py), px + 0.5, ph, py + 0.5, 1.0, grassFrame('me', px, py, now)) // in tall grass: the game's leaf effect at the feet (and the leaves of the tiles cover the legs)
       myShadow.position.set(px + 0.5, ph + 0.03, py + 0.5)
+      for (let k = puffs.length - 1; k >= 0; k--) { // the smoke of a landing
+        const f = puffs[k], age = (now - f.t0) / 520
+        if (age >= 1) { scene.remove(f.sp); f.sp.material.dispose(); puffs.splice(k, 1); continue }
+        const hh = heightAt(f.x, f.z)
+        f.sp.position.set(f.x + f.vx * age, hh + f.y + f.vy * age, f.z)
+        const s = 0.35 + age * 0.9; f.sp.scale.set(s, s, 1); f.sp.material.opacity = 1 - age * age
+      }
       // the crates: on sand they sit a little in the sand; everywhere else they are pushed towards the camera (like the characters) so the ground does not cut them
       { // items and people on ground that has sunk into the sea are gone with it
         const rad = elapsed === null ? 999 : collapseRadius(elapsedSec)
@@ -929,6 +961,7 @@ export default function GameView3D(props: Props) {
       const fr = Math.floor(now / (1000 / 30)) // water pictures: 30 a second (a calm pace; the exact speed of the original is not known)
       for (const a of animatedTextures) a.tex.offset.set(valueAt(a.anim.moveS, fr), valueAt(a.anim.moveT, fr)) // moving water
       const sunkRad = elapsed === null ? 999 : collapseRadius(elapsedSec)
+      for (const gp of gymParts) { const vis = dist(gp.x, gp.y) <= sunkRad + 3; for (const o of gp.things) o.visible = vis }
       for (const n of npcs) {
         const sunk = dist(n.fx + 0.5, n.fy + 0.5) > sunkRad // (its ground has sunk)
         n.sprite.visible = !sunk
