@@ -683,7 +683,9 @@ img, canvas, svg { -webkit-user-drag: none; }
 .fly-box small { opacity: .8; text-align: center; }
 
 /* the clock at the top, in the middle (the countdown of the next ring and that ring below it) */
-.hud-clock { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); min-width: 112px; min-height: 48px; padding: 4px 18px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; z-index: 4; font-family: 'Unbounded', system-ui, sans-serif; font-weight: 900; color: #fff; text-align: center; pointer-events: none; }
+.hud-clock { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); isolation: isolate; min-width: 132px; min-height: 48px; padding: 6px 26px 7px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; z-index: 4; font-family: 'Unbounded', system-ui, sans-serif; font-weight: 900; color: #fff; text-align: center; pointer-events: none; }
+.hud-clock::before { content: ''; position: absolute; inset: 0; z-index: -1; background: #000; transform: skewX(-14deg); border-radius: 5px; box-shadow: 0 2px 8px rgba(0, 0, 0, .45); } /* the black rhomboid */
 .hud-clock strong { font-family: 'Unbounded', system-ui, sans-serif; font-weight: 900; font-size: 1.05rem; line-height: 1.1; font-variant-numeric: tabular-nums; }
-.hud-clock span { font-family: 'Unbounded', system-ui, sans-serif; font-weight: 900; font-size: .62rem; letter-spacing: .06em; text-transform: uppercase; opacity: .85; line-height: 1.2; }
-.hud-clock.falling strong { color: #ff7a7a; }
+.hud-clock span { font-family: 'Unbounded', system-ui, sans-serif; font-weight: 900; font-size: .62rem; letter-spacing: .06em; text-transform: uppercase; color: #9a9fa8; line-height: 1.2; margin-top: 5px; }
+.hud-clock strong { color: #fff; }
+.hud-clock.falling strong { color: #ff4d4d; } /* red only while the ring is really crumbling */

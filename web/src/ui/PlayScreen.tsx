@@ -752,7 +752,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
       />
 
       {/* the clock: the countdown of the ring that falls next (top, in the middle, at the height of the Menu button) and under it that ring */}
-      <div className={`hud-clock ${collapseOn && !waiting && clock.falling && clock.ring < 4 ? 'falling' : ''}`} style={hudFrame ?? undefined}>
+      <div className={`hud-clock ${collapseOn && !waiting && clock.falling && clock.ring < 4 ? 'falling' : ''}`}>
         {collapseOn && !waiting && !(clock.ring >= 4 && tourRound > 0) && (clock.ring < 4 || clock.seconds > 0) && <strong>{fmtClock(clock.seconds)}</strong>}
         <span>{clock.ring >= 4 ? (tourRound > 0 ? (langRef.current === 'es' ? `Torneo · ronda ${tourRound}` : `Tournament · round ${tourRound}`) : (langRef.current === 'es' ? 'Cima' : 'Peak')) : (langRef.current === 'es' ? `Anillo ${clock.ring}` : `Ring ${clock.ring}`)}</span>
       </div>
