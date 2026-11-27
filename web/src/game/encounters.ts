@@ -11,7 +11,7 @@ export async function wildEncounter(ring: number, rng: () => number = Math.rando
   const [lo, hi] = ringLevels(ring)
   const level = lo + Math.floor(rng() * (hi - lo + 1))
   // legendaries only start to show up in ring 3 and are rare
-  const legendary = ring >= 3 && rng() < (ring === 3 ? RULES.legendary3Percent : RULES.legendary4Percent) / 100
+  const legendary = ring === 3 && rng() < RULES.legendary3Percent / 100 // (legendaries only in ring 3: never at the peak)
   const pool = ringPool(Math.min(3, Math.max(1, ring)), legendary)
   const species = pickOne(pool.length ? pool : ringPool(1, false), rng)
   return createMon(species.name, legendary ? Math.max(level, 30) : level, rng)

@@ -56,9 +56,8 @@ export interface Rules {
   peakNpcsOn: number
   /** chance (percent) of a wild Pokémon on every step in tall grass */
   encounterPercent: number
-  /** chance (percent) that a wild Pokémon of ring 3 / of the peak is a legendary */
+  /** chance (percent) that a wild Pokémon of ring 3 is a legendary (there are none anywhere else) */
   legendary3Percent: number
-  legendary4Percent: number
   /** the levels of the wild Pokémon and the trainers of every ring (lowest and highest) */
   lvl1Min: number
   lvl1Max: number
@@ -88,7 +87,7 @@ export const DEFAULT_RULES: Rules = {
   watchAlive: 1, watchEliminated: 1,
   startPokeBalls: 5, startGreatBalls: 5, startUltraBalls: 0, startPotions: 3, startSuperPotions: 0, startRevives: 5,
   centersOn: 1, respawnOnWipe: 1, peakWildOn: 0, peakNpcsOn: 0,
-  encounterPercent: 11, legendary3Percent: 3, legendary4Percent: 6,
+  encounterPercent: 11, legendary3Percent: 3,
   lvl1Min: 2, lvl1Max: 10, lvl2Min: 15, lvl2Max: 20, lvl3Min: 25, lvl3Max: 35, lvl4Min: 35, lvl4Max: 45,
   pickupCell: 13,
   minPlayers: 2, lobbySeconds: 6, startDelaySeconds: 0,
@@ -185,7 +184,6 @@ export const RULE_GROUPS: RuleGroup[] = [
     b('peakNpcsOn', 'Trainers and people at the peak', 'Entrenadores y gente en la cima', 'Off = nobody stands at the peak (normal island).', 'Apagado = nadie está en la cima (isla normal).'),
     n('encounterPercent', 'Wild Pokémon chance per step in grass (%)', 'Probabilidad de salvaje por paso en hierba (%)', 'The chance on every step in tall grass.', 'La probabilidad en cada paso en hierba alta.', 0, 100),
     n('legendary3Percent', 'Legendary chance in ring 3 (%)', 'Probabilidad de legendario en el anillo 3 (%)', '', '', 0, 100),
-    n('legendary4Percent', 'Legendary chance at the peak (%)', 'Probabilidad de legendario en la cima (%)', '', '', 0, 100),
     n('lvl1Min', 'Ring 1 · lowest level', 'Anillo 1 · nivel mínimo', 'Levels of wild Pokémon and trainers of this ring.', 'Niveles de salvajes y entrenadores de este anillo.', 1, 100),
     n('lvl1Max', 'Ring 1 · highest level', 'Anillo 1 · nivel máximo', '', '', 1, 100),
     n('lvl2Min', 'Ring 2 · lowest level', 'Anillo 2 · nivel mínimo', '', '', 1, 100),
