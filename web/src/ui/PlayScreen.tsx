@@ -25,7 +25,7 @@ import { buildCustomVisuals, type CustomWorld } from '../world/customWorld'
 import { fetchPublishedWorld } from '../world/publish'
 import { fetchGameConfig } from '../world/gameConfig'
 import { applyCustomEvents } from '../world/applyEvents'
-import { applyRules, RULES, tournamentStart, type Rules } from '../game/rules'
+import { applyRules, RULES, ringStartSecs, tournamentStart, type Rules } from '../game/rules'
 import { busyLine, leaderLine, lossLine, preBattleLine } from '../data/npcLines'
 import { BagPanel, CaughtPanel, PcPanel, TeamPanel } from './MenuPanels'
 import SettingsPanel from './SettingsPanel'
@@ -312,7 +312,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
       const pos = handleRef.current?.getPos()
       if (pos) setRing(ringAt(pos.x, pos.y))
       const el = (Date.now() - startRef.current) / 1000
-      if (royale && Date.now() >= t0Ref.current) for (let k = 1; k <= 3; k++) if (el >= RULES[`ring${k}Seconds` as 'ring1Seconds'] + Math.max(1, RULES[`fall${k}Seconds` as 'fall1Seconds']) && !goneRings.current.has(k)) { goneRings.current.add(k); showAnnRef.current({ k: 'gone', n: k }) }
+      if (royale && Date.now() >= t0Ref.current) for (let k = 1; k <= 3; k++) if (el >= ringStartSecs()[k - 1] + Math.max(1, RULES[`fall${k}Seconds` as 'fall1Seconds']) && !goneRings.current.has(k)) { goneRings.current.add(k); showAnnRef.current({ k: 'gone', n: k }) }
       if (pos && royale && !eliminatedRef.current) { // walking into a ring nearer the peak (higher number): announced (being pushed there by the storm is announced on its own)
         const rr = ringAt(pos.x, pos.y)
         if (prevRing.current && rr && rr > prevRing.current && Date.now() - pushedAt.current > 3000 && Date.now() >= t0Ref.current) announceRef.current({ k: 'ring', a: username ?? '', n: rr })

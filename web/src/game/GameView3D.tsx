@@ -7,7 +7,8 @@ import type { BuiltWorld } from '../rom/chunkWorld'
 import { drawCharacter, lookSprite, randomLook, type Look } from './character'
 import { SWIM_SPRITES, hasOw, owBall, owEmote, owFrame } from './ow'
 import { CENTER_MODEL, GYM_MODELS } from '../rom/buildings'
-import { addNoGrass, animatedTextures, applyClip } from '../rom/mapModel'
+import { addNoGrass, animatedTextures } from '../rom/mapModel'
+import { buildPathLayer } from './meadow'
 import { valueAt } from '../rom/texanim'
 import { safeTileFor, type GameEvents, type GameHandle, type OtherPlayer } from './GameView'
 import { hash2 } from './rng'
@@ -333,17 +334,10 @@ export default function GameView3D(props: Props) {
     }
     if (world.carved) {
       const more = connectRings(world.tiles)
-      if (more.length) {
-        world.carved.push(...more); addNoGrass(more)
-        const mat = new THREE.MeshBasicMaterial({ color: 0xe0cc8a, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 })
-        applyClip(mat, built.uniforms)
-        const im = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), mat, more.length)
-        const m4 = new THREE.Matrix4()
-        more.forEach((i, k) => { m4.makeTranslation((i % SIZE) + 0.5, built.height[i] + 0.03, ((i / SIZE) | 0) + 0.5); im.setMatrixAt(k, m4) })
-        im.frustumCulled = false
-        scene.add(im)
-      }
+      if (more.length) { world.carved.push(...more); addNoGrass(more) }
     }
+
+    scene.add(buildPathLayer(world, built)) // all the paths, with the soft edges of the game
 
     const ballMat = ballMaterial()
     // every item on the ground is drawn with the game's own item ball (a/0/4/8 file 115)
@@ -994,9 +988,14 @@ export default function GameView3D(props: Props) {
         }
       }
       } catch { clearFollower(); fol.key = fs ? `${fs.species}|${fs.shiny}` : ''; fol.mode = 'none' }
-      if (seaTex) seaTex.offset.set((now / 14000) % 1, (now / 21000) % 1) // the sea drifts
       const fr = Math.floor(now / (1000 / 30)) // water pictures: 30 a second (a calm pace; the exact speed of the original is not known)
       for (const a of animatedTextures) a.tex.offset.set(valueAt(a.anim.moveS, fr), valueAt(a.anim.moveT, fr)) // moving water
+      { // our own sea and shore move with the game's own animation of the same pictures (sea_mizu1: slides diagonally, one picture in 8 s; sea_zanami: the foam slides along the shore, the picture sits 0.1 off)
+        const animOf = (name: string) => animatedTextures.find((a) => a.tex.userData.texName === name)?.anim
+        const sz = animOf('sea_zanami'), sm = animOf('sea_mizu1')
+        if (foamTex && sz) foamTex.offset.set(valueAt(sz.moveS, fr), valueAt(sz.moveT, fr))
+        if (seaTex) { if (sm) seaTex.offset.set(valueAt(sm.moveS, fr), valueAt(sm.moveT, fr)); else seaTex.offset.set((now / 8000) % 1, (now / 8000) % 1) }
+      }
       const sunkRad = elapsed === null ? 999 : collapseRadius(elapsedSec)
       for (const gp of gymParts) { const vis = dist(gp.x, gp.y) <= sunkRad + 3; for (const o of gp.things) o.visible = vis }
       for (const n of npcs) {

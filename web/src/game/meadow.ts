@@ -232,86 +232,64 @@ function squareRing(a: number, b: number, y: number): THREE.BufferGeometry {
   return g
 }
 
-/** One 16 x 16 picture of a road tile: sand, with the grass fringe of the game's road picture along every side that does not continue as road. */
-function roadTile(sand: THREE.DataTexture | null, fringe: THREE.DataTexture | null, mask: number, variant: number): THREE.CanvasTexture {
-  const c = document.createElement('canvas'); c.width = 16; c.height = 16
-  const ctx = c.getContext('2d')!
-  ctx.imageSmoothingEnabled = false
-  const toCanvas = (t: THREE.DataTexture): HTMLCanvasElement => { const k = document.createElement('canvas'); k.width = t.image.width; k.height = t.image.height; k.getContext('2d')!.putImageData(new ImageData(new Uint8ClampedArray(t.image.data as unknown as ArrayLike<number>), t.image.width, t.image.height), 0, 0); return k }
-  if (sand) ctx.drawImage(toCanvas(sand), 0, 0, 16, 16); else { ctx.fillStyle = '#e8d090'; ctx.fillRect(0, 0, 16, 16) }
-  if (fringe) {
-    const src = toCanvas(fringe)
-    const sx = variant ? 16 : 0
-    // bits: 1 = north, 2 = east, 4 = south, 8 = west is not road; the fringe picture has its grass at the top, so it is turned for the other sides
-    for (const [bit, rot] of [[1, 0], [2, 1], [4, 2], [8, 3]] as Array<[number, number]>) {
-      if (!(mask & bit)) continue
-      ctx.save()
-      ctx.translate(8, 8); ctx.rotate((rot * Math.PI) / 2); ctx.translate(-8, -8)
-      ctx.drawImage(src, sx, 0, 16, 6, 0, 0, 16, 6) // the top 6 rows: grass edge over sand
-      ctx.restore()
-    }
-    // inner corners (the road goes on both ways but the tile diagonally is grass): the corner piece of the same edge picture
-    for (const [bit, rot] of [[16, 0], [32, 1], [64, 2], [128, 3]] as Array<[number, number]>) {
-      if (!(mask & bit)) continue
-      ctx.save()
-      ctx.translate(8, 8); ctx.rotate((rot * Math.PI) / 2); ctx.translate(-8, -8)
-      ctx.drawImage(src, sx, 0, 6, 6, 0, 0, 6, 6)
-      ctx.restore()
-    }
-  }
-  if (fringe) {
-    // outer corners (the road ends on two sides at once): the grass edge turns round the corner in a curve, like the game's paths, instead of two straight strips meeting at a right angle
-    const src = toCanvas(fringe)
-    const sd = src.getContext('2d')!.getImageData(variant ? 16 : 0, 0, 16, 6).data
-    const D = 6
-    const piece = document.createElement('canvas'); piece.width = D; piece.height = D
-    const pctx = piece.getContext('2d')!
-    const img = pctx.createImageData(D, D)
-    for (let y = 0; y < D; y++) {
-      for (let x = 0; x < D; x++) {
-        const dist = Math.hypot(D - x - 0.5, D - y - 0.5) - 0.5 // how far this pixel is from the sand, along the curve
-        const row = Math.max(0, Math.min(D - 1, Math.round(D - dist)))
-        const col = (x * 5 + y * 3 + variant * 7) % 16
-        const o = (row * 16 + col) * 4
-        const q = (y * D + x) * 4
-        img.data[q] = sd[o]; img.data[q + 1] = sd[o + 1]; img.data[q + 2] = sd[o + 2]; img.data[q + 3] = 255
-      }
-    }
-    pctx.putImageData(img, 0, 0)
-    for (const [bits, rot] of [[1 | 8, 0], [1 | 2, 1], [2 | 4, 2], [4 | 8, 3]] as Array<[number, number]>) {
-      if ((mask & bits) !== bits) continue
-      ctx.save()
-      ctx.translate(8, 8); ctx.rotate((rot * Math.PI) / 2); ctx.translate(-8, -8)
-      ctx.drawImage(piece, 0, 0)
-      ctx.restore()
-    }
-  }
-  const t = new THREE.CanvasTexture(c)
-  t.magFilter = THREE.NearestFilter; t.minFilter = THREE.NearestFilter; t.colorSpace = THREE.SRGBColorSpace
-  return t
-}
-
 /**
- * The grass of the game's road-edge picture is a darker green than the meadow ground picture, so every path was framed by a dark band. The grass pixels of the edge are brightened by the
- * difference of the two averages, so the path leads into the meadow without a seam.
+ * All the paths (the roads of the meadow, the paths in front of gyms and Centers, the ways cut through the inner rings) drawn with SOFT, game-like edges: the tiles of the
+ * paths go into a 160 x 160 mask that is smoothed (so corners are rounded), and every pixel of the path picture (16 to a tile, like the game's pictures) decides from that
+ * smooth value plus a little noise whether it is sand, the greyish worn rim, or nothing (the meadow shows). The sand is the game's own road picture (michi01b).
  */
-function matchFringeToMeadow(fringe: THREE.DataTexture | null, meadow: THREE.DataTexture | null): THREE.DataTexture | null {
-  if (!fringe || !meadow) return fringe
-  const isGrass = (r: number, g: number, b: number) => g > r + 8 && g > b + 20
-  const md = meadow.image.data as unknown as Uint8Array, fd = fringe.image.data as unknown as Uint8Array
-  let mr = 0, mg = 0, mb = 0, mc = 0, fr = 0, fg = 0, fb = 0, fc = 0
-  for (let i = 0; i < meadow.image.width * meadow.image.height; i++) { mr += md[i * 4]; mg += md[i * 4 + 1]; mb += md[i * 4 + 2]; mc++ }
-  for (let i = 0; i < fringe.image.width * fringe.image.height; i++) if (fd[i * 4 + 3] >= 128 && isGrass(fd[i * 4], fd[i * 4 + 1], fd[i * 4 + 2])) { fr += fd[i * 4]; fg += fd[i * 4 + 1]; fb += fd[i * 4 + 2]; fc++ }
-  if (!mc || !fc) return fringe
-  const dr = mr / mc - fr / fc, dg = mg / mc - fg / fc, db = mb / mc - fb / fc
-  const out = new Uint8Array(fd)
-  for (let i = 0; i < fringe.image.width * fringe.image.height; i++) {
-    if (out[i * 4 + 3] < 128 || !isGrass(out[i * 4], out[i * 4 + 1], out[i * 4 + 2])) continue
-    out[i * 4] = Math.min(255, Math.max(0, out[i * 4] + dr)); out[i * 4 + 1] = Math.min(255, Math.max(0, out[i * 4 + 1] + dg)); out[i * 4 + 2] = Math.min(255, Math.max(0, out[i * 4 + 2] + db))
+export function buildPathLayer(world: World, built: BuiltWorld): THREE.Object3D {
+  const g = new THREE.Group()
+  const hm = meadowHeight(built)
+  const sandy = (r: number, gr: number, b: number) => r + gr - 2 * b - Math.abs(r - 220) * 0.2
+  const sand = built.textureNamed('michi01b', false, sandy)
+  const pm = built.pathMask
+  const mask = new Uint8Array(SIZE * SIZE)
+  const tiles: number[] = []
+  const ok = (i: number) => world.tiles[i] === T.Grass || world.tiles[i] === T.GymDoor
+  for (let i = 0; i < SIZE * SIZE; i++) {
+    const x = i % SIZE, y = (i / SIZE) | 0, d = dist(x, y)
+    if (pm && pm[i] === 1 && d >= RING_INNER[0] && d <= RADIUS - BEACH && ok(i)) { mask[i] = 255; tiles.push(i) }
   }
-  const t = new THREE.DataTexture(out, fringe.image.width, fringe.image.height, THREE.RGBAFormat)
-  t.needsUpdate = true
-  return t
+  for (const i of world.carved ?? []) if (!mask[i] && world.tiles[i] === T.Grass && ringAt(i % SIZE, (i / SIZE) | 0) >= 2) { mask[i] = 255; tiles.push(i) }
+  if (!tiles.length) return g
+  const maskTex = new THREE.DataTexture(mask, SIZE, SIZE, THREE.RedFormat, THREE.UnsignedByteType)
+  maskTex.magFilter = THREE.LinearFilter; maskTex.minFilter = THREE.LinearFilter; maskTex.needsUpdate = true
+  if (sand) { sand.wrapS = THREE.RepeatWrapping; sand.wrapT = THREE.RepeatWrapping; sand.magFilter = THREE.NearestFilter; sand.minFilter = THREE.NearestFilter; sand.needsUpdate = true }
+  const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 })
+  applyClip(mat, built.uniforms)
+  const clipCompile = mat.onBeforeCompile
+  mat.onBeforeCompile = (shader, renderer) => {
+    clipCompile(shader, renderer)
+    shader.uniforms.uPath = { value: maskTex }
+    shader.uniforms.uSand = { value: sand }
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform sampler2D uPath;\nuniform sampler2D uSand;')
+      .replace('#include <map_fragment>', [
+        'vec2 pqPx = floor(vWPos.xz * 16.0) + 0.5;',
+        'float pqM = texture2D(uPath, (pqPx / 16.0) / 160.0).r;',
+        'float pqA = fract(sin(dot(pqPx, vec2(12.9898, 78.233))) * 43758.5453);',
+        'float pqB = fract(sin(dot(floor(pqPx * 0.5), vec2(39.3468, 11.135))) * 24634.6345);',
+        'float pqE = pqM + (pqA * 0.45 + pqB * 0.55 - 0.5) * 0.4;',
+        'if (pqE < 0.30) discard;',
+        'vec3 pqSand = texture2D(uSand, fract(vWPos.xz)).rgb;',
+        'vec3 pqCol = pqSand;',
+        'if (pqE < 0.40) pqCol = vec3(0.60, 0.66, 0.46);',
+        'else if (pqE < 0.50) pqCol = mix(vec3(0.78, 0.72, 0.52), pqSand, 0.4);',
+        'diffuseColor = vec4(pqCol, 1.0);',
+      ].join('\n'))
+  }
+  mat.customProgramCacheKey = () => 'pq-path-layer'
+  // every path tile gets a quad of 3 x 3 tiles (the soft rim reaches outside the tile); where they overlap every pixel comes out the same
+  const im = new THREE.InstancedMesh(new THREE.PlaneGeometry(3, 3).rotateX(-Math.PI / 2), mat, tiles.length)
+  const m4 = new THREE.Matrix4()
+  tiles.forEach((i, k) => {
+    const d = dist(i % SIZE, (i / SIZE) | 0)
+    m4.makeTranslation((i % SIZE) + 0.5, (d < RING_INNER[0] ? built.height[i] : hm) + 0.012, ((i / SIZE) | 0) + 0.5)
+    im.setMatrixAt(k, m4)
+  })
+  im.frustumCulled = false
+  g.add(im)
+  return g
 }
 
 /** The pictures of the meadow: ground, beach, road tiles with grass edges, tall grass and the cliffs between the rings. */
@@ -322,8 +300,6 @@ export function buildMeadowVisuals(world: World, built: BuiltWorld, extra: numbe
   const sandy = (r: number, gr: number, b: number) => r + gr - 2 * b - Math.abs(r - 220) * 0.2 // a light yellow sand
   const grass = built.textureNamed('grass01ax', true, green)
   const sand = built.textureNamed('sea_jimen', true, sandy)
-  const roadSand = built.textureNamed('michi01b', false, sandy)
-  const roadEdge = matchFringeToMeadow(built.textureNamed('michi01a', false, sandy), grass)
   const leaf1 = built.textureNamed('kusa_ec1', true, green), leaf2 = built.textureNamed('kusa_ec2', true, green), leaf3 = built.textureNamed('kusa_ec3', true, green)
   const mesh = (geo: THREE.BufferGeometry, mat: THREE.Material, y = 0) => { const m = new THREE.Mesh(geo, mat); m.position.y = y; m.frustumCulled = false; g.add(m) }
   mesh(squareRing(RING_INNER[0] - 0.2, RADIUS - BEACH, hm), groundMat(grass, 0x59b84a, built))
@@ -340,35 +316,21 @@ export function buildMeadowVisuals(world: World, built: BuiltWorld, extra: numbe
     im.frustumCulled = false
     g.add(im)
   }
-  const pm = built.pathMask
-  const isRoad = (x: number, y: number) => x >= 0 && y >= 0 && x < SIZE && y < SIZE && !!pm && pm[y * SIZE + x] === 1 && dist(x, y) >= RING_INNER[0] && dist(x, y) <= RADIUS - BEACH
-  const roads = new Map<number, number[]>() // (neighbour mask * 2 + picture variant) -> tiles
   const tuftsA: number[] = []
   for (let i = 0; i < SIZE * SIZE; i++) {
     const x = i % SIZE, y = (i / SIZE) | 0
     const d = dist(x, y)
     if (d < RING_INNER[0] || d > RADIUS) continue
-    if (isRoad(x, y) && world.tiles[i] === T.Grass) {
-      const n = isRoad(x, y - 1), e = isRoad(x + 1, y), s = isRoad(x, y + 1), w = isRoad(x - 1, y)
-      const mask = (n ? 0 : 1) | (e ? 0 : 2) | (s ? 0 : 4) | (w ? 0 : 8)
-        | (n && w && !isRoad(x - 1, y - 1) ? 16 : 0) | (n && e && !isRoad(x + 1, y - 1) ? 32 : 0)
-        | (s && e && !isRoad(x + 1, y + 1) ? 64 : 0) | (s && w && !isRoad(x - 1, y + 1) ? 128 : 0)
-      const key = mask * 2 + (hash2(x, y, 9) < 0.5 ? 0 : 1)
-      ;(roads.get(key) ?? roads.set(key, []).get(key)!).push(i)
-    } else if (world.tiles[i] === T.Tall) {
+    if (world.tiles[i] === T.Tall) {
       tuftsA.push(i) // tall grass = the game's leaf picture on every tile (the darker bush picture has square edges that show as seams)
     }
   }
-  for (const [key, tiles] of roads) flat(tiles, new THREE.MeshBasicMaterial({ map: roadTile(roadSand, roadEdge, key >> 1, key & 1) }), 0.012, () => hm)
   const alphaMat = (t: THREE.Texture | null) => new THREE.MeshBasicMaterial({ map: t ?? undefined, color: t ? 0xffffff : 0x2a8a3a, alphaTest: 0.4, transparent: true, side: THREE.DoubleSide })
   // tall grass exactly like the game's map: three flat layers of leaf pictures one above the other (bottom kusa_ec3, middle kusa_ec2, top kusa_ec1), one picture per tile
   const grassLayers = (tiles: number[], h: (i: number) => number) => {
     flat(tiles, alphaMat(leaf3), 0.125, h); flat(tiles, alphaMat(leaf2), 0.375, h); flat(tiles, alphaMat(leaf1), 0.5, h)
   }
   grassLayers(tuftsA, () => hm)
-  // the ways cut through the inner rings (so every ring can be walked round) and the paths in front of the Centers: a flat sand path over the map
-  const cv = (world.carved ?? []).filter((i) => ringAt(i % SIZE, (i / SIZE) | 0) >= 2)
-  if (cv.length) flat(cv, new THREE.MeshBasicMaterial({ map: roadSand ?? undefined, color: roadSand ? 0xffffff : 0xe8d090 }), 0.02, (i) => built.height[i])
   const ex = extra.filter((i) => dist(i % SIZE, (i / SIZE) | 0) < RING_INNER[0])
   grassLayers(ex, (i) => built.height[i])
 

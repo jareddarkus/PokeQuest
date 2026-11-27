@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useLang } from '../i18n'
-import { DEFAULT_RULES, RULE_GROUPS, type Rules, type RuleDef } from '../game/rules'
+import { DEFAULT_RULES, RULE_GROUPS, ringStartSecs, type Rules, type RuleDef } from '../game/rules'
 import { fetchGameConfig, gameConfigInfo, saveGameConfig } from '../world/gameConfig'
 
 /**
@@ -58,8 +58,10 @@ export default function AdminSettings() {
   }
 
   const d = draft
+  const [s1, s2, s3] = ringStartSecs(d)
+  const ringTxt = (n: number, a: number, f: number) => `${es ? 'anillo' : 'ring'} ${n} ${mmss(a)}→${mmss(a + f)}`
   const timeline = d.collapseOn > 0
-    ? `${es ? 'Línea de tiempo' : 'Timeline'}: ${es ? 'anillo 1' : 'ring 1'} ${mmss(d.ring1Seconds)}→${mmss(d.ring1Seconds + d.fall1Seconds)} · ${es ? 'anillo 2' : 'ring 2'} ${mmss(d.ring2Seconds)}→${mmss(d.ring2Seconds + d.fall2Seconds)} · ${es ? 'anillo 3' : 'ring 3'} ${mmss(d.ring3Seconds)}→${mmss(d.ring3Seconds + d.fall3Seconds)}${d.tournamentOn > 0 ? ` · ${es ? 'torneo' : 'tournament'} ${mmss(d.ring3Seconds + d.peakSeconds)}` : ''}`
+    ? `${es ? 'Línea de tiempo' : 'Timeline'}: ${ringTxt(1, s1, d.fall1Seconds)} · ${ringTxt(2, s2, d.fall2Seconds)} · ${ringTxt(3, s3, d.fall3Seconds)}${d.tournamentOn > 0 ? ` · ${es ? 'torneo' : 'tournament'} ${mmss(s3 + d.peakSeconds)}` : ''}`
     : es ? 'La isla no se hunde.' : 'The island does not collapse.'
 
   return (

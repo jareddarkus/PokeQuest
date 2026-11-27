@@ -49,7 +49,7 @@ export const animatedTextures: Array<{ tex: THREE.Texture; anim: MatAnim }> = []
 const textureCache = new WeakMap<object, Map<string, THREE.Texture>>()
 
 const SINK0 = 'transformed.y -= smoothstep(uCut - 1.2, uCut, pqd0) * 2.0;\n'
-const SINK1 = 'transformed.y -= smoothstep(uCut - 1.2, uCut, max(abs(vWPos.x - uCenter.x), abs(vWPos.z - uCenter.y))) * 2.0;\n'
+const SINK1 = '#ifdef USE_INSTANCING\nvec3 pqWc = (modelMatrix * (instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0))).xyz;\nfloat pqDs = max(abs(pqWc.x - uCenter.x), abs(pqWc.z - uCenter.y));\n#else\nfloat pqDs = max(abs(vWPos.x - uCenter.x), abs(vWPos.z - uCenter.y));\n#endif\ntransformed.y -= smoothstep(uCut - 1.2, uCut, pqDs) * 2.0;\n' // (many flat pictures drawn as copies - leaves, paths - sink as a whole tile; the ground bends vertex by vertex)
 /** Lets a material of ours disappear with the collapsing island and glow red before it falls (same as the map). */
 export function applyClip(mat: THREE.Material, clip: ClipUniforms): void {
   mat.onBeforeCompile = (shader) => {
@@ -114,6 +114,7 @@ export function buildModelObject(model: Model, tex: NonNullable<ReturnType<typeo
       map.wrapS = THREE.RepeatWrapping
       map.wrapT = THREE.RepeatWrapping
       map.needsUpdate = true
+      map.userData.texName = m!.texture // (so that our own pictures of the same name - the shore, the sea - can move with the same animation)
       animatedTextures.push({ tex: map, anim })
     }
     const mat = new THREE.MeshBasicMaterial({

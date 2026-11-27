@@ -2,12 +2,12 @@
 // from Settings → Admin without touching the code. The owner's saved values are stored online (see world/gameConfig.ts) and every match
 // reads them when it starts: what is saved now is used from the NEXT match on.
 export interface Rules {
-  // ---- the falling rings (seconds counted from the start of the match)
-  /** the time at which ring 1 starts to crumble into the sea */
+  // ---- the falling rings: every ring LASTS its own time, then it crumbles (the next ring starts counting when the one before has finished falling)
+  /** how long the match lasts before ring 1 starts to crumble into the sea */
   ring1Seconds: number
-  /** the time at which ring 2 starts to crumble */
+  /** how long ring 2 lasts, counted from the moment ring 1 has finished falling */
   ring2Seconds: number
-  /** the time at which ring 3 starts to crumble */
+  /** how long ring 3 lasts, counted from the moment ring 2 has finished falling */
   ring3Seconds: number
   /** how long ring 1 / 2 / 3 take to crumble once their time is up */
   fall1Seconds: number
@@ -86,7 +86,7 @@ export interface Rules {
 }
 
 export const DEFAULT_RULES: Rules = {
-  ring1Seconds: 300, ring2Seconds: 600, ring3Seconds: 900,
+  ring1Seconds: 300, ring2Seconds: 270, ring3Seconds: 270,
   fall1Seconds: 30, fall2Seconds: 30, fall3Seconds: 30,
   warnSeconds: 20, collapseOn: 1, peakSeconds: 300, tournamentOn: 1,
   maxLegendary: 1, itemsPerBattle: 4, expMultiplier: 10, trainerExpPercent: 150, duelHeal: 1,
@@ -111,7 +111,7 @@ export function applyRules(...sets: Array<Partial<Rules> | null | undefined>): v
     if (!r) continue
     const old = (r as { ringSeconds?: number; fallSeconds?: number })
     // (worlds saved before the rings had their own times: one time between falls and one fall time)
-    if (Number.isFinite(old.ringSeconds) && (old.ringSeconds as number) > 0) { const T = old.ringSeconds as number; RULES.ring1Seconds = T; RULES.ring2Seconds = 2 * T; RULES.ring3Seconds = 3 * T; RULES.peakSeconds = T }
+    if (Number.isFinite(old.ringSeconds) && (old.ringSeconds as number) > 0) { const T = old.ringSeconds as number; RULES.ring1Seconds = T; RULES.ring2Seconds = Math.max(1, T - 30); RULES.ring3Seconds = Math.max(1, T - 30); RULES.peakSeconds = T }
     if (Number.isFinite(old.fallSeconds) && (old.fallSeconds as number) > 0) RULES.fall1Seconds = RULES.fall2Seconds = RULES.fall3Seconds = old.fallSeconds as number
     for (const k of Object.keys(DEFAULT_RULES) as Array<keyof Rules>) {
       const v = Number(r[k])
@@ -119,8 +119,6 @@ export function applyRules(...sets: Array<Partial<Rules> | null | undefined>): v
     }
   }
   // sensible order and limits
-  RULES.ring2Seconds = Math.max(RULES.ring2Seconds, RULES.ring1Seconds)
-  RULES.ring3Seconds = Math.max(RULES.ring3Seconds, RULES.ring2Seconds)
   for (const k of ['fall1Seconds', 'fall2Seconds', 'fall3Seconds'] as const) RULES[k] = Math.max(1, RULES[k])
   RULES.minPlayers = Math.max(1, Math.round(RULES.minPlayers))
   RULES.pickupCell = Math.max(4, Math.round(RULES.pickupCell))
@@ -131,7 +129,12 @@ export function applyRules(...sets: Array<Partial<Rules> | null | undefined>): v
 }
 
 /** The second at which the tournament starts (after the peak). */
-export const tournamentStart = (): number => RULES.ring3Seconds + RULES.peakSeconds
+/** The second (from the start of the match) at which ring 1, 2 and 3 start to crumble. */
+export function ringStartSecs(r: Rules = RULES): [number, number, number] {
+  const s1 = r.ring1Seconds, s2 = s1 + Math.max(1, r.fall1Seconds) + r.ring2Seconds, s3 = s2 + Math.max(1, r.fall2Seconds) + r.ring3Seconds
+  return [s1, s2, s3]
+}
+export const tournamentStart = (): number => ringStartSecs()[2] + RULES.peakSeconds
 
 // ---------------------------------------------------------------- what the Admin tab shows
 export interface RuleDef {
@@ -154,11 +157,11 @@ const b = (key: keyof Rules, en: string, es: string, helpEn: string, helpEs: str
 export const RULE_GROUPS: RuleGroup[] = [
   { id: 'rings', en: 'Falling rings and the peak', es: 'Anillos que caen y la cima', rules: [
     b('collapseOn', 'The island collapses', 'La isla se hunde', 'Off = the rings never fall (the match never ends by itself).', 'Apagado = los anillos nunca caen (la partida no acaba sola).'),
-    t('ring1Seconds', 'Ring 1 starts to fall at', 'El anillo 1 empieza a caer en', 'Time since the start of the match.', 'Tiempo desde el inicio de la partida.'),
+    t('ring1Seconds', 'Ring 1 lasts', 'El anillo 1 dura', 'From the start of the match until ring 1 starts to crumble.', 'Desde el inicio de la partida hasta que el anillo 1 empieza a hundirse.'),
     t('fall1Seconds', 'Ring 1 takes to crumble', 'El anillo 1 tarda en hundirse', 'How long the fall of ring 1 lasts.', 'Lo que dura la caída del anillo 1.', 1, 600),
-    t('ring2Seconds', 'Ring 2 starts to fall at', 'El anillo 2 empieza a caer en', 'Never earlier than ring 1.', 'Nunca antes que el anillo 1.'),
+    t('ring2Seconds', 'Ring 2 lasts', 'El anillo 2 dura', 'From the moment ring 1 has finished falling until ring 2 starts to crumble.', 'Desde que el anillo 1 termina de caer hasta que el anillo 2 empieza a hundirse.'),
     t('fall2Seconds', 'Ring 2 takes to crumble', 'El anillo 2 tarda en hundirse', 'How long the fall of ring 2 lasts.', 'Lo que dura la caída del anillo 2.', 1, 600),
-    t('ring3Seconds', 'Ring 3 starts to fall at', 'El anillo 3 empieza a caer en', 'Never earlier than ring 2.', 'Nunca antes que el anillo 2.'),
+    t('ring3Seconds', 'Ring 3 lasts', 'El anillo 3 dura', 'From the moment ring 2 has finished falling until ring 3 starts to crumble.', 'Desde que el anillo 2 termina de caer hasta que el anillo 3 empieza a hundirse.'),
     t('fall3Seconds', 'Ring 3 takes to crumble', 'El anillo 3 tarda en hundirse', 'How long the fall of ring 3 lasts.', 'Lo que dura la caída del anillo 3.', 1, 600),
     t('warnSeconds', 'Warning before a ring falls', 'Aviso antes de que caiga un anillo', 'The ground shakes and reddens this long before.', 'El suelo tiembla y se pone rojo este tiempo antes.', 0, 300),
     t('peakSeconds', 'Peak duels last (until the tournament)', 'Duelos en la cima (hasta el torneo)', 'Counted from the moment ring 3 starts to fall.', 'Se cuenta desde que el anillo 3 empieza a caer.', 0, 3600),

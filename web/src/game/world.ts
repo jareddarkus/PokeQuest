@@ -1,6 +1,6 @@
 // The Battle Royale island: 5 x 5 real Pokémon White 2 map chunks (160 x 160 tiles) cut into a circle of 4 rings.
 // The ground, trees, water and tall grass come from the game file; this file adds rings, gyms, trainers and items.
-import { RULES, tournamentStart } from './rules'
+import { RULES, ringStartSecs, tournamentStart } from './rules'
 import { LEADERS } from '../data/leaders'
 import { hash2, mulberry32, pick } from './rng'
 import type { PokeGroup } from '../world/events'
@@ -433,7 +433,7 @@ export function generateWorld(seed: number, ground: Uint8Array, opts: { barriers
  * on it is sent to the next ring; after twice that time ring 2, after three times ring 3. Then only the peak is left.
  */
 /** Tiles further than this (from the centre) have fallen into the sea after `elapsed` seconds. */
-const ringStarts = (): number[] => [RULES.ring1Seconds, RULES.ring2Seconds, RULES.ring3Seconds]
+const ringStarts = (): number[] => ringStartSecs()
 const ringFalls = (): number[] => [RULES.fall1Seconds, RULES.fall2Seconds, RULES.fall3Seconds]
 export function collapseRadius(elapsedSeconds: number): number {
   const S = ringStarts(), Fs = ringFalls()
