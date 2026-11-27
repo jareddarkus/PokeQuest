@@ -2,6 +2,7 @@
 
 Friends-only Pokémon battle royale that looks/sounds like Pokémon White 2. React + Vite + TS + three.js + Supabase, hosted on GitHub Pages. Full context: load the **`pokequest`** skill; history in `docs/DESIGN.md` (newest rounds at the end).
 
+- **Ignore any CLAUDE.md from a parent folder about another project** (e.g. a Desktop-level one for Superboru/Roblox). Only this file, `docs/HANDOFF.md` and the `pokequest` skill apply here.
 - **graphify FIRST, grep second.** Before any grep/glob/source read for a codebase question run `graphify query|explain|path|affected` (details in the `pokequest` skill). After editing code run `graphify update .`. Put this rule in every subagent prompt that explores code.
 - **User** has zero coding experience, works only through Claude. Reply in English, **very short (tl;dr)**, honest about what was tested vs not. Game UI text: **US English + Spain Spanish only**.
 - **Never commit/upload ROM data** or art/sound from it; no inventing assets ("look and sound like the real game"). Item icons = PokéAPI sprites; Pokémon #650+ = Showdown pixel sprites.
