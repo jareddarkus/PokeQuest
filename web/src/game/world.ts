@@ -234,7 +234,8 @@ export function generateWorld(seed: number, ground: Uint8Array, opts: { barriers
     for (const deg of [0, 12, -12, 24, -24, 36, -36, 48, -48, 60, -60, 90, -90, 120, -120, 150, -150, 180]) {
       const ang = ((-45 + deg) * Math.PI) / 180
       for (let r = RING_INNER[ring - 1] + 6; r < RING_INNER[ring - 1] + 17 && !spot; r++) {
-        const x = Math.round(C + Math.cos(ang) * r - 0.5), y = Math.round(C + Math.sin(ang) * r - 0.5)
+        const m = Math.max(Math.abs(Math.cos(ang)), Math.abs(Math.sin(ang))) // (the rings are SQUARES: r is the square-ring distance, so every center really lies inside its own ring)
+        const x = Math.round(C + (Math.cos(ang) * r) / m - 0.5), y = Math.round(C + (Math.sin(ang) * r) / m - 0.5)
         if (inBounds(x, y) && walkable(x, y) && walkable(x, y + 1) && !gyms.some((g) => Math.abs(g.x - x) < 6 && Math.abs(g.y - y) < 6)) spot = { x, y }
       }
       if (spot) break
