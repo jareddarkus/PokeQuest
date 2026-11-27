@@ -278,32 +278,6 @@ function ClassicHpBox({ side, mine, exp, expFrac, gender, k, nameFont = 2 }: { s
   )
 }
 
-/** The HP box in the modern look: a light slanted card with the name, level, the HP gauge (and the numbers and the EXP gauge for yours). */
-function ModernHpBox({ side, mine, exp, expFrac, gender, k }: { side: Side; mine: boolean; exp?: number; expFrac?: number; gender?: 'M' | 'F' | 'N'; k?: number }) {
-  const K0 = useDsK()
-  const K = k ?? K0
-  const shownHp = useDrain(side.hp, side.maxHp)
-  const frac = side.maxHp > 0 ? Math.max(0, Math.min(1, shownHp / side.maxHp)) : 0
-  const lo = expForLevel(side.level), hi = expForLevel(side.level + 1)
-  const expF = expFrac !== undefined ? Math.max(0, Math.min(1, expFrac)) : exp === undefined ? 0 : Math.max(0, Math.min(1, (exp - lo) / Math.max(1, hi - lo)))
-  const color = frac > 0.5 ? '#19c37d' : frac > 0.2 ? '#f0a800' : '#e03a4c'
-  return (
-    <div className={`hp2 mxh ${mine ? 'mine' : 'foe'}`} style={{ width: (mine ? 124 : 112) * K, height: (mine ? 40 : 30) * K, ['--k' as string]: `${K}px`, fontSize: 6.6 * K }}>
-      <div className="mxh-card"><div className="mxh-in">
-        <div className="mxh-top">
-          <b className="mxh-name">{nameOf(side.species)}</b>
-          {gender && gender !== 'N' && <span className="mxh-g" style={{ color: gender === 'M' ? '#2a7de1' : '#e0467c' }}>{gender === 'M' ? '♂' : '♀'}</span>}
-          <span className="mxh-lv">Lv {side.level}</span>
-          <span className="mxh-st"><StatusIcon status={side.fainted ? 'fnt' : side.status} scale={K / 1.5} /></span>
-        </div>
-        <div className="mxh-row"><span className="mxh-lab">PS</span><span className="mxh-bar"><i style={{ width: `${frac * 100}%`, background: color }} /></span></div>
-        {mine && <div className="mxh-num">{Math.max(0, Math.ceil(shownHp))} / {side.maxHp}</div>}
-        {mine && <div className="mxh-row"><span className="mxh-lab">EXP</span><span className="mxh-bar exp"><i style={{ width: `${expF * 100}%` }} /></span></div>}
-      </div></div>
-    </div>
-  )
-}
-
 /** Little slanted badges next to an HP box for every stat that is raised (green) or lowered (red): "Atk +2", "Speed -1" ... */
 const STAGE_ORDER = ['atk', 'def', 'spa', 'spd', 'spe', 'accuracy', 'evasion'] as const
 const STAGE_NAME = {
@@ -323,7 +297,7 @@ function StageBadges({ st, es, K, side }: { st: Record<string, number>; es: bool
 }
 
 export function HpBox(props: Parameters<typeof ClassicHpBox>[0]) {
-  return useTheme() === 'modern' ? <ModernHpBox side={props.side} mine={props.mine} exp={props.exp} expFrac={props.expFrac} gender={props.gender} k={props.k} /> : <ClassicHpBox {...props} />
+  return <ClassicHpBox {...props} /> // (the game's own HP boxes in every theme)
 }
 export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed, foeClass, pvp, spectate, stream, playerGirl, playerSprite, textSpeed = 'normal', onEnd }: Props) {
   const lang = useLang()

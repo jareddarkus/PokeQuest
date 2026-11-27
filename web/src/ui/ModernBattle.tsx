@@ -35,13 +35,13 @@ function Dots({ party, foeCount }: { party?: Dot[]; foeCount?: number }) {
   )
 }
 
-function Box({ S, children, className = '' }: { S: number; children: React.ReactNode; className?: string }) {
-  return <div className={`mxb ${className}`} style={{ width: 256 * S + 6, height: 176 * S + 3, ['--s' as string]: `${S}px` } as CSSProperties}>{children}</div>
+function Box({ S, children, className = '', h = 176 }: { S: number; children: React.ReactNode; className?: string; h?: number }) {
+  return <div className={`mxb ${className}`} style={{ width: 256 * S + 6, height: h * S + 3, ['--s' as string]: `${S}px` } as CSSProperties}>{children}</div>
 }
 
 /** Nothing can be chosen right now (the foe is acting): the same card, quiet. */
 export function ModernIdle({ S }: { S: number }) {
-  return <Box S={S} className="idle"><span className="mxb-idle"><i /><i /><i /></span></Box>
+  return <Box S={S} className="idle" h={124}><span className="mxb-idle"><i /><i /><i /></span></Box>
 }
 
 export function ModernCommand({ S, onFight, onBag, onPokemon, onRun, party, foeCount }: {
@@ -49,7 +49,7 @@ export function ModernCommand({ S, onFight, onBag, onPokemon, onRun, party, foeC
 }) {
   useLang()
   return (
-    <Box S={S}>
+    <Box S={S} h={124}>
       <div className="mxb-head"><span className="mxb-title"><GameIcon n={9} />{useLang() === 'es' ? 'Combate' : 'Battle'}</span><Dots party={party} foeCount={foeCount} /></div>
       <button className="mxb-fight" onClick={() => { decide(); onFight() }}><span className="mxb-ico"><FightIcon /><span>Fight</span></span></button>
       <div className="mxb-three">
@@ -87,7 +87,7 @@ export function ModernMoves({ S, moves, party, onMove, onBack }: { S: number; mo
   return (
     <div style={{ position: 'relative' }}>
       {info && <div className="mxb-info-wrap" style={{ width: 256 * S + 6 }}><MoveInfo mv={info} /></div>}
-      <Box S={S} className="moves">
+      <Box S={S} className="moves" h={160}>
         <div className="mxb-head"><span className="mxb-title"><FightIcon />{lang === 'es' ? 'Movimientos' : 'Moves'}</span><Dots party={party} /></div>
         <div className="mxb-moves">
           {moves.slice(0, 4).map((mv, i) => {
