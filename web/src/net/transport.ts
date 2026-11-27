@@ -1,6 +1,6 @@
 // How the messages of a match travel. Two ways, same messages:
-//  - "socket": our own small realtime server on Cloudflare (server/ folder), used when VITE_REALTIME_URL is set when the site is built;
-//  - "supabase": Supabase Realtime broadcast (the way it was before), used otherwise or as the fallback.
+//  - "socket": our own small realtime server on Cloudflare (server/ folder), used by default;
+//  - "supabase": Supabase Realtime broadcast (the way it was before), used when the site is built with VITE_REALTIME_URL=off.
 import { supabase } from '../supabase'
 
 export interface Transport {
@@ -11,7 +11,9 @@ export interface Transport {
   close(): void
 }
 
-const SOCKET_URL = (import.meta.env.VITE_REALTIME_URL as string | undefined)?.replace(/\/+$/, '')
+// The address of our realtime server (public, like the site). Building with VITE_REALTIME_URL=off uses Supabase Realtime instead (the old way); another address replaces it.
+const SERVER = (import.meta.env.VITE_REALTIME_URL as string | undefined) ?? 'wss://pokequest-realtime.pokequest-realtime.workers.dev'
+const SOCKET_URL = SERVER === 'off' || SERVER === '' ? undefined : SERVER.replace(/\/+$/, '')
 
 function supabaseTransport(matchId: string): Transport {
   const ch = supabase.channel(`match:${matchId}`, { config: { private: true, broadcast: { self: false } } })
@@ -23,10 +25,13 @@ function supabaseTransport(matchId: string): Transport {
   }
 }
 
-function socketTransport(base: string, matchId: string, me: string): Transport {
+/** Our own server. `onGiveUp` is called when it never lets us in (down, or it does not accept our login): the match then moves to Supabase. */
+function socketTransport(base: string, matchId: string, me: string, onGiveUp: () => void): Transport {
   const handlers = new Map<string, Array<(p: unknown) => void>>()
   let ws: WebSocket | null = null
   let closed = false
+  let everOpen = false
+  let failures = 0 // connection attempts in a row that never opened
   let tries = 0
   let timer = 0
   const connect = async () => {
@@ -36,14 +41,20 @@ function socketTransport(base: string, matchId: string, me: string): Transport {
     if (!token) { timer = window.setTimeout(() => void connect(), 2000); return }
     const s = new WebSocket(`${base}/ws?match=${encodeURIComponent(matchId)}&name=${encodeURIComponent(me)}&token=${encodeURIComponent(token)}`)
     ws = s
-    s.onopen = () => { tries = 0 }
+    let opened = false
+    s.onopen = () => { opened = true; everOpen = true; tries = 0; failures = 0 }
     s.onmessage = (e) => {
       try {
         const m = JSON.parse(e.data as string) as { e?: string; p?: unknown }
         if (typeof m.e === 'string') for (const cb of handlers.get(m.e) ?? []) cb(m.p)
       } catch { /* not ours */ }
     }
-    s.onclose = () => { ws = null; if (!closed) timer = window.setTimeout(() => void connect(), Math.min(5000, 300 * 2 ** tries++)) } // (reconnects by itself, a little slower each time)
+    s.onclose = () => {
+      ws = null
+      if (closed) return
+      if (!opened && ++failures >= 3 && !everOpen) { closed = true; onGiveUp(); return }
+      timer = window.setTimeout(() => void connect(), Math.min(5000, 300 * 2 ** tries++)) // (reconnects by itself, a little slower each time)
+    }
   }
   return {
     on: (event, cb) => { handlers.set(event, [...(handlers.get(event) ?? []), cb]) },
@@ -54,5 +65,25 @@ function socketTransport(base: string, matchId: string, me: string): Transport {
 }
 
 export function makeTransport(matchId: string, me: string): Transport {
-  return SOCKET_URL ? socketTransport(SOCKET_URL, matchId, me) : supabaseTransport(matchId)
+  if (!SOCKET_URL) return supabaseTransport(matchId)
+  // our server first; if it never lets us in, the same match goes on over Supabase (so a problem with the server never leaves the game without multiplayer)
+  const handlers = new Map<string, Array<(p: unknown) => void>>()
+  let active: Transport
+  let fallback: Transport | null = null
+  let closed = false
+  const giveUp = () => {
+    if (closed || fallback) return
+    console.warn('PokeQuest: the realtime server did not accept us, using Supabase Realtime instead')
+    fallback = supabaseTransport(matchId)
+    for (const [ev, list] of handlers) for (const cb of list) fallback.on(ev, cb)
+    active = fallback
+    fallback.start()
+  }
+  active = socketTransport(SOCKET_URL, matchId, me, giveUp)
+  return {
+    on: (event, cb) => { handlers.set(event, [...(handlers.get(event) ?? []), cb]); active.on(event, cb) },
+    send: (event, payload) => active.send(event, payload),
+    start: () => active.start(),
+    close: () => { closed = true; active.close() },
+  }
 }
