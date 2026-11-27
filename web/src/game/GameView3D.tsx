@@ -337,7 +337,7 @@ export default function GameView3D(props: Props) {
       const s = new THREE.Sprite(mat)
       s.center.set(0.5, 0)
       s.scale.set(3, 0.75, 1)
-      s.position.set(g.x + 0.5, gy + 2.35, g.y + 0.5) // (right above the entrance, not lying on the ground in front of it)
+      s.position.set(g.x + 0.5, gy + 2.9, g.y + 0.5) // (right above the entrance, not lying on the ground in front of it)
       scene.add(s)
       const part = gymParts.find((q) => q.x === g.x && q.y === g.y)
       if (part) part.things.push(s); else gymParts.push({ x: g.x, y: g.y, things: [s] })
@@ -588,12 +588,12 @@ export default function GameView3D(props: Props) {
 
     // The "!" of a trainer that has seen you: the game's own picture (field effect file 50 of a/0/7/4): a quad one tile wide and tall, its bottom 22/16 tiles over the feet,
     // it hops for 7 frames (6, 10, 12, 12, 10, 6, 0 sixteenths of a tile) and stays 30 more; the frames of that effect are 1/30 s. Until it is loaded the round emote is used.
-    let alert: { n: NpcRuntime; t: number } | null = null
+    let alert: { n: NpcRuntime; t: number; walk?: boolean } | null = null
     let bubble: THREE.Sprite | null = null
     let realBubble = false
     const ALERT_FRAME = 1 / 30
     const ALERT_HOP = [6, 10, 12, 12, 10, 6, 0].map((h) => h / 16)
-    const ALERT_FRAMES = 37
+    const BUBBLE_SECONDS = 0.5 // the "!" shows for half a second, then the trainer walks up to you
     const nearestTex = (t: THREE.Texture) => { t.needsUpdate = true; t.magFilter = THREE.NearestFilter; t.minFilter = THREE.NearestFilter; t.colorSpace = THREE.SRGBColorSpace; return t }
     {
       const em = owEmote(15)
@@ -846,16 +846,25 @@ export default function GameView3D(props: Props) {
             }
           }
         }
-        if (alert) { // a trainer has spotted you: the "!" bubble shows for a moment, then the battle begins
+        if (alert) { // a trainer has spotted you: the "!" bubble shows for half a second, then the trainer walks up to you and only then speaks
           alert.t -= dt
-          const frame = Math.max(0, Math.floor((ALERT_FRAMES * ALERT_FRAME - alert.t) / ALERT_FRAME))
-          const hop = realBubble ? (ALERT_HOP[frame] ?? 0) : 0
-          bubble!.position.set(alert.n.fx + 0.5, heightAt(alert.n.fx + 0.5, alert.n.fy + 0.5) + (realBubble ? 22 / 16 : 1.7) + hop, alert.n.fy + 0.5)
-          if (alert.t <= 0) {
-            const id = alert.n.spec.id
-            alert = null
-            bubble!.visible = false
-            p.events.onNpcSpotted?.(id)
+          if (!alert.walk) {
+            const frame = Math.max(0, Math.floor((BUBBLE_SECONDS - alert.t) / ALERT_FRAME))
+            const hop = realBubble ? (ALERT_HOP[frame] ?? 0) : 0
+            bubble!.position.set(alert.n.fx + 0.5, heightAt(alert.n.fx + 0.5, alert.n.fy + 0.5) + (realBubble ? 22 / 16 : 1.7) + 0.7 + hop, alert.n.fy + 0.5) // (a little higher than the game's, clear of the head)
+            if (alert.t <= 0) { alert.walk = true; alert.t = 5; bubble!.visible = false } // (5 s: never wait for ever)
+          } else {
+            const n = alert.n
+            if (n.moving === 0) {
+              const near = Math.abs(n.x - me.x) + Math.abs(n.y - me.y) <= 1
+              const nx = n.x + DX[n.dir], ny = n.y + DY[n.dir]
+              const blocked = (nx === me.x && ny === me.y) || !isWalkable(world, nx, ny) || npcAt(nx, ny)
+              if (near || blocked || alert.t <= 0) {
+                const id = n.spec.id
+                alert = null
+                p.events.onNpcSpotted?.(id)
+              } else { n.fromX = n.x; n.fromY = n.y; n.x = nx; n.y = ny; n.moving = 0.001; n.stp ^= 1 }
+            }
           }
         }
         if (me.t >= 1) me.idle += dt
@@ -909,7 +918,7 @@ export default function GameView3D(props: Props) {
               const sy = n.y + DY[n.dir] * k
               if (!isWalkable(world, sx, sy) && tileAt(world, sx, sy) !== T.GymDoor) break
               if (sx === me.x && sy === me.y && me.t >= 1 && !alert && sameGround(n.x, n.y) && p.canBattle !== false && !p.noChallenge?.(n.spec.id) && !busyMap.has(n.spec.id)) { // (trainers leave you alone when none of your Pokémon can fight)
-                if (bubble && (realBubble || owEmote(15))) { alert = { n, t: realBubble ? ALERT_FRAMES * ALERT_FRAME : 0.9 }; bubble.visible = true; p.events.onAlert?.(); break }
+                if (bubble && (realBubble || owEmote(15))) { alert = { n, t: BUBBLE_SECONDS }; bubble.visible = true; p.events.onAlert?.(); break }
                 p.events.onNpcSpotted?.(n.spec.id)
                 break
               }

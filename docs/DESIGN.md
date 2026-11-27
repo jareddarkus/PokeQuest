@@ -570,3 +570,4 @@ Seen in the recording but NOT done: the trainers' battle sprites (the foe traine
 - Peak: the tournament starts `peakSeconds` AFTER the peak is reached (ring 3 fallen), so the peak has a countdown.
 - After a run the character shows a short walking step before standing. The leaf tuft effect is switched off (`SHOW_TUFT`), the grass cover remains.
 - Video of the real game's trees (1 s): trees scroll faster than the ground and higher parts a little differently = 3D layers, the same construction we draw.
+- Trainer spots you: the "!" shows 0.5 s and 0.7 tile higher, then the trainer WALKS up to you (you cannot move) and only then speaks (`alert.walk` in GameView3D). Gym signs 0.55 tile higher.
