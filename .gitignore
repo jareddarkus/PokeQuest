@@ -6,3 +6,6 @@
 extracted/
 .env
 .env.*
+
+# graphify output is rebuilt on every session start (graphify update .)
+graphify-out/
