@@ -31,7 +31,6 @@ import { trText, useLang } from '../i18n'
 import FontText from './FontText'
 import { useTheme } from './theme'
 import { RULES } from '../game/rules'
-import { getTheme, setTheme } from './theme'
 import { nameOf } from '../i18n'
 
 export type BattleKind = 'wild' | 'trainer' | 'gym'
@@ -328,8 +327,7 @@ export function HpBox(props: Parameters<typeof ClassicHpBox>[0]) {
 }
 export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed, foeClass, pvp, spectate, stream, playerGirl, playerSprite, textSpeed = 'normal', onEnd }: Props) {
   const lang = useLang()
-  // the battle always looks classic (the game's own HP boxes, command and move screens), whatever the theme is; the theme comes back when the battle ends
-  useEffect(() => { const prev = getTheme(); setTheme('classic'); return () => setTheme(prev) }, [])
+  // the Classic theme shows the game's own HP boxes, command and move screens; the Modern theme has its own (ui/ModernBattle.tsx)
   const playerTeam = useMemo(() => trainer.team.filter((m) => m.hp > 0).map((m) => ({ ...m, evs: { ...m.evs }, ivs: { ...m.ivs }, moves: [...m.moves] })), [])
   const foeCopies = useMemo(() => foeTeam.map((m) => ({ ...m, evs: { ...m.evs }, ivs: { ...m.ivs }, moves: [...m.moves] })), [])
   const [me, setMe] = useState<Side | null>(null)
@@ -343,6 +341,16 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
   const [trOut, setTrOut] = useState({ foe: false, me: false }) // sliding away
   const [trGone, setTrGone] = useState({ foe: false, me: false }) // gone
   const [throwKey, setThrowKey] = useState(0)
+  // the height of the lower screen (the HP box of your Pokémon sits right above it on wide windows)
+  const bottomRef = useRef<HTMLDivElement>(null)
+  const [lowerH, setLowerH] = useState(0)
+  useEffect(() => {
+    const el = bottomRef.current
+    if (!el) return
+    const ro = new ResizeObserver(() => { const band = el.querySelector<HTMLElement>('.battle-band'); setLowerH(Math.round(el.getBoundingClientRect().height - (sideLayout() ? 0 : band?.getBoundingClientRect().height ?? 0))) })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
   const [stages, setStages] = useState<{ me: Record<string, number>; foe: Record<string, number> }>({ me: {}, foe: {} }) // the stat stages of the two Pokémon that are out (badges next to the HP boxes)
   const [expFrac, setExpFrac] = useState<number | null>(null) // the EXP gauge of your Pokémon while it is filling (null: as it is)
   const [lvWin, setLvWin] = useState<null | { name: string; rows: Array<{ label: string; inc: number; now: number }>; phase: 'inc' | 'now' }>(null) // the window of the stat gains after a level
@@ -1185,7 +1193,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
   }
 
   return (
-    <div className={`fullscreen battle ${showScene ? '' : 'pre'} ${sideLayout() ? 'side' : ''}`} style={{ ["--menu-h" as string]: `${236 * S}px`, ["--bottom-h" as string]: `${bottomHeight()}px`, ["--k" as string]: `${Kd}px`, ["--s" as string]: `${S}px`, ...zoneVars(layout, Kd) }}>
+    <div className={`fullscreen battle ${showScene ? '' : 'pre'} ${sideLayout() ? 'side' : ''}`} style={{ ["--menu-h" as string]: `${236 * S}px`, ["--bottom-h" as string]: `${bottomHeight()}px`, ["--k" as string]: `${Kd}px`, ["--s" as string]: `${S}px`, ["--lower-h" as string]: `${lowerH}px`, ...zoneVars(layout, Kd) }}>
       <div className={`stage-cam ${mode === 'fight' ? 'zoom' : ''}`}>
       <BattleBackdrop env={environment} onLayout={setLayout} sceneRef={sceneRef} />
       <canvas ref={fxCanvas} className="fx-canvas" />
@@ -1243,7 +1251,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
         {me && hpOn.me && <HpBox side={me} mine exp={teamRef.current.find((m) => m.uid === me.uid)?.exp} expFrac={expFrac ?? undefined} gender={teamRef.current.find((m) => m.uid === me.uid)?.gender} />}
         {me && hpOn.me && <StageBadges st={stages.me} es={lang === 'es'} K={Kd} side="me" />}
       </div>
-      <div className="battle-bottom">
+      <div className="battle-bottom" ref={bottomRef}>
         <div className="battle-band" data-nonav style={{ cursor: 'pointer' }} onClick={advance}><TypedText text={text} ms={msPer} skip={skip} /></div>
 
         {mode === 'wait' && <IdleBall S={S} />}

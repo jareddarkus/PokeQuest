@@ -498,7 +498,9 @@ button.big small { opacity: .7; font-size: .75rem; }
 
 /* wide windows: the HP boxes where the designer's reference layout puts them (DS pixels of the 256 x 192 picture; --kz = screen pixels per picture pixel of the picture's width) */
 .fullscreen.battle.side .foe-zone .hp2 { left: calc(4.5 * var(--kz, var(--k))) !important; top: calc(5.5 * var(--kz, var(--k))) !important; }
-.fullscreen.battle.side .me-zone .hp2 { right: auto !important; bottom: auto !important; left: calc(145 * var(--kz, var(--k))) !important; top: calc(81 * var(--kz, var(--k))) !important; }
+.fullscreen.battle.side .me-zone .hp2 { right: auto !important; top: auto !important; left: calc(145 * var(--kz, var(--k))) !important; bottom: calc(var(--lower-h, 0px) + 6px - var(--zone-b, 0px)) !important; } /* (right above the lower screen: nothing lies on top of it) */
+/* wide windows: the message log sits at the top right (over the empty sky), so it never covers the HP boxes or the Pokémon */
+.fullscreen.battle.side .battle-band { position: fixed; top: 0; right: var(--zone-r, 0px); z-index: 30; }
 
 /* the progress bar shown whenever the page reads or builds something */
 .pq-progress { box-sizing: border-box; width: 100%; max-width: min(440px, 86vw); margin: 14px auto 4px; text-align: left; } /* (as wide as its frame, never wider) */

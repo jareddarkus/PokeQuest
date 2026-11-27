@@ -314,3 +314,19 @@ html[data-theme="modern"] .pq-progress-fill { border-radius: max(2px, calc(var(-
 /* the Battle Royale button on the main menu looks like all the other big buttons (white, dark letters) */
 html[data-theme="modern"] .title-side button.big.primary { --bg: #fff; --bgh: #0d1018; --sh: inset 0 -3px 0 #dfe4ee; color: #1c2333; font-weight: 500; }
 html[data-theme="modern"] .title-side button.big.primary:hover:not(:disabled), html[data-theme="modern"] .title-side button.big.primary:focus-visible { color: #fff; }
+
+/* the Modern battle windows: a title row (icon + name of the window, the team balls at the right), buttons with an icon next to / above the word */
+.mxb-head { display: flex; justify-content: space-between; align-items: center; min-height: calc(var(--s) * 12); gap: calc(var(--s) * 6); }
+.mxb-head .mxb-dots { flex: none; }
+.mxb-title { display: inline-flex; align-items: center; gap: calc(var(--s) * 4); font-family: 'Unbounded', sans-serif; font-weight: 900; font-size: calc(var(--s) * 6); letter-spacing: .08em; text-transform: uppercase; color: #6b7690; }
+.mxb-title .mxb-svg, .mxb-title .mxb-gico { width: calc(var(--s) * 11); height: calc(var(--s) * 11); }
+.mxb-svg { width: calc(var(--s) * 18); height: calc(var(--s) * 18); flex: none; }
+.mxb-gico { width: calc(var(--s) * 18); height: calc(var(--s) * 18); image-rendering: pixelated; flex: none; display: block; }
+.mxb-ico { display: flex; align-items: center; justify-content: center; gap: calc(var(--s) * 7); }
+.mxb-fight .mxb-svg { width: calc(var(--s) * 22); height: calc(var(--s) * 22); }
+.mxb-three .mxb-ico { flex-direction: column; gap: calc(var(--s) * 3); }
+.mxb-back .mxb-ico { gap: calc(var(--s) * 4); }
+.mxb-back .mxb-svg { width: calc(var(--s) * 9); height: calc(var(--s) * 9); }
+.mxb-three .mxb-svg, .mxb-three .mxb-gico { width: calc(var(--s) * 24); height: calc(var(--s) * 24); }
+.mxb-fight .mxb-svg { width: calc(var(--s) * 30); height: calc(var(--s) * 30); }
+.mxb-title .mxb-svg, .mxb-title .mxb-gico { width: calc(var(--s) * 14); height: calc(var(--s) * 14); }
