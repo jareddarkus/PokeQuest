@@ -20,6 +20,7 @@ import { setLang, startTranslator } from './i18n'
 import TitleDragon from './ui/TitleDragon'
 import WorldEditor from './ui/WorldEditor'
 import type { CustomWorld } from './world/customWorld'
+import { useAutoUpdate } from './ui/useAutoUpdate'
 import './App.css'
 import './modern.css'
 
@@ -85,6 +86,7 @@ export default function App() {
   const [testWorld, setTestWorld] = useState<CustomWorld | null>(null)
   const [showSettings, setShowSettings] = useState(false)
   const [match, setMatch] = useState<MatchInfo | null>(null)
+  useAutoUpdate(screen === 'menu' && !showSettings && !editing) // (an old page left open reloads itself in the menu, so everybody plays the same build)
   const [rom, setRom] = useState<'checking' | 'missing' | 'ready'>('checking')
   useEffect(() => {
     void getRomMeta().then((m) => setRom(m ? 'ready' : 'missing'))

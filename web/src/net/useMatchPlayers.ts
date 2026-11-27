@@ -28,6 +28,8 @@ export interface MatchSync {
   onBusy?: (npcId: string, by: string, on: boolean) => void
   /** a message of an online duel (or an elimination notice) from another player */
   onDuel?: (msg: { to?: string; from: string; type: string; data?: unknown }) => void
+  /** how this match's messages travel (decided by the host in the lobby): 'cf' Cloudflare server, 'sb' Supabase Realtime */
+  net?: 'cf' | 'sb'
 }
 
 export function useMatchPlayers(matchId: string | null, me: string | null, look: Look, getPos: () => { x: number; y: number; dir: Dir } | null, sync?: MatchSync, chanRef?: { current: { send: (npcId: string, on: boolean) => void; duel: (msg: { to?: string; type: string; data?: unknown }) => void } | null }) {
@@ -48,7 +50,7 @@ export function useMatchPlayers(matchId: string | null, me: string | null, look:
 
   useEffect(() => {
     if (!matchId || !me) return
-    const tr = makeTransport(matchId, me)
+    const tr = makeTransport(matchId, me, syncRef.current ? syncRef.current.net ?? 'sb' : undefined)
     tr.on('pos', (payload) => {
       const p = payload as { n?: string; x?: number; y?: number; d?: Dir; l?: Look; pg?: number }
       if (!p || typeof p.n !== 'string' || p.n === me || typeof p.x !== 'number' || typeof p.y !== 'number') return

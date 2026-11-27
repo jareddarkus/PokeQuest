@@ -46,7 +46,7 @@ import { useChat } from './useChat'
 import { music } from '../audio/music'
 import { ProgressBar, type Progress } from './ProgressBar'
 
-export interface RoyaleInfo { id: string; seed: number; players: string[]; startsAt: number; rules?: Partial<Rules> }
+export interface RoyaleInfo { id: string; seed: number; players: string[]; startsAt: number; rules?: Partial<Rules>; net?: 'cf' | 'sb' }
 
 interface Props {
   /** set when this is a real match (from the waiting room) */
@@ -213,6 +213,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
   const players = useMatchPlayers(royale?.id ?? null, username, look, () => handleRef.current?.getPos() ?? null, royale ? {
     pickedMe: trainer.team.length > 0 || trainer.pc.length > 0,
     expected: royale.players,
+    net: royale.net,
     started: Date.now() >= t0Ref.current,
     onAllPicked: () => { const nt = Date.now() + 1500; if (nt < t0Ref.current) { startRef.current = nt + RULES.startDelaySeconds * 1000; t0Ref.current = nt; setT0(nt) } }, // everybody is ready: start right away
     onBusy: (npc, by, on) => { if (on) busyNpcs.current.set(npc, { by, until: Date.now() + 9000 }); else busyNpcs.current.delete(npc) },

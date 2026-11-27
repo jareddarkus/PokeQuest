@@ -79,8 +79,8 @@ function socketTransport(base: string, matchId: string, me: string, onGiveUp: ()
 /** where to read today's usage of the realtime server (null when the match does not use it) */
 export const statsUrl = (): string | null => (SOCKET_URL ? SOCKET_URL.replace(/^ws/, 'http') + '/stats' : null)
 
-export function makeTransport(matchId: string, me: string): Transport {
-  if (!SOCKET_URL) return supabaseTransport(matchId)
+export function makeTransport(matchId: string, me: string, net?: 'cf' | 'sb'): Transport {
+  if (!SOCKET_URL || net === 'sb') return supabaseTransport(matchId) // ('sb': somebody in this match has an older build that only knows Supabase)
   // our server first; if it never lets us in, the same match goes on over Supabase (so a problem with the server never leaves the game without multiplayer)
   const handlers = new Map<string, Array<(p: unknown) => void>>()
   let active: Transport
