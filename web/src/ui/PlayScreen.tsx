@@ -124,6 +124,8 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
   /** a tap on the speech or the A button: first the sentence is finished, then it closes */
   const advanceSpeech = () => { if (Date.now() < speechTyping.current) { speechTyping.current = 0; setSpeechSkip((k) => k + 1) } else closeSpeech() }
   useKeyAction('a', advanceSpeech, speech !== null)
+  useKeyAction('b', () => setMenuOpen(false), menuOpen) // (the little menu: B or X close it; the cursor keys move inside it)
+  useKeyAction('x', () => setMenuOpen(false), menuOpen)
   const toastFrame = useFrameStyle('white', 2)
   const hudFrame2 = useFrameStyle('dark', 2)
   const hudFrame = useFrameStyle('dark', 1) // the game's own dark message window for the info boxes
@@ -700,7 +702,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
         busy={busyMapFn}
         events={events}
         handleRef={handleRef}
-        paused={panel !== null || battle !== null || waiting || speech !== null || eliminated}
+        paused={panel !== null || battle !== null || waiting || speech !== null || eliminated || menuOpen}
         spectate={eliminated && !champion ? spectatePos : undefined}
         fighting={fightingNow}
         nameColor={colorOf}
