@@ -70,6 +70,8 @@ export interface Rules {
   // ---- items on the ground
   /** one item every N × N tiles (a smaller number = more items) */
   pickupCell: number
+  /** 1 = picking up an item plays the "item found" jingle (and the music pauses for a moment); 0 = silent pick-up, the music goes on */
+  pickupJingleOn: number
   // ---- the lobby
   /** the least players needed to start a match (1 lets you test alone) */
   minPlayers: number
@@ -89,7 +91,7 @@ export const DEFAULT_RULES: Rules = {
   centersOn: 1, respawnOnWipe: 1, peakWildOn: 0, peakNpcsOn: 0,
   encounterPercent: 11, legendary3Percent: 3,
   lvl1Min: 2, lvl1Max: 10, lvl2Min: 15, lvl2Max: 20, lvl3Min: 25, lvl3Max: 35, lvl4Min: 35, lvl4Max: 45,
-  pickupCell: 13,
+  pickupCell: 13, pickupJingleOn: 1,
   minPlayers: 2, lobbySeconds: 6, startDelaySeconds: 0,
 }
 /** The rules in force right now (one object, changed in place). */
@@ -195,6 +197,7 @@ export const RULE_GROUPS: RuleGroup[] = [
   ] },
   { id: 'items', en: 'Items on the ground', es: 'Objetos por el suelo', rules: [
     n('pickupCell', 'One item every N × N tiles', 'Un objeto cada N × N casillas', 'A smaller number = more items on the island (13 by default).', 'Un número menor = más objetos en la isla (13 por defecto).', 4, 60),
+    b('pickupJingleOn', 'Jingle when picking up an item', 'Sonido al recoger un objeto', 'Off = no sound and the music does not pause when you pick up an item.', 'Apagado = sin sonido y la música no se detiene al recoger un objeto.'),
   ] },
   { id: 'lobby', en: 'Lobby and start', es: 'Sala de espera e inicio', rules: [
     n('minPlayers', 'Least players to start', 'Mínimo de jugadores para empezar', '1 lets you test a match alone.', '1 permite probar una partida a solas.', 1, 20),

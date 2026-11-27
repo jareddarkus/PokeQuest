@@ -24,19 +24,26 @@ const GRID = 160
 const noGrassData = new Uint8Array(GRID * GRID)
 const noGrassTex = new THREE.DataTexture(noGrassData, GRID, GRID, THREE.RedFormat, THREE.UnsignedByteType)
 noGrassTex.magFilter = THREE.NearestFilter; noGrassTex.minFilter = THREE.NearestFilter; noGrassTex.needsUpdate = true
+export function addNoGrass(tiles: number[]): void {
+  for (const i of tiles) noGrassData[i] = 255
+  noGrassTex.needsUpdate = true
+}
 export function setNoGrass(tiles: number[]): void {
   noGrassData.fill(0)
   for (const i of tiles) noGrassData[i] = 255
   noGrassTex.needsUpdate = true
 }
-/** the pictures of the map that are tall grass (leaves drawn over the ground) */
-const isGrassPicture = (name: string | null | undefined): boolean => !!name && (name.startsWith('kusa') || name.startsWith('nagakusa'))
+/** the pictures of the map that are scenery standing on the ground (tall grass, trees, flowers, fences, ponds): hidden on the tiles of the no-grass mask */
+const DECOR = ['ki', 'kusa', 'plant', 'hana', 'saku', 'fence', 'nagakusa', 'yamasaba', 'kisetu', 'ike_', 'out07saku']
+const isGrassPicture = (name: string | null | undefined): boolean => !!name && DECOR.some((p) => name.startsWith(p))
 
 /** Textures that move (water, rivers, fountains) with the animation the game file gives them. */
 export const animatedTextures: Array<{ tex: THREE.Texture; anim: MatAnim }> = []
 
 const textureCache = new WeakMap<object, Map<string, THREE.Texture>>()
 
+const SINK0 = 'transformed.y -= smoothstep(uCut - 2.5, uCut, pqd0) * 1.6;\n'
+const SINK1 = 'transformed.y -= smoothstep(uCut - 2.5, uCut, max(abs(vWPos.x - uCenter.x), abs(vWPos.z - uCenter.y))) * 1.6;\n'
 /** Lets a material of ours disappear with the collapsing island and glow red before it falls (same as the map). */
 export function applyClip(mat: THREE.Material, clip: ClipUniforms): void {
   mat.onBeforeCompile = (shader) => {
@@ -44,6 +51,8 @@ export function applyClip(mat: THREE.Material, clip: ClipUniforms): void {
     shader.uniforms.uCenter = clip.uCenter
     shader.uniforms.uTime = clip.uTime
     shader.uniforms.uWarn = clip.uWarn
+    // the ground that is about to fall sinks into the sea first (the last 2.5 tiles before the cut slope down under the water)
+    shader.vertexShader = shader.vertexShader.replace('#include <project_vertex>', SINK1 + '#include <project_vertex>').replace('#include <common>', '#include <common>\nuniform float uCut;\nuniform vec2 uCenter;')
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;')
       // (flat pictures drawn as many copies in one go: each copy sits at its own place, so the clip must use the copy's matrix)
@@ -117,6 +126,7 @@ export function buildModelObject(model: Model, tex: NonNullable<ReturnType<typeo
         shader.uniforms.uWarn = clip.uWarn
         shader.uniforms.uHide = hide ? clip.uHide : { value: 9999 }
         shader.uniforms.uLift = hide ? clip.uLift : { value: 0 }
+        shader.vertexShader = shader.vertexShader.replace('#include <project_vertex>', SINK0 + '#include <project_vertex>').replace('#include <common>', '#include <common>\nuniform float uCut;')
         shader.vertexShader = shader.vertexShader
           .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;\nuniform float uLift;\nuniform vec2 uCenter;')
           .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWPos = (modelMatrix * vec4(position, 1.0)).xyz;\nfloat pqd0 = max(abs(vWPos.x - uCenter.x), abs(vWPos.z - uCenter.y));\ntransformed.y += uLift * ((1.0 - smoothstep(59.0, 60.0, pqd0)) + (1.0 - smoothstep(39.0, 40.0, pqd0)) + (1.0 - smoothstep(19.0, 20.0, pqd0)));')

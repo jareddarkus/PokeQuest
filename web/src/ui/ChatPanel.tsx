@@ -4,7 +4,7 @@ import { GLOBAL, type useChat } from './useChat'
 type Chat = ReturnType<typeof useChat>
 
 /** The chat window in the bottom left corner: Global, friends and private chats (tabs). Click a name to whisper to that player. */
-export default function ChatDock({ chat, canChat, open, setOpen, colorOf }: { chat: Chat; canChat: boolean; open: boolean; setOpen: (o: boolean) => void; colorOf?: (name: string) => string }) {
+export default function ChatDock({ chat, canChat, open, setOpen, colorOf, onName }: { chat: Chat; canChat: boolean; open: boolean; setOpen: (o: boolean) => void; colorOf?: (name: string) => string; onName?: (name: string, x: number, y: number) => void }) {
   const [text, setText] = useState('')
   const endRef = useRef<HTMLDivElement>(null)
   const msgs = chat.byTab[chat.active] ?? []
@@ -30,7 +30,7 @@ export default function ChatDock({ chat, canChat, open, setOpen, colorOf }: { ch
             <div className="chat-log">
               {chat.friends.length === 0 && <span className="muted">Aún no tienes amigos. Pulsa a un jugador en el mapa para añadirlo.</span>}
               {chat.friends.map((f) => (
-                <div key={f} className="chat-msg"><b>{f}</b> <button className="chat-mini" onClick={() => chat.openWhisper(f)}>Susurrar</button></div>
+                <div key={f} className="chat-msg"><b>{f}</b> <button className="chat-mini" onClick={() => chat.openWhisper(f)}>Susurrar</button>{onName && <button className="chat-mini" onClick={(e) => onName(f, e.clientX, e.clientY)}>Tarjeta</button>}</div>
               ))}
             </div>
           ) : (
@@ -41,7 +41,7 @@ export default function ChatDock({ chat, canChat, open, setOpen, colorOf }: { ch
                 <div key={m.id} className="chat-msg sys">{m.text}</div>
               ) : (
                 <div key={m.id} className={`chat-msg ${m.mine ? 'mine' : ''}`}>
-                  {m.mine || m.from === '⚠' ? <b style={colorOf && m.from !== '⚠' ? { color: colorOf(m.from) } : undefined}>{m.from}</b> : <b className="chat-name" style={colorOf ? { color: colorOf(m.from) } : undefined} onClick={() => chat.openWhisper(m.from)} title="Susurrar">{m.from}</b>} <span>{m.text}</span>
+                  {m.mine || m.from === '⚠' ? <b style={colorOf && m.from !== '⚠' ? { color: colorOf(m.from) } : undefined}>{m.from}</b> : <b className="chat-name" style={colorOf ? { color: colorOf(m.from) } : undefined} onClick={(e) => (onName ? onName(m.from, e.clientX, e.clientY) : chat.openWhisper(m.from))} title="Susurrar / amigo / tarjeta">{m.from}</b>} <span>{m.text}</span>
                 </div>
               ))}
               <div ref={endRef} />

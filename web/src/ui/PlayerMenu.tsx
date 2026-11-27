@@ -13,9 +13,9 @@ function EmoteImg({ idx }: { idx: number }) {
   return <img src={img.src} alt={`reacción ${idx}`} width={40} height={40} style={{ imageRendering: 'pixelated' }} draggable={false} />
 }
 
-export function PlayerPopup({ name, x, y, isFriend, onFriend, onWhisper, onTrade, onWatch, onClose }: {
-  name: string; x: number; y: number; isFriend: boolean; onWatch?: () => void
-  onFriend: (add: boolean) => void; onWhisper: () => void; onTrade: () => void; onClose: () => void
+export function PlayerPopup({ name, x, y, isFriend, onFriend, onWhisper, onTrade, onWatch, onCard, onClose }: {
+  name: string; x: number; y: number; isFriend: boolean; onWatch?: () => void; onCard?: () => void
+  onFriend: (add: boolean) => void; onWhisper: () => void; onTrade?: () => void; onClose: () => void
 }) {
   const [confirm, setConfirm] = useState(false)
   const left = Math.min(Math.max(8, x + 8), window.innerWidth - 230), top = Math.min(Math.max(8, y - 10), window.innerHeight - 220)
@@ -27,8 +27,9 @@ export function PlayerPopup({ name, x, y, isFriend, onFriend, onWhisper, onTrade
           <>
             <button onClick={() => (isFriend ? setConfirm(true) : onFriend(true))}>{isFriend ? 'Quitar amigo' : 'Añadir amigo'}</button>
             <button onClick={onWhisper}>Susurrar</button>
+            {onCard && <button onClick={onCard}>Tarjeta de entrenador</button>}
             {onWatch && <button className="primary" onClick={onWatch}>Ver combate</button>}
-            <button onClick={onTrade}>Intercambiar</button>
+            {onTrade && <button onClick={onTrade}>Intercambiar</button>}
             <button className="pm-close" onClick={onClose}>Cerrar</button>
           </>
         ) : (

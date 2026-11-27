@@ -91,6 +91,8 @@ export interface World {
   triggers?: Map<number, { type: number; text?: string; tx?: number; ty?: number }>
   encGroup?: Uint8Array
   groups?: Map<number, PokeGroup>
+  /** tiles that were blocked (trees, rocks, water ...) and were turned into ground so that every ring can be walked all the way round */
+  carved?: number[]
 }
 
 /** Distance from the centre in whole TILES, square rings (the island is a tile-based mountain of squares, not circles). */
@@ -148,7 +150,84 @@ const NPC_NAMES = [
  * Builds the playable island from the ground tiles of the real map chunks.
  * `ground` has SIZE*SIZE tile codes (Water / Grass / Tall / Tree = blocked ...).
  */
-export function generateWorld(seed: number, ground: Uint8Array, opts: { barriers?: boolean } = {}): World {
+/**
+ * The real map was not made as rings: a ring can be cut into many separate pieces (you could get stuck in a dead end, or never get round the circle).
+ * For every ring from 2 to the peak, the pieces of walkable ground of some size are joined to the biggest piece by the cheapest way through what blocks
+ * (trees and fences first, then rocks, water last; the walls of the ring edges and of the gyms never). Returns the tile numbers that were changed into ground.
+ */
+export function connectRings(tiles: Uint8Array, debug?: unknown[]): number[] {
+  const carved: number[] = []
+  const walk = (t: number) => t === T.Grass || t === T.Tall || t === T.Sand || t === T.GymDoor
+  const edgeRow = (x: number, y: number) => { const fl = Math.floor(dist(x, y)); return fl === RING_INNER[0] - 1 || fl === RING_INNER[1] - 1 || fl === RING_INNER[2] - 1 }
+  const cost = (i: number, ring: number): number => {
+    const x = i % SIZE, y = (i / SIZE) | 0
+    if (ringAt(x, y) !== ring) return Infinity
+    const t = tiles[i]
+    if (walk(t)) return t === T.GymDoor ? 6 : 1
+    if (edgeRow(x, y) || t === T.GymWall) return Infinity
+    return t === T.Tree ? 4 : t === T.Cliff ? 30 : t === T.Water ? 14 : Infinity
+  }
+  for (let ring = 2; ring <= 4; ring++) {
+    for (let round = 0; round < 40; round++) {
+      // the separate pieces of this ring
+      const comp = new Int32Array(SIZE * SIZE).fill(-1)
+      const sizes: number[] = []
+      for (let s = 0; s < SIZE * SIZE; s++) {
+        if (comp[s] >= 0 || !walk(tiles[s]) || ringAt(s % SIZE, (s / SIZE) | 0) !== ring) continue
+        const id = sizes.length
+        let n = 0
+        const st = [s]; comp[s] = id
+        while (st.length) {
+          const c = st.pop()!; n++
+          const cx = c % SIZE, cy = (c / SIZE) | 0
+          for (let d = 0; d < 4; d++) {
+            const nx = cx + DX[d], ny = cy + DY[d]
+            if (nx < 0 || ny < 0 || nx >= SIZE || ny >= SIZE) continue
+            const ni = ny * SIZE + nx
+            if (comp[ni] >= 0 || !walk(tiles[ni]) || ringAt(nx, ny) !== ring) continue
+            comp[ni] = id; st.push(ni)
+          }
+        }
+        sizes.push(n)
+      }
+      if (sizes.length < 2) break
+      let main = 0
+      for (let k = 1; k < sizes.length; k++) if (sizes[k] > sizes[main]) main = k
+      const wanted = new Set<number>()
+      sizes.forEach((n, k) => { if (k !== main && n >= 12) wanted.add(k) })
+      if (!wanted.size) break
+      // the cheapest way from the biggest piece to any other big piece (Dijkstra over the tiles of this ring)
+      const best = new Float64Array(SIZE * SIZE).fill(Infinity)
+      const from = new Int32Array(SIZE * SIZE).fill(-1)
+      const heap: Array<[number, number]> = []
+      const push = (c: number, i: number) => { heap.push([c, i]); let k = heap.length - 1; while (k > 0) { const p = (k - 1) >> 1; if (heap[p][0] <= heap[k][0]) break; [heap[p], heap[k]] = [heap[k], heap[p]]; k = p } }
+      const pop = (): [number, number] => { const top = heap[0]; const last = heap.pop()!; if (heap.length) { heap[0] = last; let k = 0; for (;;) { const l = 2 * k + 1, r = l + 1; let m = k; if (l < heap.length && heap[l][0] < heap[m][0]) m = l; if (r < heap.length && heap[r][0] < heap[m][0]) m = r; if (m === k) break; [heap[m], heap[k]] = [heap[k], heap[m]]; k = m } } return top }
+      for (let i = 0; i < SIZE * SIZE; i++) if (comp[i] === main) { best[i] = 0; push(0, i) }
+      let target = -1
+      while (heap.length) {
+        const [c, i] = pop()
+        if (c > best[i]) continue
+        if (comp[i] >= 0 && wanted.has(comp[i])) { target = i; break }
+        const x = i % SIZE, y = (i / SIZE) | 0
+        for (let d = 0; d < 4; d++) {
+          const nx = x + DX[d], ny = y + DY[d]
+          if (nx < 0 || ny < 0 || nx >= SIZE || ny >= SIZE) continue
+          const ni = ny * SIZE + nx
+          const w = cost(ni, ring)
+          if (!Number.isFinite(w)) continue
+          const nc = c + w
+          if (nc < best[ni]) { best[ni] = nc; from[ni] = i; push(nc, ni) }
+        }
+      }
+      if (debug) debug.push({ ring, round, comps: sizes.length, main: sizes[main], wanted: [...wanted].map((k) => sizes[k]), target })
+      if (target < 0) break // (no way through: the rest stay as they are)
+      for (let i = target; i >= 0 && best[i] > 0; i = from[i]) if (!walk(tiles[i])) { tiles[i] = T.Grass; carved.push(i) }
+    }
+  }
+  return carved
+}
+
+export function generateWorld(seed: number, ground: Uint8Array, opts: { barriers?: boolean; connect?: boolean } = {}): World {
   const rng = mulberry32(seed)
   const tiles = new Uint8Array(ground)
 
@@ -164,6 +243,8 @@ export function generateWorld(seed: number, ground: Uint8Array, opts: { barriers
       }
     }
   }
+
+  const carved = opts.connect ? connectRings(tiles) : [] // (every ring can be walked all the way round)
 
   const main = new Uint8Array(SIZE * SIZE) // 1 = part of the biggest connected piece of ground of its ring (where things are placed)
   const walkable = (x: number, y: number) => {
@@ -248,9 +329,9 @@ export function generateWorld(seed: number, ground: Uint8Array, opts: { barriers
   const spawns: { x: number; y: number }[] = []
   for (let i = 0; i < 16; i++) {
     const u = (i + 0.35) / 16
-    for (let r = RADIUS - 5; r >= RING_INNER[0]; r--) {
+    for (let r = RADIUS - 1; r >= RING_INNER[0]; r--) { // (everybody starts on the outer shore: the sand, or the first grass inside it)
       const q = ringPoint(r, u)
-      if (inBounds(q.x, q.y) && walkable(q.x, q.y)) { spawns.push(q); break }
+      if (inBounds(q.x, q.y) && (tiles[q.y * SIZE + q.x] === T.Sand || walkable(q.x, q.y))) { spawns.push(q); break }
     }
   }
 
@@ -341,7 +422,8 @@ export function generateWorld(seed: number, ground: Uint8Array, opts: { barriers
   }
 
   void hash2
-  return { seed, tiles, gyms, npcs, pickups, spawns, lake }
+  if (opts.connect) carved.push(...connectRings(tiles)) // (again at the end: the gym buildings can cut a way that was open before)
+  return { seed, tiles, gyms, npcs, pickups, spawns, lake, carved }
 }
 
 // ---------------------------------------------------------------- the collapsing island

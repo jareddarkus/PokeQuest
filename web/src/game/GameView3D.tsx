@@ -7,7 +7,7 @@ import type { BuiltWorld } from '../rom/chunkWorld'
 import { drawCharacter, lookSprite, randomLook, type Look } from './character'
 import { SWIM_SPRITES, hasOw, owBall, owEmote, owFrame } from './ow'
 import { CENTER_MODEL, GYM_MODELS } from '../rom/buildings'
-import { animatedTextures } from '../rom/mapModel'
+import { addNoGrass, animatedTextures, applyClip } from '../rom/mapModel'
 import { valueAt } from '../rom/texanim'
 import { safeTileFor, type GameEvents, type GameHandle, type OtherPlayer } from './GameView'
 import { hash2 } from './rng'
@@ -22,7 +22,7 @@ import type { AnimatedSprite } from '../rom/anim'
 import type { Settings } from './settings'
 import { loadGrassTuft, loadGrassSway, loadShadowPicture, type GrassSway } from '../rom/grassFx'
 import {
-  DX, DY, SIZE, T, TYPE_COLOR, collapseRadius, collapseWarn, dist, inBounds, isWalkable, tileAt, type Dir, type NpcSpec, type World,
+  DX, DY, SIZE, T, TYPE_COLOR, collapseRadius, connectRings, collapseWarn, dist, inBounds, isWalkable, tileAt, type Dir, type NpcSpec, type World,
 } from './world'
 
 interface Props {
@@ -111,7 +111,7 @@ function makeShadow(scene: THREE.Scene, size = 1): THREE.Mesh {
     shadowLoading = true
     void loadShadowPicture().then((c) => { if (c) { shadowTex.image = c; shadowTex.needsUpdate = true } })
   }
-  const m = new THREE.Mesh(shadowGeo, new THREE.MeshBasicMaterial({ map: shadowTex, alphaTest: 0.5, transparent: true, opacity: 0.613, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }))
+  const m = new THREE.Mesh(shadowGeo, new THREE.MeshBasicMaterial({ map: shadowTex, alphaTest: 0.5, transparent: true, opacity: 0.4, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }))
   m.scale.set(size, 1, size)
   m.renderOrder = 1
   scene.add(m)
@@ -243,7 +243,10 @@ export default function GameView3D(props: Props) {
     const camera = new THREE.PerspectiveCamera(CAM_FOV, 1, 0.1, 400)
 
     scene.add(built.group)
-    const sea = new THREE.Mesh(new THREE.PlaneGeometry(600, 600).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: '#3a7fc0' }))
+    // the sea under the island (what is left when a ring sinks): the game's own water picture, drifting slowly, repeated every 4 tiles
+    const seaTex = built.textureNamed('sea_mizu1', true)
+    if (seaTex) seaTex.repeat.set(150, 150)
+    const sea = new THREE.Mesh(new THREE.PlaneGeometry(600, 600).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: seaTex ? 0xffffff : '#3a7fc0', map: seaTex ?? undefined }))
     sea.position.set(SIZE / 2, built.waterY - 0.03, SIZE / 2)
     scene.add(sea)
 
@@ -286,6 +289,21 @@ export default function GameView3D(props: Props) {
       scene.add(s)
     })
 
+    // the gym buildings just closed some tiles: open the ways again so that every ring can still be walked all the way round (a sand path over the map)
+    if (world.carved) {
+      const more = connectRings(world.tiles)
+      if (more.length) {
+        world.carved.push(...more); addNoGrass(more)
+        const mat = new THREE.MeshBasicMaterial({ color: 0xe0cc8a, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 })
+        applyClip(mat, built.uniforms)
+        const im = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), mat, more.length)
+        const m4 = new THREE.Matrix4()
+        more.forEach((i, k) => { m4.makeTranslation((i % SIZE) + 0.5, built.height[i] + 0.03, ((i / SIZE) | 0) + 0.5); im.setMatrixAt(k, m4) })
+        im.frustumCulled = false
+        scene.add(im)
+      }
+    }
+
     const ballMat = ballMaterial()
     // every item on the ground is drawn with the game's own item ball (a/0/4/8 file 115)
     const ballImg = owBall()
@@ -311,7 +329,7 @@ export default function GameView3D(props: Props) {
       s.renderOrder = 3
       s.position.set(pk.x + 0.5, heightAt(pk.x + 0.5, pk.y + 0.5) + 0.05, pk.y + 0.5)
       scene.add(s)
-      const psh = makeShadow(scene, 1.25) // the ball on the ground has a little shadow under it (a little towards the camera so it shows under the ball)
+      const psh = makeShadow(scene, 1.0) // the ball on the ground has a little shadow under it (a little towards the camera so it shows under the ball)
       psh.position.set(pk.x + 0.5, heightAt(pk.x + 0.5, pk.y + 0.5) + 0.04, pk.y + 0.62)
       pickupShadows.set(pk.id, psh)
       s.userData = { tx: pk.x, ty: pk.y, bs, sand: world.tiles[pk.y * SIZE + pk.x] === T.Sand }
@@ -849,6 +867,10 @@ export default function GameView3D(props: Props) {
       cover(myCover, tallAt(px, py), px + 0.5, ph, py + 0.5, 1.0, grassFrame('me', px, py, now)) // in tall grass: the game's leaf effect at the feet (and the leaves of the tiles cover the legs)
       myShadow.position.set(px + 0.5, ph + 0.03, py + 0.5)
       // the crates: on sand they sit a little in the sand; everywhere else they are pushed towards the camera (like the characters) so the ground does not cut them
+      { // items and people on ground that has sunk into the sea are gone with it
+        const rad = elapsed === null ? 999 : collapseRadius(elapsedSec)
+        for (const [id, sp] of pickupSprites) { const u = sp.userData as { tx: number; ty: number }; const gone = removed.has(id) || dist(u.tx, u.ty) > rad; sp.visible = !gone; const h = pickupShadows.get(id); if (h) h.visible = !gone }
+      }
       for (const sp of pickupSprites.values()) {
         const u = sp.userData as { tx: number; ty: number; bs: number; sand: boolean }
         if (!sp.visible || u.sand || Math.abs(u.tx - me.x) > 16 || Math.abs(u.ty - me.y) > 16) continue
@@ -903,10 +925,13 @@ export default function GameView3D(props: Props) {
         }
       }
       } catch { clearFollower(); fol.key = fs ? `${fs.species}|${fs.shiny}` : ''; fol.mode = 'none' }
+      if (seaTex) seaTex.offset.set((now / 14000) % 1, (now / 21000) % 1) // the sea drifts
       const fr = Math.floor(now / (1000 / 30)) // water pictures: 30 a second (a calm pace; the exact speed of the original is not known)
       for (const a of animatedTextures) a.tex.offset.set(valueAt(a.anim.moveS, fr), valueAt(a.anim.moveT, fr)) // moving water
+      const sunkRad = elapsed === null ? 999 : collapseRadius(elapsedSec)
       for (const n of npcs) {
-        n.sprite.visible = !n.defeated || true
+        const sunk = dist(n.fx + 0.5, n.fy + 0.5) > sunkRad // (its ground has sunk)
+        n.sprite.visible = !sunk
         const frame = n.moving > 0 && n.moving < 0.5 ? 1 + n.stp : 0
         n.sprite.material = charMaterial(n.look, n.dir, frame, n.spec.behavior === 'run' && n.moving > 0)
         fit(n.sprite)
@@ -917,7 +942,7 @@ export default function GameView3D(props: Props) {
           cover(nc, !n.spec.swim && (n.moving > 0 && n.moving < 0.5 ? tallAt(n.fromX, n.fromY) : tallAt(n.x, n.y)), n.fx + 0.5, nh, n.fy + 0.5, 1.0, grassFrame(`npc:${n.spec.id}`, n.fx, n.fy, now)) }
         let sh = npcShadows.get(n)
         if (!sh) { sh = makeShadow(scene); npcShadows.set(n, sh) }
-        sh.visible = !n.spec.swim
+        sh.visible = !n.spec.swim && !sunk
         sh.position.set(n.fx + 0.5, nh + 0.03, n.fy + 0.5)
       }
       // fights between another player and a trainer: a Poké Ball spins above both of them (like PokéMMO), the trainer is busy

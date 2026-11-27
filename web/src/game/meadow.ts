@@ -4,7 +4,7 @@
 import * as THREE from 'three'
 import { applyClip } from '../rom/mapModel'
 import type { BuiltWorld } from '../rom/chunkWorld'
-import { C, RADIUS, RING_INNER, SIZE, T, dist, isWalkable, ringAt, type World } from './world'
+import { C, DX, DY, RADIUS, RING_INNER, SIZE, T, dist, inBounds, isWalkable, ringAt, type World } from './world'
 import { hash2, valueNoise } from './rng'
 import { RULES } from './rules'
 
@@ -101,6 +101,49 @@ export function prepareMeadow(built: BuiltWorld, seed: number): void {
   for (let y = 0; y < SIZE; y++) for (let x = 0; x < SIZE; x++) { const d = dist(x, y); if (d < RING_INNER[0]) built.height[y * SIZE + x] += liftAt(d) }
 }
 
+/** tiles that must stay as they are (no extra tall grass grows on them): the paths in front of the Pokémon Centers */
+const protectedTiles = new Set<number>()
+
+/**
+ * Every Pokémon Center gets a path in front of its door, so that you do not walk out of it, healed, straight into tall grass: a small square of plain ground, and then
+ * (ring 1) a path to the nearest road of the meadow, or (the inner rings) a path going away from the door. Returns the tile numbers that were changed.
+ */
+export function carveCenterPaths(world: World, built: BuiltWorld): number[] {
+  protectedTiles.clear()
+  const out: number[] = []
+  const pm = built.pathMask
+  const pm0 = pm ? pm.slice() : null // (the roads as they were: the path must lead to one of THESE)
+  const idx = (x: number, y: number) => y * SIZE + x
+  const open = (x: number, y: number) => inBounds(x, y) && (world.tiles[idx(x, y)] === T.Grass || world.tiles[idx(x, y)] === T.Tall)
+  const lay = (x: number, y: number, ring: number) => {
+    const i = idx(x, y)
+    if (world.tiles[i] === T.Tall) world.tiles[i] = T.Grass
+    protectedTiles.add(i); out.push(i)
+    if (ring === 1 && pm) pm[i] = 1
+    else (world.carved ??= []).push(i) // (the inner rings: drawn as a sand path over the map)
+  }
+  for (const g of world.gyms) {
+    if (!g.center) continue
+    const sx = g.doorX, sy = g.doorY + 1
+    for (let dy = 0; dy < 2; dy++) for (let dx = -1; dx <= 1; dx++) if (open(sx + dx, sy + dy)) lay(sx + dx, sy + dy, g.ring)
+    if (g.ring === 1 && pm && pm0) {
+      // the shortest walk (over open ground) from the square to a road of the meadow
+      const from = new Int32Array(SIZE * SIZE).fill(-2)
+      const queue = [idx(sx, sy + 1)]; from[queue[0]] = -1
+      let found = -1
+      for (let q = 0; q < queue.length && found < 0 && q < 4000; q++) {
+        const c = queue[q]; const cx = c % SIZE, cy = (c / SIZE) | 0
+        if (pm0[c] === 1) { found = c; break }
+        for (let d = 0; d < 4; d++) { const nx = cx + DX[d], ny = cy + DY[d]; if (!open(nx, ny) || from[idx(nx, ny)] !== -2) continue; from[idx(nx, ny)] = c; queue.push(idx(nx, ny)) }
+      }
+      for (let c = found; c >= 0; c = from[c]) { if (!pm[c] || pm0[c] !== 1) lay(c % SIZE, (c / SIZE) | 0, 1) }
+    } else {
+      for (let k = 2; k <= 9; k++) { if (!open(sx, sy + k)) break; lay(sx, sy + k, g.ring) }
+    }
+  }
+  return out
+}
+
 /** The peak has no tall grass (unless the owner turned wild Pokémon at the peak on): its tall-grass tiles become plain grass. Returns the tile numbers that were changed. */
 export function clearPeakGrass(world: World): number[] {
   const changed: number[] = []
@@ -122,7 +165,7 @@ export function addExtraGrass(world: World, built: BuiltWorld, seed: number): nu
       let steep = false
       for (let b = -2; b <= 2 && !steep; b++) for (let a = -2; a <= 2; a++) { const xx = x + a, yy = y + b; if (xx >= 0 && yy >= 0 && xx < SIZE && yy < SIZE && Math.abs(built.height[yy * SIZE + xx] - h0) > 0.12 * Math.max(Math.abs(a), Math.abs(b))) { steep = true; break } }
       if (steep) continue
-      if (world.gyms.some((g) => Math.abs(g.x - x) < 3 && Math.abs(g.y - y) < 3)) continue
+      if (world.gyms.some((g) => Math.abs(g.x - x) < 3 && Math.abs(g.y - y) < 3) || protectedTiles.has(i)) continue
       if (valueNoise(x, y, seed + 29, 4) + (hash2(x, y, seed + 2) - 0.5) * 0.2 > 0.6) { world.tiles[i] = T.Tall; changed.push(i) }
     }
   }
@@ -286,6 +329,9 @@ export function buildMeadowVisuals(world: World, built: BuiltWorld, extra: numbe
     flat(tiles, alphaMat(leaf3), 0.125, h); flat(tiles, alphaMat(leaf2), 0.375, h); flat(tiles, alphaMat(leaf1), 0.5, h)
   }
   grassLayers(tuftsA, () => hm)
+  // the ways cut through the inner rings (so every ring can be walked round) and the paths in front of the Centers: a flat sand path over the map
+  const cv = (world.carved ?? []).filter((i) => ringAt(i % SIZE, (i / SIZE) | 0) >= 2)
+  if (cv.length) flat(cv, new THREE.MeshBasicMaterial({ map: roadSand ?? undefined, color: roadSand ? 0xffffff : 0xe8d090 }), 0.02, (i) => built.height[i])
   const ex = extra.filter((i) => dist(i % SIZE, (i / SIZE) | 0) < RING_INNER[0])
   grassLayers(ex, (i) => built.height[i])
 

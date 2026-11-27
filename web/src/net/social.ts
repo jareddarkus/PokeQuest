@@ -47,3 +47,14 @@ export function listenWhispers(uid: string, onMsg: (w: Whisper) => void): () => 
   ch.subscribe()
   return () => { void supabase.removeChannel(ch) }
 }
+
+// ---------------------------------------------------------------- trainer cards (what a player has done; only battles against other PLAYERS count)
+export interface TrainerCardData { username: string; since: string; number: string; pvp_wins: number; match_wins: number; matches_played: number }
+export async function trainerCard(name: string): Promise<TrainerCardData | null> {
+  const { data, error } = await supabase.rpc('trainer_card', { p_username: name })
+  return !error && data && typeof data === 'object' ? (data as TrainerCardData) : null
+}
+/** I beat another player in a duel or a tournament fight (the server ignores more than one every 10 seconds and wins against myself) */
+export async function recordPvpWin(loser: string): Promise<void> { try { await supabase.rpc('record_pvp_win', { p_loser: loser }) } catch { /* the card is only a bonus */ } }
+/** A match I played is over (won or not) */
+export async function recordMatchEnd(won: boolean): Promise<void> { try { await supabase.rpc('record_match_end', { p_won: won }) } catch { /* the card is only a bonus */ } }

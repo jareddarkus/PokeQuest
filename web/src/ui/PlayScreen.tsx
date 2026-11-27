@@ -20,7 +20,7 @@ import {
 } from '../game/world'
 import BattleScreen, { CHAR_MS, TypedText, type BattleKind, type BattleOutcome, type PvpLink } from './BattleScreen'
 import { setNoGrass } from '../rom/mapModel'
-import { addExtraGrass, buildMeadowVisuals, clearPeakGrass, prepareMeadow } from '../game/meadow'
+import { addExtraGrass, buildMeadowVisuals, carveCenterPaths, clearPeakGrass, prepareMeadow } from '../game/meadow'
 import { buildCustomVisuals, type CustomWorld } from '../world/customWorld'
 import { fetchPublishedWorld } from '../world/publish'
 import { fetchGameConfig } from '../world/gameConfig'
@@ -34,6 +34,9 @@ import MenuButton from './MenuButton'
 import PartyBar from './PartyBar'
 import { useFrameStyle } from './DsFrame'
 import ChatDock from './ChatPanel'
+import TrainerCard from './TrainerCard'
+import FlyMap from './FlyMap'
+import { recordMatchEnd, recordPvpWin } from '../net/social'
 import MiniMap, { useIsMobile } from './MiniMap'
 import { announcementText, nameColor, type Announcement } from '../net/announce'
 import { fakeMon, snapshotOf, summarize, type BattleInfo } from '../battle/spectate'
@@ -170,7 +173,9 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
   const matchId = royale?.id ?? ''
   const colorOf = (name: string) => nameColor(name, matchId)
   // clicking players: a menu for another player (friend, whisper, trade), reactions for yourself; trading with a player
-  const [pmenu, setPmenu] = useState<null | { name: string | null; x: number; y: number }>(null)
+  const [pmenu, setPmenu] = useState<null | { name: string | null; x: number; y: number; fromChat?: boolean }>(null)
+  const [cardOf, setCardOf] = useState<string | null>(null) // (whose trainer card is open)
+  const [flyOpen, setFlyOpen] = useState(false) // (the map of Fly is open)
   const [trade, setTradeState] = useState<TradeState | null>(null)
   const tradeRef = useRef<TradeState | null>(null)
   const setTrade = (t: TradeState | null) => { tradeRef.current = t; setTradeState(t) }
@@ -200,6 +205,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
   const tour = useRef(newTournament())
   const [tourRound, setTourRound] = useState(0)
   const [champion, setChampion] = useState<string | null>(null)
+  useEffect(() => { if (champion && royale && username) void recordMatchEnd(champion === username) }, [champion]) // (the trainer card counts matches played and won)
   // watching battles: the fighter sends its events to the ones that asked to watch; the watcher plays them
   const battleLog = useRef<BattleEvent[]>([]) // every event of my own battle so far
   const spectators = useRef(new Set<string>())
@@ -429,7 +435,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
     if (b?.pvp) { // a duel against another player: the loser is out of the match
       duelPending.current = null
       if (outcome === 'lose') eliminateMe('duel')
-      else if (outcome === 'win') { outPlayers.current.add(b.name ?? ''); applyLoss(tour.current, b.name ?? ''); announceRef.current({ k: 'beat', a: username ?? '', b: b.name ?? '', s: t.team.filter((m) => m.hp > 0).length }); say(`You beat ${b.name}! They are out of the match.`) }
+      else if (outcome === 'win') { void recordPvpWin(b.name ?? ''); outPlayers.current.add(b.name ?? ''); applyLoss(tour.current, b.name ?? ''); announceRef.current({ k: 'beat', a: username ?? '', b: b.name ?? '', s: t.team.filter((m) => m.hp > 0).length }); say(`You beat ${b.name}! They are out of the match.`) }
       return
     }
     if (outcome === 'lose') { if (royale && RULES.respawnOnWipe <= 0) eliminateMe('wipe'); else blackOut() }
@@ -508,6 +514,26 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
     const t = window.setInterval(send, 3000)
     return () => { window.clearInterval(t); busySender.current?.duel({ type: 'bat-end' }); myBat.current = null; spectators.current.clear() }
   }, [battle?.id])
+
+  // ---- the last player standing wins (also a match with only one player): everybody else is eliminated, or was seen and has now been gone for 20 seconds
+  useEffect(() => {
+    if (!royale || !username) return
+    const me = username
+    const lastSeen = new Map<string, number>() // (a player that was NEVER seen is not counted as gone: that is a connection problem, not a win)
+    let aloneSince = 0
+    const id = window.setInterval(() => {
+      const T = tour.current, now = Date.now()
+      if (now < t0Ref.current + 3000 || T.champion || eliminatedRef.current) { aloneSince = 0; return }
+      for (const o of players()) lastSeen.set(o.id, now)
+      const rivals = royale.players.filter((n) => n !== me && !outPlayers.current.has(n) && !T.losers.has(n) && !(lastSeen.has(n) && now - (lastSeen.get(n) as number) > 20_000))
+      if (rivals.length > 0) { aloneSince = 0; return }
+      aloneSince ||= now
+      if (now - aloneSince < 3000) return
+      T.champion = me; busySender.current?.duel({ type: 'tdone', data: { champion: me } }); setChampion(me); showAnnRef.current({ k: 'champ', a: me })
+    }, 1000)
+    return () => window.clearInterval(id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // ---- the tournament: starts when the 5 minutes at the peak are over
   const gotBracket = (m: BracketMsg) => {
@@ -638,7 +664,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
       },
       onPickup: (id) => {
         if (eliminatedRef.current) return
-        void music.itemGet() // the game's "item found" jingle
+        if (RULES.pickupJingleOn > 0) void music.itemGet() // the game's "item found" jingle (it pauses the music for a moment; the owner can turn it off)
         const pos = handleRef.current?.getPos()
         const r = pos ? ringAt(pos.x, pos.y) : 1
         const items = rollPickup(r, Math.random)
@@ -742,8 +768,10 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
             <MenuButton icon={7} label="Bag" onClick={() => { setPanel('bag'); setMenuOpen(false) }} />
             <MenuButton icon={6} label="PC" onClick={() => { setPanel('pc'); setMenuOpen(false) }} />
             <MenuButton icon={5} label="Chat" badge={chat.unread} onClick={() => { setChatOpen((o) => !o); setMenuOpen(false) }} />
+            {!eliminated && !battle && <MenuButton icon={8} label="Fly" onClick={() => { setFlyOpen(true); setMenuOpen(false) }} />}
+            {chatUser && <MenuButton icon={10} label="Trainer card" onClick={() => { setCardOf(chatUser); setMenuOpen(false) }} />}
             <MenuButton icon={13} label="Settings" onClick={() => { setPanel('settings'); setMenuOpen(false) }} />
-            <MenuButton icon={11} label="Exit" onClick={onExit} />
+            <MenuButton icon={11} label="Exit" onClick={() => { if (!royale || window.confirm(langRef.current === 'es' ? '¿Salir de la partida? Perderás tu sitio en ella.' : 'Leave the match? You will lose your place in it.')) onExit() }} />
           </>
         )}
       </div>
@@ -783,7 +811,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
         </div>
       )}
       {!battle && <MiniMap world={world} getMe={() => handleRef.current?.getPos() ?? null} others={playersVisible} radius={radius} collapseOn={collapseOn} mobile={mobile} />}
-      {!battle && <ChatDock chat={chat} canChat={!!chatUser} open={chatOpen} setOpen={setChatOpen} colorOf={royale ? colorOf : undefined} />}
+      {!battle && <ChatDock chat={chat} canChat={!!chatUser} open={chatOpen} setOpen={setChatOpen} colorOf={royale ? colorOf : undefined} onName={(n, x, y) => setPmenu({ name: n, x, y, fromChat: true })} />}
       {panel === 'settings' && <SettingsPanel settings={settings} onChange={onSettings} onClose={() => setPanel(null)} onCustomize={onCustomize} />}
       {panel === 'team' && <TeamPanel initial={teamSel} trainer={trainer} setTrainer={setTrainer} onClose={() => setPanel(null)} onMessage={say} />}
       {panel === 'bag' && <BagPanel trainer={trainer} setTrainer={setTrainer} onClose={() => setPanel(null)} onMessage={say} />}
@@ -794,11 +822,17 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
         <PlayerPopup
           name={pmenu.name} x={pmenu.x} y={pmenu.y} isFriend={chat.friends.some((f) => f.toLowerCase() === pmenu.name!.toLowerCase())}
           onClose={() => setPmenu(null)}
+          onCard={() => { const n = pmenu.name!; setPmenu(null); setCardOf(n) }}
           onWatch={(() => { const b = batInfo.current.get(pmenu.name!); return (!royale || RULES.watchAlive > 0) && b && b.until > Date.now() ? () => { const n = pmenu.name!; setPmenu(null); startSpectate(n) } : undefined })()}
           onFriend={(add) => { const n = pmenu.name!; setPmenu(null); if (!chatUser) { say('Inicia sesión para tener amigos.'); return } void chat.friendAction(n, add).then((ok) => say(ok ? (add ? `${n} ahora es tu amigo.` : `${n} ya no es tu amigo.`) : 'No se pudo hacer eso.')) }}
           onWhisper={() => { const n = pmenu.name!; setPmenu(null); if (!chatUser) { say('Inicia sesión para chatear.'); return } chat.openWhisper(n); setChatOpen(true) }}
-          onTrade={() => { const n = pmenu.name!; setPmenu(null); if (!royale) { say('Solo se puede intercambiar en una partida con otros jugadores.'); return } sendTo(n, 'trade-req'); say(`Petición de intercambio enviada a ${n}…`) }}
+          onTrade={pmenu.fromChat ? undefined : () => { const n = pmenu.name!; setPmenu(null); if (!royale) { say('Solo se puede intercambiar en una partida con otros jugadores.'); return } sendTo(n, 'trade-req'); say(`Petición de intercambio enviada a ${n}…`) }}
         />
+      )}
+      {cardOf && <TrainerCard name={cardOf} onClose={() => setCardOf(null)} />}
+      {flyOpen && !eliminated && !battle && (
+        <FlyMap world={world} ring={Math.max(1, ring || 1)} radius={collapseOn ? radius : 999} getMe={() => handleRef.current?.getPos() ?? null} others={playersVisible}
+          onClose={() => setFlyOpen(false)} onPick={(x, y) => { setFlyOpen(false); void music.playSfx('fld:KAIDAN'); handleRef.current?.teleport(x, y) }} />
       )}
       {pmenu && pmenu.name === null && (
         <ReactionPopup x={pmenu.x} y={pmenu.y} onClose={() => setPmenu(null)} onPick={(idx) => { setPmenu(null); handleRef.current?.showEmote(null, idx); busySender.current?.duel({ type: 'react', data: { idx } }) }} />
@@ -912,8 +946,8 @@ export default function PlayScreen(props: Props) {
         prepareMeadow(built, seed) // ring 1 = a meadow (lots of tall grass, a ring road and paths, a beach)
         setProg({ text: 'Placing gyms, trainers and items…', frac: 0.8, step: 4, steps: 5, done: 0, total: 1, unit: 'step' })
         await pause()
-        world = generateWorld(seed, built.ground)
-        setNoGrass(clearPeakGrass(world)) // (nothing grows at the peak: the tiles become plain grass and the map's own grass pictures there are hidden)
+        world = generateWorld(seed, built.ground, { connect: true })
+        setNoGrass([...clearPeakGrass(world), ...(world.carved ?? []), ...carveCenterPaths(world, built)]) // (nothing grows at the peak: the tiles become plain grass and the map's own grass pictures there are hidden)
         const extra = addExtraGrass(world, built, seed) // and more tall grass in the inner rings
         setProg({ text: 'Drawing the island…', frac: 0.9, step: 5, steps: 5, done: 0, total: 1, unit: 'step' })
         await pause()
