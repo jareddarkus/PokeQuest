@@ -2,6 +2,7 @@
 import * as THREE from 'three'
 import { buildModelObject, type ClipUniforms } from './mapModel'
 import { parsePack } from './buildings'
+import { parseTextureAnim as parseBtaFile } from './texanim'
 import { parseTextureAnim, type MatAnim } from './texanim'
 import { decodeTexture, readModels, readTexFile, type Model } from './nitro'
 import type { WorldData } from './worldData'
@@ -98,14 +99,15 @@ function rasterHeights(model: Model, out: Float32Array, ox: number, oz: number, 
 /** Puts the real buildings (Pokémon Centers, houses, signs ...) of every map piece into the world. */
 function addBuildings(data: WorldData, group: THREE.Group, uniforms: ClipUniforms) {
   if (!data.buildings || !data.packs) return
-  const parsed = new Map<number, { models: Uint8Array[]; tex: ReturnType<typeof readTexFile> }>()
+  const parsed = new Map<number, { models: Uint8Array[]; anims: Array<Uint8Array | null>; tex: ReturnType<typeof readTexFile> }>()
+  const animCache = new Map<string, ReturnType<typeof parseBtaFile>>()
   for (const cb of data.buildings) {
     let pk = parsed.get(cb.pack)
     if (!pk) {
       const raw = data.packs[cb.pack]
       const pack = raw ? parsePack(raw.bld) : null
       if (!raw || !pack) continue
-      pk = { models: pack.models, tex: readTexFile(raw.tex) }
+      pk = { models: pack.models, anims: pack.anims, tex: readTexFile(raw.tex) }
       parsed.set(cb.pack, pk)
     }
     if (!pk.tex) continue
@@ -115,7 +117,12 @@ function addBuildings(data: WorldData, group: THREE.Group, uniforms: ClipUniform
       try {
         const model = readModels(pk.models[it.model])[0]
         if (!model) continue
-        const obj = buildModelObject(model, pk.tex, uniforms, undefined, true)
+        // the building's own texture animation (the water of a fountain moves ...), read from its record in the pack
+        const bta = pk.anims[it.model]
+        const akey = `${cb.pack}/${it.model}`
+        let anim = animCache.get(akey)
+        if (anim === undefined && bta) { anim = parseBtaFile(bta); animCache.set(akey, anim) }
+        const obj = buildModelObject(model, pk.tex, uniforms, anim && anim.size ? anim : undefined, true)
         // vending machines and bins (building numbers 19 and 20 of the shared set) stand one tile further south than the table says:
         // the game's tile data puts them on the row in front of the flower bed, not inside it
         const dz = it.model === 19 || it.model === 20 ? 1 : 0
@@ -233,20 +240,22 @@ export function buildChunkWorld(data: WorldData): BuiltWorld {
   for (let i = 0; i < size * size; i++) if (ground[i] === T.Water) waterHeights.push(height[i])
   waterHeights.sort((a, b) => a - b)
   const waterY = waterHeights.length ? waterHeights[Math.floor(waterHeights.length / 2)] : -1
-  const packCache = new Map<number, { models: Uint8Array[]; tex: ReturnType<typeof readTexFile> } | null>()
+  const packCache = new Map<number, { models: Uint8Array[]; anims: Array<Uint8Array | null>; tex: ReturnType<typeof readTexFile> } | null>()
   const makeBuilding = (pack: number, model: number) => {
     let pk = packCache.get(pack)
     if (pk === undefined) {
       const raw = data.packs?.[pack]
       const parsed = raw ? parsePack(raw.bld) : null
-      pk = raw && parsed ? { models: parsed.models, tex: readTexFile(raw.tex) } : null
+      pk = raw && parsed ? { models: parsed.models, anims: parsed.anims, tex: readTexFile(raw.tex) } : null
       packCache.set(pack, pk)
     }
     if (!pk || !pk.tex || !pk.models[model]) return null
     try {
       const m = readModels(pk.models[model])[0]
       if (!m) return null
-      const obj = buildModelObject(m, pk.tex, uniforms)
+      const bta = pk.anims[model]
+      const anim = bta ? parseBtaFile(bta) : undefined
+      const obj = buildModelObject(m, pk.tex, uniforms, anim && anim.size ? anim : undefined)
       const box = new THREE.Box3().setFromObject(obj)
       const sz = box.getSize(new THREE.Vector3())
       return { obj, w: sz.x, d: sz.z, h: sz.y }

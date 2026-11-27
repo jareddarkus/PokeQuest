@@ -8,7 +8,7 @@ export const BUILDING_PACKS_NARC = 'a/2/2/5'
 export const BUILDING_TEX_NARC = 'a/1/7/4'
 
 export interface BuildingSpec { model: number; x: number; y: number; z: number; rot: number }
-export interface Pack { ids: number[]; models: Uint8Array[] }
+export interface Pack { ids: number[]; models: Uint8Array[]; /** the texture animation (BTA0) a building's record carries after its 36-byte header (fountains, water, flags ...), or null */ anims: Array<Uint8Array | null> }
 
 export function parsePack(file: Uint8Array): Pack | null {
   if (file.length < 8 || file[0] !== 0x41 || file[1] !== 0x42) return null
@@ -19,11 +19,14 @@ export function parsePack(file: Uint8Array): Pack | null {
   const m = n >> 1
   const ids: number[] = []
   const models: Uint8Array[] = []
+  const anims: Array<Uint8Array | null> = []
   for (let k = 0; k < m; k++) {
     ids.push(dv.getUint32(offs[k], true) & 0xffff)
     models.push(file.subarray(offs[m + k], offs[m + k + 1]))
+    const o = offs[k], e = offs[k + 1]
+    anims.push(e - o > 40 && file[o + 36] === 0x42 && file[o + 37] === 0x54 && file[o + 38] === 0x41 && file[o + 39] === 0x30 ? file.subarray(o + 36, e) : null) // 'BTA0'
   }
-  return { ids, models }
+  return { ids, models, anims }
 }
 
 /** The building list at the end of a map file: [{ building number, x, y, z, turn }]. */

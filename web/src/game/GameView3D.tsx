@@ -783,11 +783,13 @@ export default function GameView3D(props: Props) {
 
     let lastBump = 0
     const now0 = () => performance.now()
+    /** a step may go up or down by about one tile at most: different levels of the ground are joined only by stairs / slopes (their tiles rise gradually), never by walking straight onto the next terrace */
+    const levelOk = (ax: number, ay: number, bx: number, by: number): boolean => !inBounds(bx, by) || !inBounds(ax, ay) || Math.abs(built.height[by * SIZE + bx] - built.height[ay * SIZE + ax]) <= 1.0
     const tryStep = (d: Dir, elapsed: number | null) => {
       me.dir = d
       const nx = me.x + DX[d]
       const ny = me.y + DY[d]
-      if (!walkableFor(world, nx, ny, elapsed) || npcAt(nx, ny) || pickupAt(nx, ny)) {
+      if (!walkableFor(world, nx, ny, elapsed) || !levelOk(me.x, me.y, nx, ny) || npcAt(nx, ny) || pickupAt(nx, ny)) {
         if (tileAt(world, nx, ny) === T.GymDoor) {
           const g = world.gyms.find((q) => q.doorX === nx && q.doorY === ny)
           if (g) propsRef.current.events.onGym?.(g.id)
@@ -913,7 +915,7 @@ export default function GameView3D(props: Props) {
                 const ny = n.y + DY[d]
                 n.dir = d
                 const homeOk = Math.abs(nx - n.spec.x) <= 7 && Math.abs(ny - n.spec.y) <= 7
-                const tileOk = n.spec.swim ? (inBounds(nx, ny) && world.lake[ny * SIZE + nx] === 1) : (walkableFor(world, nx, ny, elapsed) && tileAt(world, nx, ny) !== T.GymDoor) // swimmers: only lake water
+                const tileOk = n.spec.swim ? (inBounds(nx, ny) && world.lake[ny * SIZE + nx] === 1) : (walkableFor(world, nx, ny, elapsed) && levelOk(n.x, n.y, nx, ny) && tileAt(world, nx, ny) !== T.GymDoor) // swimmers: only lake water
                 if (homeOk && tileOk && !(nx === me.x && ny === me.y) && !npcAt(nx, ny) && !pickupAt(nx, ny)) {
                   n.fromX = n.x; n.fromY = n.y; n.x = nx; n.y = ny; n.moving = 0.001; n.stp ^= 1
                 }

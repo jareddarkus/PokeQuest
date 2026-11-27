@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { actionOf, capture, roam } from '../game/keys'
+import NavCursor, { onNavTarget, setNavTarget } from './NavCursor'
 
 /**
  * The cursor of EVERY menu, with the keyboard: the keys that walk the character (W A S D by default, or the ones the player chose in
@@ -56,13 +57,25 @@ function pick(from: HTMLElement | null, all: HTMLElement[], dir: 'up' | 'down' |
 export default function MenuNav() {
   useEffect(() => {
     let cur: HTMLElement | null = null
-    const clear = () => { cur?.classList.remove('pq-nav'); cur = null }
+    const clear = () => { cur = null; setNavTarget(null) }
+    // bring the cursor's element into view, but only by scrolling real scroll areas (scrollIntoView also moves boxes that are cut off with overflow: hidden, which shifted the whole battle screen)
+    const reveal = (el: HTMLElement) => {
+      for (let p = el.parentElement; p; p = p.parentElement) {
+        const o = getComputedStyle(p)
+        if (!/(auto|scroll)/.test(o.overflowY + o.overflowX) || (p.scrollHeight <= p.clientHeight && p.scrollWidth <= p.clientWidth)) continue
+        const r = el.getBoundingClientRect(), q = p.getBoundingClientRect()
+        if (r.top < q.top) p.scrollTop -= q.top - r.top; else if (r.bottom > q.bottom) p.scrollTop += r.bottom - q.bottom
+        if (r.left < q.left) p.scrollLeft -= q.left - r.left; else if (r.right > q.right) p.scrollLeft += r.right - q.right
+      }
+    }
     const setCur = (el: HTMLElement | null) => {
       if (cur === el) return
-      cur?.classList.remove('pq-nav')
       cur = el
-      if (el) { el.classList.add('pq-nav'); el.scrollIntoView({ block: 'nearest', inline: 'nearest' }) }
+      setNavTarget(el)
+      if (el) reveal(el)
     }
+    // a screen can put the cursor on something itself (the first move of the move screen, a move under the mouse)
+    const offTarget = onNavTarget((el) => { cur = el })
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null
       if (t && (t.tagName === 'TEXTAREA' || (t.tagName === 'INPUT' && !['range', 'checkbox', 'radio', 'button'].includes((t as HTMLInputElement).type)))) return
@@ -100,10 +113,10 @@ export default function MenuNav() {
         if (back) { eat(); clear(); back.click() }
       }
     }
-    const onPointer = () => { if (cur) clear() } // (the mouse / a finger takes over)
+    const onPointer = (e: PointerEvent) => { if (cur && !(e.target as HTMLElement | null)?.closest?.('.ds-move')) clear() } // (the mouse / a finger takes over; on the move buttons the cursor stays with the pointer)
     window.addEventListener('keydown', onKey, true)
     window.addEventListener('pointerdown', onPointer, true)
-    return () => { window.removeEventListener('keydown', onKey, true); window.removeEventListener('pointerdown', onPointer, true); clear() }
+    return () => { offTarget(); window.removeEventListener('keydown', onKey, true); window.removeEventListener('pointerdown', onPointer, true); clear() }
   }, [])
-  return null
+  return <NavCursor />
 }
