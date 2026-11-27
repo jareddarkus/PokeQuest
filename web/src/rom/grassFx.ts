@@ -78,3 +78,22 @@ export function loadShadowPicture(): Promise<HTMLCanvasElement | null> {
   })()
   return shadowCache
 }
+
+/** The "!" bubble over a trainer that has spotted you: file 50 of the effects archive (51 = "?", 52 = a note, 53 = "..."), a 16 x 16 picture. Null when the game file is not there. */
+let alertCache: Promise<HTMLCanvasElement | null> | null = null
+export function loadAlertBubble(): Promise<HTMLCanvasElement | null> {
+  if (alertCache) return alertCache
+  alertCache = (async () => {
+    try {
+      const narc = await loadEffectsNarc()
+      const file = narc?.[50]
+      const t = file ? readTexFile(file) : null
+      if (!t || !t.texs[0]) return null
+      const d = decodeTexture(t.texs[0], t.pals[0])
+      const c = document.createElement('canvas'); c.width = d.width; c.height = d.height
+      c.getContext('2d')!.putImageData(new ImageData(new Uint8ClampedArray(d.rgba), d.width, d.height), 0, 0)
+      return c
+    } catch { return null }
+  })()
+  return alertCache
+}

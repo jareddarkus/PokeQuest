@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { isKey, roam } from './keys'
+import { loadAlertBubble } from '../rom/grassFx'
 import { hardEdges } from '../rom/anim'
 import * as THREE from 'three'
 import type { BuiltWorld } from '../rom/chunkWorld'
@@ -494,21 +495,30 @@ export default function GameView3D(props: Props) {
       })()
     }
 
+    // The "!" of a trainer that has seen you: the game's own picture (field effect file 50 of a/0/7/4): a quad one tile wide and tall, its bottom 22/16 tiles over the feet,
+    // it hops for 7 frames (6, 10, 12, 12, 10, 6, 0 sixteenths of a tile) and stays 30 more; the frames of that effect are 1/30 s. Until it is loaded the round emote is used.
     let alert: { n: NpcRuntime; t: number } | null = null
     let bubble: THREE.Sprite | null = null
-    const em = owEmote(15)
-    if (em) {
-      const tex = new THREE.Texture(em)
-      tex.needsUpdate = true
-      tex.magFilter = THREE.NearestFilter
-      tex.minFilter = THREE.NearestFilter
-      tex.colorSpace = THREE.SRGBColorSpace
-      bubble = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, alphaTest: 0.1, depthTest: false }))
+    let realBubble = false
+    const ALERT_FRAME = 1 / 30
+    const ALERT_HOP = [6, 10, 12, 12, 10, 6, 0].map((h) => h / 16)
+    const ALERT_FRAMES = 37
+    const nearestTex = (t: THREE.Texture) => { t.needsUpdate = true; t.magFilter = THREE.NearestFilter; t.minFilter = THREE.NearestFilter; t.colorSpace = THREE.SRGBColorSpace; return t }
+    {
+      const em = owEmote(15)
+      bubble = new THREE.Sprite(new THREE.SpriteMaterial({ map: em ? nearestTex(new THREE.Texture(em)) : null, transparent: true, alphaTest: 0.1, depthTest: false }))
       bubble.scale.set(1.3, 1.3, 1)
       bubble.center.set(0.5, 0)
       bubble.renderOrder = 10
       bubble.visible = false
       scene.add(bubble)
+      void loadAlertBubble().then((c) => {
+        if (!c || !bubble) return
+        const m = bubble.material as THREE.SpriteMaterial
+        m.map = nearestTex(new THREE.CanvasTexture(c)); m.needsUpdate = true
+        bubble.scale.set(1, 1, 1)
+        realBubble = true
+      })
     }
 
     // reactions: the game's emote pictures above a head (yours and the other players')
@@ -744,7 +754,9 @@ export default function GameView3D(props: Props) {
         }
         if (alert) { // a trainer has spotted you: the "!" bubble shows for a moment, then the battle begins
           alert.t -= dt
-          bubble!.position.set(alert.n.fx + 0.5, heightAt(alert.n.fx + 0.5, alert.n.fy + 0.5) + 1.7, alert.n.fy + 0.5)
+          const frame = Math.max(0, Math.floor((ALERT_FRAMES * ALERT_FRAME - alert.t) / ALERT_FRAME))
+          const hop = realBubble ? (ALERT_HOP[frame] ?? 0) : 0
+          bubble!.position.set(alert.n.fx + 0.5, heightAt(alert.n.fx + 0.5, alert.n.fy + 0.5) + (realBubble ? 22 / 16 : 1.7) + hop, alert.n.fy + 0.5)
           if (alert.t <= 0) {
             const id = alert.n.spec.id
             alert = null
@@ -803,8 +815,7 @@ export default function GameView3D(props: Props) {
               const sy = n.y + DY[n.dir] * k
               if (!isWalkable(world, sx, sy) && tileAt(world, sx, sy) !== T.GymDoor) break
               if (sx === me.x && sy === me.y && me.t >= 1 && !alert && p.canBattle !== false && !busyMap.has(n.spec.id)) { // (trainers leave you alone when none of your Pokémon can fight)
-                const em = owEmote(15) // the game's own "!" bubble
-                if (em && bubble) { alert = { n, t: 0.9 }; bubble.visible = true; p.events.onAlert?.(); break }
+                if (bubble && (realBubble || owEmote(15))) { alert = { n, t: realBubble ? ALERT_FRAMES * ALERT_FRAME : 0.9 }; bubble.visible = true; p.events.onAlert?.(); break }
                 p.events.onNpcSpotted?.(n.spec.id)
                 break
               }
