@@ -48,6 +48,7 @@ export async function runEffScript(d: Uint8Array, host: EffHost, depth = 0): Pro
     for (let i = 0; i < n; i++) a.push(dv.getInt32(pos + 2 + i * 4, true))
     const next = pos + 2 + n * 4
     pos = next
+    if (import.meta.env.DEV) ((globalThis as { __effLog?: unknown[] }).__effLog ??= []).push([op, ...a])
     switch (op) {
       case 0x00: pending.push(host.camera(a[0], a[1], a[2], a[3], a[4])); break
       case 0x03: pending.push(host.shakeCamera(a[1] / 4096, a[3], a[5])); break

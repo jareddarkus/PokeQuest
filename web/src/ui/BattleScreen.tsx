@@ -299,6 +299,12 @@ function StageBadges({ st, es, K, side }: { st: Record<string, number>; es: bool
 export function HpBox(props: Parameters<typeof ClassicHpBox>[0]) {
   return <ClassicHpBox {...props} /> // (the game's own HP boxes in every theme)
 }
+/** Safari (and every WebKit browser on an iPhone / iPad) */
+const SAFARI = typeof navigator !== 'undefined' && (/^((?!chrome|android|crios|fxios).)*safari/i.test(navigator.userAgent) || location.search.includes('cssfilter'))
+/** the game's particle effects and move scripts are read once and kept for every battle (the first battle of a match plays them too) */
+let sharedSpl: SplFx | null = null
+const getSpl = (): SplFx => (sharedSpl ??= new SplFx())
+
 export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed, foeClass, pvp, spectate, stream, playerGirl, playerSprite, textSpeed = 'normal', onEnd }: Props) {
   const lang = useLang()
   // the battle always looks classic (the game's own HP boxes, command and move screens), whatever the theme is; the theme comes back when the battle ends
@@ -556,7 +562,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
     const c = splCanvas.current
     if (!c) return
     c.width = Math.max(1, Math.ceil(c.parentElement!.clientWidth / splScale)); c.height = Math.max(1, Math.ceil(c.parentElement!.clientHeight / splScale))
-    if (!splRef.current) { const f = new SplFx(); splRef.current = f; void f.load() }
+    if (!splRef.current) { splRef.current = getSpl(); void splRef.current.load() }
     splRef.current.attach(c)
     if (import.meta.env.DEV) (window as unknown as { __spl?: SplFx }).__spl = splRef.current
   }, [splScale, layout?.frame.w, layout?.frame.h])
@@ -673,15 +679,21 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
             document.body.appendChild(svg)
           }
           const m = document.getElementById(`pq-tint-m-${sd}`)!
-          const set = (t: number) => m.setAttribute('values', `${1 - t} 0 0 0 ${t * cr}  0 ${1 - t} 0 0 ${t * cg}  0 0 ${1 - t} 0 ${t * cb}  0 0 0 1 0`)
+          // Safari does not draw SVG colour filters on page elements: there the same blend is made with the plain CSS filter functions (sepia / hue-rotate / saturate / brightness)
+          const plain = SAFARI
+          const lum = 0.3 * cr + 0.59 * cg + 0.11 * cb, mx = Math.max(cr, cg, cb), mn = Math.min(cr, cg, cb)
+          const hue = mx === mn ? 0 : mx === cr ? (60 * ((cg - cb) / (mx - mn)) + 360) % 360 : mx === cg ? 60 * (2 + (cb - cr) / (mx - mn)) : 60 * (4 + (cr - cg) / (mx - mn))
+          const css = (t: number) => (mx - mn < 0.15 ? (lum > 0.5 ? `brightness(${1 + 2 * t}) saturate(${1 - 0.7 * t})` : `brightness(${1 - t})`) : `sepia(${t}) hue-rotate(${(((hue - 38 + 540) % 360) - 180) * t}deg) saturate(${1 + 9 * t}) brightness(${1 - 0.15 * t + (lum - 0.4) * 0.5 * t})`)
+          const set = (t: number) => { if (plain) e.style.filter = css(t); else m.setAttribute('values', `${1 - t} 0 0 0 ${t * cr}  0 ${1 - t} 0 0 ${t * cg}  0 0 ${1 - t} 0 ${t * cb}  0 0 0 1 0`) }
           const ms = Math.max(16, (frames * 1000) / 60), t0 = performance.now()
+          e.dataset.pqTint = '1'
           set(from)
-          e.style.filter = `url(#pq-tint-${sd})`
+          if (!plain) e.style.filter = `url(#pq-tint-${sd})`
           const step = (now: number) => {
             const k = Math.min(1, (now - t0) / ms)
             set(from + (to - from) * k)
             if (k < 1) requestAnimationFrame(step)
-            else { if (to <= 0.001) e.style.filter = ''; res() }
+            else { if (to <= 0.001) { e.style.filter = ''; delete e.dataset.pqTint }; res() }
           }
           requestAnimationFrame(step)
         }))).then(() => undefined)
@@ -708,7 +720,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
       },
       call: (effect) => (effect >= FIRST_EFFECT ? spl.effectScript(effect - FIRST_EFFECT) : spl.moveScript(effect)),
     }
-    try { await runEffScript(data, host) } finally { for (const sd of ['me', 'foe'] as const) { const e = el(sd); if (e && e.style.filter.startsWith('url(#pq-tint')) e.style.filter = '' } if (dimRef.current) { dimRef.current.getAnimations().forEach((x) => x.cancel()); dimRef.current.style.opacity = '0' } }
+    try { await runEffScript(data, host) } finally { for (const sd of ['me', 'foe'] as const) { const e = el(sd); if (e && (e.style.filter.startsWith('url(#pq-tint') || e.dataset.pqTint)) { e.style.filter = ''; delete e.dataset.pqTint } } if (dimRef.current) { dimRef.current.getAnimations().forEach((x) => x.cancel()); dimRef.current.style.opacity = '0' } }
     return true
   }
 
@@ -800,6 +812,7 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
         jobs.push(d > 0 && d <= 649 ? warmAnim(m.species, back, !!m.shiny) : Promise.resolve(preloadPixel(m.species, back, !!m.shiny)))
       }
       for (const m of foeCopies.slice(1)) { const d = dexNum(m.species); if (d > 649) preloadPixel(m.species, false, !!m.shiny) }
+      jobs.push(getSpl().load()) // (the move animations are ready before the first move)
       jobs.push(music.preloadCries([...playerTeam, ...foeCopies].map((m) => dexNum(m.species)))) // (cries and the sounds of the first moves are read now, so the very first battle has sound too)
       jobs.push(trainerBackPic(playerSprite !== undefined ? backClassForSprite(playerSprite) : playerBackClass(!!playerGirl)).then(setMyPic))
       if (kind !== 'wild') jobs.push(trainerFrontPic(foeClass ?? trainerClassFor(kind === 'gym' ? 'gym' : 'trainer', foeSeed ?? foeName ?? 'trainer'), [2, 3, 4, 5]).then((r) => setFoePic(r?.canvas ?? null)))
