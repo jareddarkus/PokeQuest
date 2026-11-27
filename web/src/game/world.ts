@@ -269,7 +269,7 @@ export function generateWorld(seed: number, ground: Uint8Array, opts: { barriers
   const counts = [10, 9, 8, 6]
   const behaviors: NpcBehavior[] = ['stand', 'look', 'walk', 'run', 'look', 'stand']
   for (let ring = 1; ring <= 4; ring++) {
-    for (let i = 0; i < counts[ring - 1]; i++) {
+    for (let i = 0; i < (ring === 4 && RULES.peakNpcsOn <= 0 ? 0 : counts[ring - 1]); i++) { // (the peak is empty unless the owner wants people there)
       const p = freeTile(ring)
       npcs.push({
         id: `n${ring}_${i}`, ring, x: p.x, y: p.y, dir: Math.floor(rng() * 4) as Dir,
@@ -335,6 +335,7 @@ export function generateWorld(seed: number, ground: Uint8Array, opts: { barriers
       if (spot < 0) break
       used.push(spot)
       const x = spot % SIZE, y = (spot / SIZE) | 0
+      if (ringAt(x, y) === 4 && RULES.peakNpcsOn <= 0) continue // (no swimmers in the lake of the peak either)
       npcs.push({ id: `s${k}`, ring: ringAt(x, y), x, y, dir: Math.floor(rng() * 4) as Dir, behavior: 'walk', name: 'Swimmer', look: Math.floor(rng() * 1e9), swim: true })
     }
   }

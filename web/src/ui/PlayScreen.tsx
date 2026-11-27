@@ -595,6 +595,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
           const r = pos ? ringAt(pos.x, pos.y) : 1
           const gid = pos ? world.encGroup?.[Math.round(pos.y) * SIZE + Math.round(pos.x)] ?? 0 : 0
           const grp = gid ? world.groups?.get(gid) : undefined
+          if (r === 4 && RULES.peakWildOn <= 0 && !(grp && grp.entries.length)) return // (the peak: nothing wild unless the owner wants it, or painted a zone there)
           if (grp && grp.entries.length) void groupMon(grp).then((mon) => startBattle({ kind: 'wild', foe: [mon] }))
           else void wildEncounter(r).then((mon) => startBattle({ kind: 'wild', foe: [mon] }))
         }
