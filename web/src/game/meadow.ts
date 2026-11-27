@@ -304,11 +304,28 @@ export function buildMeadowVisuals(world: World, built: BuiltWorld, extra: numbe
   const mesh = (geo: THREE.BufferGeometry, mat: THREE.Material, y = 0) => { const m = new THREE.Mesh(geo, mat); m.position.y = y; m.frustumCulled = false; g.add(m) }
   mesh(squareRing(RING_INNER[0] - 0.2, RADIUS - BEACH, hm), groundMat(grass, 0x59b84a, built))
   mesh(squareRing(RADIUS - BEACH, RADIUS + 1.2, hm + 0.001), groundMat(sand, 0xe8d890, built))
+  { // the beach is a raised plate: a skirt of sand goes down from its edge to the sea bed, so that nothing but sand is seen under the edge of the beach
+    const pos: number[] = [], uv: number[] = [], idx: number[] = []
+    const o = RADIUS + 1.2, top = hm + 0.001, bot = built.waterY - 0.15
+    const wall = (x0: number, z0: number, x1: number, z1: number) => {
+      const b = pos.length / 3
+      pos.push(x0, top, z0, x1, top, z1, x1, bot, z1, x0, bot, z0)
+      const len = Math.hypot(x1 - x0, z1 - z0)
+      uv.push(0, 0, len / 4, 0, len / 4, (top - bot) / 4, 0, (top - bot) / 4)
+      idx.push(b, b + 1, b + 2, b, b + 2, b + 3)
+    }
+    wall(C - o, C - o, C + o, C - o); wall(C - o, C + o, C + o, C + o); wall(C - o, C - o, C - o, C + o); wall(C + o, C - o, C + o, C + o)
+    const geo = new THREE.BufferGeometry()
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); geo.setIndex(idx)
+    const m = groundMat(sand, 0xe8d890, built); m.side = THREE.DoubleSide
+    mesh(geo, m)
+  }
 
   // flat single-tile pictures
-  const flat = (tiles: number[], mat: THREE.Material, y: number, h: (i: number) => number, scale = 1) => {
+  const flat = (tiles: number[], mat: THREE.Material, y: number, h: (i: number) => number, scale = 1, flipV = false) => {
     if (!tiles.length) return
     const geo = new THREE.PlaneGeometry(scale, scale).rotateX(-Math.PI / 2)
+    if (flipV) { const uv = geo.attributes.uv; for (let k = 0; k < uv.count; k++) uv.setY(k, 1 - uv.getY(k)) } // (the game's flat pictures: v grows towards the south, a plane turned flat has it the other way round)
     applyClip(mat, built.uniforms)
     const im = new THREE.InstancedMesh(geo, mat, tiles.length)
     const m4 = new THREE.Matrix4()
@@ -328,7 +345,7 @@ export function buildMeadowVisuals(world: World, built: BuiltWorld, extra: numbe
   const alphaMat = (t: THREE.Texture | null) => new THREE.MeshBasicMaterial({ map: t ?? undefined, color: t ? 0xffffff : 0x2a8a3a, alphaTest: 0.4, transparent: true, side: THREE.DoubleSide })
   // tall grass exactly like the game's map: three flat layers of leaf pictures one above the other (bottom kusa_ec3, middle kusa_ec2, top kusa_ec1), one picture per tile
   const grassLayers = (tiles: number[], h: (i: number) => number) => {
-    flat(tiles, alphaMat(leaf3), 0.125, h); flat(tiles, alphaMat(leaf2), 0.375, h); flat(tiles, alphaMat(leaf1), 0.5, h)
+    flat(tiles, alphaMat(leaf3), 0.125, h, 1, true); flat(tiles, alphaMat(leaf2), 0.375, h, 1, true); flat(tiles, alphaMat(leaf1), 0.5, h, 1, true)
   }
   grassLayers(tuftsA, () => hm)
   const ex = extra.filter((i) => dist(i % SIZE, (i / SIZE) | 0) < RING_INNER[0])
@@ -348,16 +365,18 @@ export function buildMeadowVisuals(world: World, built: BuiltWorld, extra: numbe
   if (forestCells.length) {
     const side = built.textureNamed('ki02ax', false), crown = built.textureNamed('ki02bx', false)
     const base = built.textureNamed('ki02c', false), tip = built.textureNamed('ki02dx', false)
-    const mk = () => ({ pos: [] as number[], uv: [] as number[], idx: [] as number[] })
+    const mk = () => ({ pos: [] as number[], uv: [] as number[], idx: [] as number[], c: [] as number[] })
+    let curC = [0, 0] // (the middle of the tree being built: the whole tree sinks together when its ring falls)
     const quad = (m: ReturnType<typeof mk>, p: number[][], uvs: number[][]) => {
       const v = m.pos.length / 3
-      for (let k = 0; k < 4; k++) { m.pos.push(...p[k]); m.uv.push(...uvs[k]) }
+      for (let k = 0; k < 4; k++) { m.pos.push(...p[k]); m.uv.push(...uvs[k]); m.c.push(curC[0], curC[1]) }
       m.idx.push(v, v + 1, v + 2, v, v + 2, v + 3)
     }
     const mSide = mk(), mCrown = mk(), mBase = mk(), mTip = mk()
     const y0 = hm + 0.19, y1 = hm + 3.5
     for (const i of forestCells) {
       const x = i % SIZE, z = (i / SIZE) | 0
+      curC = [x + 1, z + 1]
       const flat4 = (m: ReturnType<typeof mk>, y: number) => quad(m, [[x, y, z], [x + 2, y, z], [x + 2, y, z + 2], [x, y, z + 2]], [[0, 0], [1, 0], [1, 1], [0, 1]])
       flat4(mBase, hm + 0.19); flat4(mCrown, hm + 1.38); flat4(mTip, hm + 2.91)
       quad(mSide, [[x, y0, z + 1], [x + 2, y0, z + 1], [x + 2, y1, z + 1], [x, y1, z + 1]], [[0, 1], [1, 1], [1, 0], [0, 0]])
@@ -368,9 +387,12 @@ export function buildMeadowVisuals(world: World, built: BuiltWorld, extra: numbe
       const geo = new THREE.BufferGeometry()
       geo.setAttribute('position', new THREE.Float32BufferAttribute(m.pos, 3))
       geo.setAttribute('uv', new THREE.Float32BufferAttribute(m.uv, 2))
+      geo.setAttribute('pqc', new THREE.Float32BufferAttribute(m.c, 2))
       geo.setIndex(m.idx)
       const mat = new THREE.MeshBasicMaterial({ map: tex, alphaTest: 0.4, transparent: true, side: THREE.DoubleSide })
+      mat.defines = { PQ_UNIT: '' }
       applyClip(mat, built.uniforms)
+      mat.customProgramCacheKey = () => 'pq-clip-ours-unit'
       mesh(geo, mat)
     }
     add(mBase, base); add(mCrown, crown); add(mTip, tip); if (SHOW_SIDE) add(mSide, side)

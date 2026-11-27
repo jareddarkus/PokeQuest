@@ -252,36 +252,49 @@ export default function GameView3D(props: Props) {
     const sea = new THREE.Mesh(new THREE.PlaneGeometry(600, 600).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: seaTex ? 0xffffff : '#3a7fc0', map: seaTex ?? undefined }))
     sea.position.set(SIZE / 2, built.waterY - 0.03, SIZE / 2)
     scene.add(sea)
-    // the shore: the game's own shore picture (sea_zanami, 1 x 4 tiles: white foam at the land side, fading into the blue of the sea) laid along the edge of the island, as a
-    // ring of four strips that follows the edge while the island sinks
+    // the shore: what lies under the foam is SAND (the sea bed next to the beach), not deep water. Two layers laid along the edge of the island as rings of four strips that follow the edge
+    // while the island sinks: (1) the sand of the bed, solid for 1.2 tiles and then fading out into the sea, (2) the game's own shore picture (sea_zanami, 1 x 4 tiles: white foam at the land
+    // side, fading into the blue of the sea) on top of it.
     const foamTex = built.textureNamed('sea_zanami', true)
-    const FOAM_W = 4
-    const foamPos = new Float32Array(4 * 4 * 3), foamUv = new Float32Array(4 * 4 * 2)
-    const foamGeo = new THREE.BufferGeometry()
-    foamGeo.setAttribute('position', new THREE.BufferAttribute(foamPos, 3))
-    foamGeo.setAttribute('uv', new THREE.BufferAttribute(foamUv, 2))
-    foamGeo.setIndex([0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7, 8, 9, 10, 8, 10, 11, 12, 13, 14, 12, 14, 15])
-    const foam = new THREE.Mesh(foamGeo, new THREE.MeshBasicMaterial({ map: foamTex ?? undefined, color: foamTex ? 0xffffff : 0xdff4ff, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3, side: THREE.DoubleSide }))
-    foam.frustumCulled = false; foam.renderOrder = 1
-    scene.add(foam)
-    const setFoam = (r: number): void => {
-      const e = r - 1.0, o = e + FOAM_W, y = built.waterY + 0.015, cc = SIZE / 2
-      // [x0, z0, x1, z1, x2, z2, x3, z3] of every strip: inner edge (x0,z0)-(x1,z1), outer edge (x2,z2)-(x3,z3); u runs along the strip, v from the land (0) outwards (1)
-      const strips = [
-        [cc - o, cc - e, cc + o, cc - e, cc + o, cc - o, cc - o, cc - o], // north
-        [cc - o, cc + e, cc + o, cc + e, cc + o, cc + o, cc - o, cc + o], // south
-        [cc - e, cc - o, cc - e, cc + o, cc - o, cc + o, cc - o, cc - o], // west (inner edge is x = cc - e)
-        [cc + e, cc - o, cc + e, cc + o, cc + o, cc + o, cc + o, cc - o], // east
-      ]
-      strips.forEach((q, s) => {
-        for (let k = 0; k < 4; k++) {
-          foamPos.set([q[k * 2], y, q[k * 2 + 1]], (s * 4 + k) * 3)
-          const along = s < 2 ? q[k * 2] : q[k * 2 + 1] // (north / south: along x; west / east: along z)
-          foamUv.set([along, k < 2 ? 0 : 1], (s * 4 + k) * 2)
+    const bedTex = built.textureNamed('sea_jimen', true, (r, gg, b) => r + gg - 2 * b - Math.abs(r - 220) * 0.2)
+    const ringStrips = (offsets: number[], uvOf: (along: number, across: number, x: number, z: number) => [number, number], alphas?: number[]) => {
+      const rows = offsets.length, n = 4 * rows * 2
+      const pos = new Float32Array(n * 3), uv = new Float32Array(n * 2), col = alphas ? new Float32Array(n * 4).fill(1) : null
+      const index: number[] = []
+      for (let s = 0; s < 4; s++) for (let j = 0; j < rows - 1; j++) { const a = (s * rows + j) * 2; index.push(a, a + 1, a + 3, a, a + 3, a + 2) }
+      const geo = new THREE.BufferGeometry()
+      geo.setAttribute('position', new THREE.BufferAttribute(pos, 3))
+      geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2))
+      if (col) { for (let s = 0; s < 4; s++) for (let j = 0; j < rows; j++) for (let k = 0; k < 2; k++) col[((s * rows + j) * 2 + k) * 4 + 3] = alphas![j]; geo.setAttribute('color', new THREE.BufferAttribute(col, 4)) }
+      geo.setIndex(index)
+      const update = (r: number, y: number, inset = 1.0): void => {
+        const e = r - inset, cc = SIZE / 2, W = offsets[rows - 1]
+        for (let s = 0; s < 4; s++) {
+          for (let j = 0; j < rows; j++) {
+            const d = e + offsets[j], o = e + W // (the strips run a little past the corners so that they overlap there)
+            // [x, z] of the start and the end of this row of strip s (north, south: along x; west, east: along z)
+            const ends = s === 0 ? [[cc - o, cc - d], [cc + o, cc - d]] : s === 1 ? [[cc - o, cc + d], [cc + o, cc + d]] : s === 2 ? [[cc - d, cc - o], [cc - d, cc + o]] : [[cc + d, cc - o], [cc + d, cc + o]]
+            for (let k = 0; k < 2; k++) {
+              const v = (s * rows + j) * 2 + k, [x, z] = ends[k]
+              pos.set([x, y, z], v * 3)
+              uv.set(uvOf(s < 2 ? x : z, offsets[j] / W, x, z), v * 2)
+            }
+          }
         }
-      })
-      foamGeo.attributes.position.needsUpdate = true; foamGeo.attributes.uv.needsUpdate = true
+        geo.attributes.position.needsUpdate = true; geo.attributes.uv.needsUpdate = true
+      }
+      return { geo, update }
     }
+    const bed = ringStrips([0, 1.2, 3.2], (_a, _c, x, z) => [x / 4, z / 4], [1, 1, 0])
+    const bedMesh = new THREE.Mesh(bed.geo, new THREE.MeshBasicMaterial({ map: bedTex ?? undefined, color: bedTex ? 0xffffff : 0xe6d28c, vertexColors: true, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, side: THREE.DoubleSide }))
+    bedMesh.frustumCulled = false; bedMesh.renderOrder = 1
+    scene.add(bedMesh)
+    const FOAM_W = 4
+    const foamS = ringStrips([0, FOAM_W], (along, across) => [along, 1 - across]) // (the picture's first rows - the white foam - are at v = 1 once on the GPU: the foam touches the beach)
+    const foam = new THREE.Mesh(foamS.geo, new THREE.MeshBasicMaterial({ map: foamTex ?? undefined, color: foamTex ? 0xffffff : 0xdff4ff, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3, side: THREE.DoubleSide }))
+    foam.frustumCulled = false; foam.renderOrder = 2
+    scene.add(foam)
+    const setFoam = (r: number): void => { bed.update(r, built.waterY + 0.012, 1.0); foamS.update(r, built.waterY + 0.016, 0.4) }
     setFoam(79)
 
     const heightAt = (fx: number, fz: number): number => {
@@ -1099,7 +1112,7 @@ export default function GameView3D(props: Props) {
       // the collapsing island
       const u = built.uniforms
       u.uTime.value = now / 1000
-      u.uCut.value = elapsed === null ? 999 : collapseRadius(elapsedSec)
+      u.uCut.value = elapsed === null || collapseRadius(elapsedSec) >= 78.99 ? 999 : collapseRadius(elapsedSec) // (before the first ring starts to fall nothing sinks: the beach stays a whole plate)
       setFoam(elapsed === null ? 79 : Math.min(79, collapseRadius(elapsedSec)))
       u.uWarn.value = elapsed !== null && collapseWarn(elapsedSec) ? 1 : 0
 
