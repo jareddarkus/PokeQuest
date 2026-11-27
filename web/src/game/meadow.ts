@@ -20,7 +20,8 @@ export function liftAt(d: number): number {
 const BEACH = 3 // the outermost tiles are sand
 const ROAD_R = 67 // ring distance of the ring road
 
-const SHOW_SIDE = new URLSearchParams(location.search).has('side') // (the upright side picture of the pines stretches into long streaks when a tree is far from the middle of the screen or the zoom is high: off)
+const SHOW_SIDE = !new URLSearchParams(location.search).has('noside') // the upright picture of the pines: only the plane that faces the camera (the crossing one, seen edge-on, stretched into streaks)
+const SHOW_CROSS = new URLSearchParams(location.search).has('cross')
 /** The 2 x 2 tile cells of ring 1 that are forest (top-left tile numbers), made by prepareMeadow. */
 let forestCells: number[] = []
 
@@ -165,7 +166,7 @@ export function addExtraGrass(world: World, built: BuiltWorld, seed: number): nu
   for (let y = 1; y < SIZE - 1; y++) {
     for (let x = 1; x < SIZE - 1; x++) {
       const i = y * SIZE + x
-      if (world.tiles[i] !== T.Grass) continue
+      if (world.tiles[i] !== T.Grass || built.bridge?.[i]) continue // (never on a bridge)
       if (ringAt(x, y) < 2 || (ringAt(x, y) === 4 && RULES.peakWildOn <= 0)) continue
       // never on stairs or slopes: the ground there is not level
       const h0 = built.height[i]
@@ -380,7 +381,7 @@ export function buildMeadowVisuals(world: World, built: BuiltWorld, extra: numbe
       const flat4 = (m: ReturnType<typeof mk>, y: number) => quad(m, [[x, y, z], [x + 2, y, z], [x + 2, y, z + 2], [x, y, z + 2]], [[0, 0], [1, 0], [1, 1], [0, 1]])
       flat4(mBase, hm + 0.19); flat4(mCrown, hm + 1.38); flat4(mTip, hm + 2.91)
       quad(mSide, [[x, y0, z + 1], [x + 2, y0, z + 1], [x + 2, y1, z + 1], [x, y1, z + 1]], [[0, 1], [1, 1], [1, 0], [0, 0]])
-      quad(mSide, [[x + 1, y0, z], [x + 1, y0, z + 2], [x + 1, y1, z + 2], [x + 1, y1, z]], [[0, 1], [1, 1], [1, 0], [0, 0]])
+      if (SHOW_CROSS) quad(mSide, [[x + 1, y0, z], [x + 1, y0, z + 2], [x + 1, y1, z + 2], [x + 1, y1, z]], [[0, 1], [1, 1], [1, 0], [0, 0]])
     }
     const add = (m: ReturnType<typeof mk>, tex: THREE.Texture | null) => {
       if (!tex || !m.idx.length) return

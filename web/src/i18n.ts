@@ -148,6 +148,9 @@ const DICT: Record<string, string> = {
   'Choose your starter': 'Elige a tu inicial', 'Search by name or number': 'Buscar por nombre o número', 'Type a message…': 'Escribe un mensaje…',
 }
 const PATTERNS: Array<[RegExp, string | ((...m: string[]) => string)]> = [
+  [/^You used an? (.+)!$/, '¡Has usado $1!'], [/^There's no running from a Trainer battle!$/, '¡No puedes huir de un combate contra un Entrenador!'], [/^There are no other Pokémon that can fight!$/, '¡No hay más Pokémon que puedan luchar!'],
+  [/^(.+) can't be switched out!$/, '¡$1 no puede ser retirado del combate!'], [/^(.+) has no energy left to battle!$/, '¡$1 no tiene energía para luchar!'], [/^(.+) is already in battle!$/, '¡$1 ya está en combate!'],
+  [/^(.+), come back!$/, '¡$1, vuelve!'], [/^Wild (.+) fled!$/, '¡El $1 salvaje ha huido!'], [/^(.+) is about to send out (.+)\. Will you switch\?$/, '$1 va a sacar a $2. ¿Quieres cambiar de Pokémon?'],
   [/^Go! (.+)!$/, '¡Adelante, $1!'], [/^The foe sent out (.+)!$/, '¡El rival envió a $1!'], [/^A wild (.+) appeared!$/, '¡Ha aparecido un $1 salvaje!'],
   [/^(.+) used (.+)!$/, '¡$1 usó $2!'], [/^(.+) sent out (.+)!$/, '¡$1 sacó a $2!'], [/^You are challenged by (.+)!$/, '¡$1 te desafía!'], [/^(.+) fainted!$/, '¡$1 se ha debilitado!'], [/^(.+)'s attack missed!$/, '¡$1 ha fallado el ataque!'],
   [/^It doesn't affect (.+)\.\.\.$/, 'No afecta a $1...'], [/^(.+) can't move!$/, '¡$1 no se puede mover!'],

@@ -134,7 +134,8 @@ export function ringStartSecs(r: Rules = RULES): [number, number, number] {
   const s1 = r.ring1Seconds, s2 = s1 + Math.max(1, r.fall1Seconds) + r.ring2Seconds, s3 = s2 + Math.max(1, r.fall2Seconds) + r.ring3Seconds
   return [s1, s2, s3]
 }
-export const tournamentStart = (): number => ringStartSecs()[2] + RULES.peakSeconds
+/** The tournament starts `peakSeconds` after the peak is reached (the moment ring 3 has finished falling), so the peak always has its own countdown. */
+export const tournamentStart = (): number => ringStartSecs()[2] + Math.max(1, RULES.fall3Seconds) + RULES.peakSeconds
 
 // ---------------------------------------------------------------- what the Admin tab shows
 export interface RuleDef {
@@ -164,7 +165,7 @@ export const RULE_GROUPS: RuleGroup[] = [
     t('ring3Seconds', 'Ring 3 lasts', 'El anillo 3 dura', 'From the moment ring 2 has finished falling until ring 3 starts to crumble.', 'Desde que el anillo 2 termina de caer hasta que el anillo 3 empieza a hundirse.'),
     t('fall3Seconds', 'Ring 3 takes to crumble', 'El anillo 3 tarda en hundirse', 'How long the fall of ring 3 lasts.', 'Lo que dura la caída del anillo 3.', 1, 600),
     t('warnSeconds', 'Warning before a ring falls', 'Aviso antes de que caiga un anillo', 'The ground shakes and reddens this long before.', 'El suelo tiembla y se pone rojo este tiempo antes.', 0, 300),
-    t('peakSeconds', 'Peak duels last (until the tournament)', 'Duelos en la cima (hasta el torneo)', 'Counted from the moment ring 3 starts to fall.', 'Se cuenta desde que el anillo 3 empieza a caer.', 0, 3600),
+    t('peakSeconds', 'Peak duels last (until the tournament)', 'Duelos en la cima (hasta el torneo)', 'Counted from the moment the peak is reached (ring 3 has fallen).', 'Se cuenta desde que se llega a la cima (el anillo 3 ya ha caído).', 0, 3600),
     b('tournamentOn', 'Tournament after the peak', 'Torneo después de la cima', 'Off = the touch-duels at the peak just go on.', 'Apagado = los duelos por contacto de la cima siguen sin torneo.'),
   ] },
   { id: 'battle', en: 'Battles', es: 'Combates', rules: [

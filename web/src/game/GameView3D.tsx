@@ -23,7 +23,7 @@ import type { AnimatedSprite } from '../rom/anim'
 import type { Settings } from './settings'
 import { loadGrassTuft, loadGrassSway, loadShadowPicture, type GrassSway } from '../rom/grassFx'
 import {
-  DX, DY, SIZE, T, TYPE_COLOR, collapseRadius, connectRings, collapseWarn, dist, inBounds, isWalkable, tileAt, type Dir, type NpcSpec, type World,
+  DX, DY, SIZE, T, TYPE_COLOR, collapseRadius, ringAt, connectRings, collapseWarn, dist, inBounds, isWalkable, tileAt, type Dir, type NpcSpec, type World,
 } from './world'
 
 interface Props {
@@ -271,7 +271,7 @@ export default function GameView3D(props: Props) {
         const e = r - inset, cc = SIZE / 2, W = offsets[rows - 1]
         for (let s = 0; s < 4; s++) {
           for (let j = 0; j < rows; j++) {
-            const d = e + offsets[j], o = e + W // (the strips run a little past the corners so that they overlap there)
+            const d = e + offsets[j], o = d // (each row ends exactly where the next side's row of the same distance begins: the corners are mitred, nothing overlaps)
             // [x, z] of the start and the end of this row of strip s (north, south: along x; west, east: along z)
             const ends = s === 0 ? [[cc - o, cc - d], [cc + o, cc - d]] : s === 1 ? [[cc - o, cc + d], [cc + o, cc + d]] : s === 2 ? [[cc - d, cc - o], [cc - d, cc + o]] : [[cc + d, cc - o], [cc + d, cc + o]]
             for (let k = 0; k < 2; k++) {
@@ -290,7 +290,7 @@ export default function GameView3D(props: Props) {
     bedMesh.frustumCulled = false; bedMesh.renderOrder = 1
     scene.add(bedMesh)
     const FOAM_W = 4
-    const foamS = ringStrips([0, FOAM_W], (along, across) => [along, 1 - across]) // (the picture's first rows - the white foam - are at v = 1 once on the GPU: the foam touches the beach)
+    const foamS = ringStrips([0, FOAM_W], (along, across) => [along, across]) // (the white foam - the picture's first rows - touches the beach and the blue of the sea follows outwards, as in the game)
     const foam = new THREE.Mesh(foamS.geo, new THREE.MeshBasicMaterial({ map: foamTex ?? undefined, color: foamTex ? 0xffffff : 0xdff4ff, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3, side: THREE.DoubleSide }))
     foam.frustumCulled = false; foam.renderOrder = 2
     scene.add(foam)
@@ -306,6 +306,9 @@ export default function GameView3D(props: Props) {
       const a = h[z0 * SIZE + x0], b = h[z0 * SIZE + x0 + 1], c = h[(z0 + 1) * SIZE + x0], d = h[(z0 + 1) * SIZE + x0 + 1]
       return a * (1 - ax) * (1 - az) + b * ax * (1 - az) + c * (1 - ax) * az + d * ax * az
     }
+
+    /** a trainer only challenges you when you stand in its own ring and at its own height (not on a cliff above or a lower terrace below it) */
+    const sameGround = (nx: number, ny: number): boolean => ringAt(nx, ny) === ringAt(Math.round(me.x), Math.round(me.y)) && Math.abs(heightAt(nx + 0.5, ny + 0.5) - heightAt(me.x + 0.5, me.y + 0.5)) < 0.7
 
     // gyms: the real gym buildings of the game (a sign at the entrance if the building is not available)
     let gymNo = 0
@@ -423,6 +426,7 @@ export default function GameView3D(props: Props) {
     void loadGrassSway().then((sw) => { tuftSway = sw })
     // the corners of the game's model ee_kusa, exactly as the game file has them (16 units = 1 tile): ONE tile wide, a little slanted (its back edge 0.31 tile higher than the front one), 0.31 - 0.63 tile above the ground
     // at the legs. Its picture is 32 x 32 but only 30 x 30 pixels are used (u 0 - 0.9375, v 0.0625 - 1); v = 0 is the TOP row of the picture and the front (south, lower) edge is v = 1: the picture stands as drawn.
+    const SHOW_TUFT = false // (the second leaf picture lying on top of the grass that already covers the legs: switched off at the designer's request)
     const TUFT_UV = [0, 1, 0.9375, 1, 0.9375, 0.0625, 0, 0.0625]
     const tuftGeo = new THREE.BufferGeometry()
     tuftGeo.setAttribute('position', new THREE.Float32BufferAttribute([-9 / 16, 5 / 16, 6 / 16, 7 / 16, 5 / 16, 6 / 16, 7 / 16, 10 / 16, -9 / 16, -9 / 16, 10 / 16, -9 / 16], 3))
@@ -436,7 +440,7 @@ export default function GameView3D(props: Props) {
     /** Characters are drawn south (nearer the camera) over north, always: the order follows the ground position. */
     const order = (sp: THREE.Sprite, z: number) => { sp.renderOrder = 3 + z * 0.001 }
     const cover = (m: THREE.Mesh, on: boolean, x: number, ground: number, z: number, _wide = 1.0, age = 1e9) => {
-      m.visible = on && !!tuftTex
+      m.visible = SHOW_TUFT && on && !!tuftTex
       if (!m.visible) return
       const t = tuftTex![Math.max(0, Math.min(3, Math.floor(age / 100)))]
       const mat = m.material as THREE.MeshBasicMaterial
@@ -904,7 +908,7 @@ export default function GameView3D(props: Props) {
               const sx = n.x + DX[n.dir] * k
               const sy = n.y + DY[n.dir] * k
               if (!isWalkable(world, sx, sy) && tileAt(world, sx, sy) !== T.GymDoor) break
-              if (sx === me.x && sy === me.y && me.t >= 1 && !alert && p.canBattle !== false && !p.noChallenge?.(n.spec.id) && !busyMap.has(n.spec.id)) { // (trainers leave you alone when none of your Pokémon can fight)
+              if (sx === me.x && sy === me.y && me.t >= 1 && !alert && sameGround(n.x, n.y) && p.canBattle !== false && !p.noChallenge?.(n.spec.id) && !busyMap.has(n.spec.id)) { // (trainers leave you alone when none of your Pokémon can fight)
                 if (bubble && (realBubble || owEmote(15))) { alert = { n, t: realBubble ? ALERT_FRAMES * ALERT_FRAME : 0.9 }; bubble.visible = true; p.events.onAlert?.(); break }
                 p.events.onNpcSpotted?.(n.spec.id)
                 break
@@ -931,7 +935,8 @@ export default function GameView3D(props: Props) {
       // walking: the foot picture for the first half of a tile, standing for the second half; the foot changes with every tile
       // walking: the foot picture for the first half of a tile, standing for the second half. Running changes its picture only once per
       // tile (half as often as before): foot, upright, other foot, upright ...
-      const myFrame = me.t >= 1 || me.thrown ? 0 : me.run ? [1, 0, 2, 0][me.cycle] : me.t < 0.5 ? 1 + me.step : 0
+      const settling = me.t >= 1 && !me.thrown && me.run && me.idle < 0.14 // (after a run: a short walking step before the standing picture)
+      const myFrame = settling ? 1 + me.step : me.t >= 1 || me.thrown ? 0 : me.run ? [1, 0, 2, 0][me.cycle] : me.t < 0.5 ? 1 + me.step : 0
       mySprite.material = charMaterial(p.look, me.dir, myFrame, me.run && me.t < 1) // (standing still after a run: the normal standing picture)
       fit(mySprite)
       place(mySprite, camera, px + 0.5, ph + lift(mySprite) + (me.thrown ? Math.sin(Math.PI * me.t) * 1.6 : 0), py + 0.5, me.t < 1 ? (tallAt(me.t < 0.5 ? me.fromX : me.x, me.t < 0.5 ? me.fromY : me.y) ? TALL_PUSH : PUSH) : tallAt(me.x, me.y) ? TALL_PUSH : PUSH)

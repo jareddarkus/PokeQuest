@@ -119,6 +119,18 @@ class MusicManager {
 
   cry(dex: number) { return this.playSfx(`cry:${dex}`) }
 
+  /** Reads the files of a sound into memory ahead of time (so that the first time it is needed it plays at once instead of after a long wait, or not at all). */
+  async preloadSfx(key: string): Promise<void> {
+    try {
+      const index = await loadMusicIndex()
+      const info = index?.[key]
+      if (!info) return
+      await Promise.all([this.file(info.seq), this.file(info.bank), ...info.waves.map((w) => (w >= 0 ? this.file(w) : Promise.resolve(null)))])
+    } catch { /* optional */ }
+  }
+  /** The cries of these Pokémon (by Pokédex number) are ready to play. */
+  preloadCries(dexes: number[]): Promise<unknown> { return Promise.all(dexes.filter((d) => d > 0 && d <= 649).map((d) => this.preloadSfx(`cry:${d}`))) }
+
   /** The cry of a Pokémon by name: #1-#649 from the player's own game file; the newer ones (generations 6-9) are not in that file, so they are played from Pokémon Showdown's public cry files (a plain audio element, nothing is stored). */
   cryOf(species: string, dex: number) {
     if (dex <= 649) return this.playSfx(`cry:${dex}`)

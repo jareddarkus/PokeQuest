@@ -18,3 +18,13 @@ export function trainerClassFor(kind: 'trainer' | 'gym' | string, seed: string):
 }
 /** The player's back picture: 0 = the boy, 1 = the girl (archive a/0/7/2). */
 export const playerBackClass = (girl: boolean): number => (girl ? 1 : 0)
+
+/**
+ * Which back picture (archive a/0/7/2) your trainer shows in battle for the walking character (file of a/0/4/8) you chose as your skin.
+ * The game file only has back pictures for a few characters (the two heroes and a handful of story characters), so: the heroes keep their own picture,
+ * every other character gets the girl's picture if it is a girl / woman and the boy's otherwise (the walking characters carry no gender in the file:
+ * the list of girls below was made by looking at the pictures).
+ */
+const OW_TO_BACK: Record<number, number> = { 7: 0, 10: 1 }
+const FEMALE_OW = new Set([10, 15, 19, 21, 22, 23, 29, 36, 37, 39, 47, 49, 51, 53, 54, 57, 59, 66, 68, 71, 75, 80, 82, 83, 85, 86, 87, 88, 90, 92, 94, 96, 98, 99, 102, 108, 147, 149, 152, 160, 174, 193, 195, 206, 218, 229, 231, 234, 239, 242, 245, 246, 249, 257, 258, 261, 268, 274, 276, 277, 278, 281])
+export const backClassForSprite = (sprite: number | undefined): number => (sprite === undefined ? 0 : OW_TO_BACK[sprite] ?? (FEMALE_OW.has(sprite) ? 1 : 0))

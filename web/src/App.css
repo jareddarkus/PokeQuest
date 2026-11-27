@@ -263,6 +263,8 @@ button.big small { opacity: .7; font-size: .75rem; }
 /* Pokémon in battle: the feet stand on the middle of the platform, with a soft oval shadow right under them */
 .stage-shadow { position: absolute; transform: translate(-50%, -50%); aspect-ratio: 3.2 / 1; border-radius: 50%; background: radial-gradient(ellipse at center, rgba(0,0,0,.5) 0%, rgba(0,0,0,.42) 45%, rgba(0,0,0,.18) 75%, rgba(0,0,0,0) 100%); filter: blur(1.5px); z-index: 1; pointer-events: none; } /* a small soft ellipse right under the feet */
 .stage-sprite::before { display: none !important; }
+.stage-shadow { transition: opacity .5s; }
+.stage-shadow.gone { opacity: 0; } /* a fainted Pokémon takes its shadow with it */
 .stage-sprite.lunge-me { transform: translate(calc(-50% + 46px), calc(-100% - 22px)); transition: transform .12s ease-out; }
 .stage-sprite.lunge-foe { transform: translate(calc(-50% - 46px), calc(-100% + 22px)); transition: transform .12s ease-out; }
 .stage-sprite .mon-sprite.hd { display: block; image-rendering: pixelated; }
@@ -481,7 +483,7 @@ button.big small { opacity: .7; font-size: .75rem; }
 .battle-bottom { align-items: center; flex-direction: column !important; }
 .battle-band { width: calc(256 * var(--s)) !important; height: calc(40 * var(--s)) !important; padding: calc(4 * var(--s)) calc(8 * var(--s)) !important; }
 /* wide windows: the log and the lower screen are in the bottom right corner */
-.fullscreen.battle.side .battle-bottom { left: auto; right: 0; margin: 0; width: calc(256 * var(--s) + 6px); }
+.fullscreen.battle.side .battle-bottom { left: auto; right: var(--zone-r, 0px); margin: 0; width: calc(256 * var(--s) + 6px); }
 
 /* the picture of the top screen ends where the log box begins; your trainer's feet touch that border */
 .fullscreen.battle .stage-cam, .fullscreen.battle .foe-zone, .fullscreen.battle .me-zone, .fullscreen.battle .team-balls, .fullscreen.battle .tbs { bottom: var(--bottom-h, 0px) !important; inset: 0 0 var(--bottom-h, 0px) 0 !important; height: auto !important; overflow: hidden; }
@@ -493,6 +495,10 @@ button.big small { opacity: .7; font-size: .75rem; }
 
 /* the HP boxes / team balls belong to the game's 4:3 screen as it fits above the lower screen, in the middle of the window */
 .fullscreen.battle .foe-zone, .fullscreen.battle .me-zone, .fullscreen.battle .team-balls, .fullscreen.battle .tbs { inset: var(--zone-t, 0px) var(--zone-r, var(--zone-l, 0px)) var(--zone-b, var(--bottom-h, 0px)) var(--zone-l, 0px) !important; width: auto !important; height: auto !important; overflow: visible !important; }
+
+/* wide windows: the HP boxes where the designer's reference layout puts them (DS pixels of the 256 x 192 picture; --kz = screen pixels per picture pixel of the picture's width) */
+.fullscreen.battle.side .foe-zone .hp2 { left: calc(4.5 * var(--kz, var(--k))) !important; top: calc(5.5 * var(--kz, var(--k))) !important; }
+.fullscreen.battle.side .me-zone .hp2 { right: auto !important; bottom: auto !important; left: calc(145 * var(--kz, var(--k))) !important; top: calc(81 * var(--kz, var(--k))) !important; }
 
 /* the progress bar shown whenever the page reads or builds something */
 .pq-progress { box-sizing: border-box; width: 100%; max-width: min(440px, 86vw); margin: 14px auto 4px; text-align: left; } /* (as wide as its frame, never wider) */

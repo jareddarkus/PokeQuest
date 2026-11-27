@@ -15,9 +15,9 @@ import StatusIcon from './StatusIcon'
 import BattleBackdrop from './BattleBackdrop'
 import BattleTransition from './BattleTransition'
 import type { BattleBackdrop3D } from '../rom/battleScene'
-import type { BattleLayout } from '../rom/battleScene'
+import { SIDE_ASPECT, type BattleLayout } from '../rom/battleScene'
 import MonSprite, { preloadPixel } from './MonSprite'
-import { CommandScreen, IdleBall, MoveScreen, dsScale, sideLayout, lowerWidth } from './DsMenu'
+import { CommandScreen, IdleBall, MoveScreen, dsScale, sideLayout } from './DsMenu'
 import PartyScreen from './PartyScreen'
 import BagScreen from './BagScreen'
 import { Dex } from '@pkmn/sim'
@@ -25,7 +25,7 @@ import { music } from '../audio/music'
 import { warmAnim } from './AnimSprite'
 import { trainerBackPic, trainerFrontPic } from '../rom/trainerPics'
 import { hardEdges, type AnimatedSprite } from '../rom/anim'
-import { playerBackClass, trainerClassFor } from '../data/trainerClasses'
+import { backClassForSprite, playerBackClass, trainerClassFor } from '../data/trainerClasses'
 import { MoveFx, FX_NAMES } from './moveFx'
 import { trText, useLang } from '../i18n'
 import FontText from './FontText'
@@ -62,6 +62,8 @@ interface Props {
   stream?: (evs: BattleEvent[]) => void
   /** the player's character is the girl */
   playerGirl?: boolean
+  /** the walking character you chose as your skin (its battle picture is chosen to match) */
+  playerSprite?: number
   /** how fast the message text is typed */
   textSpeed?: 'slow' | 'normal' | 'fast' | 'instant'
   onEnd: (outcome: BattleOutcome, trainer: Trainer) => void
@@ -178,8 +180,8 @@ export function useDsK(): number {
 }
 function dsK(): number {
   // the top screen is the picture above the log box and the lower screen
-  const side = sideLayout()
-  const W = window.innerWidth - (side ? lowerWidth() : 0), H = window.innerHeight - bottomHeight()
+  if (sideLayout()) return snap(Math.max(1.2, Math.min(window.innerWidth, window.innerHeight * SIDE_ASPECT) / 256)) // (the same as the 3D picture's top screen: its width fills the window up to the designer's proportions)
+  const W = window.innerWidth, H = window.innerHeight - bottomHeight()
   return snap(Math.max(1.2, Math.min(W / 256, H / 192)))
 }
 /** The height of the log box + the lower screen (screen pixels). */
@@ -190,7 +192,7 @@ function zoneVars(layout: BattleLayout | null, Kd: number): Record<string, strin
   const W = window.innerWidth, H = window.innerHeight
   if (layout) {
     const f = layout.frame
-    return { '--zone-l': `${f.l}px`, '--zone-r': `${Math.max(0, W - f.l - f.w)}px`, '--zone-t': `${f.t}px`, '--zone-b': `${sideLayout() ? Math.max(0, H - f.t - f.h) : bottomHeight()}px` }
+    return { '--kz': `${f.w / 256}px`, '--zone-l': `${f.l}px`, '--zone-r': `${Math.max(0, W - f.l - f.w)}px`, '--zone-t': `${f.t}px`, '--zone-b': `${sideLayout() ? H - f.t - f.h : bottomHeight()}px` }
   }
   const l = Math.max(0, (W - 256 * Kd) / 2)
   return { '--zone-l': `${l}px`, '--zone-r': `${l}px`, '--zone-t': '0px', '--zone-b': `${bottomHeight()}px` }
@@ -324,7 +326,7 @@ function StageBadges({ st, es, K, side }: { st: Record<string, number>; es: bool
 export function HpBox(props: Parameters<typeof ClassicHpBox>[0]) {
   return useTheme() === 'modern' ? <ModernHpBox side={props.side} mine={props.mine} exp={props.exp} expFrac={props.expFrac} gender={props.gender} k={props.k} /> : <ClassicHpBox {...props} />
 }
-export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed, foeClass, pvp, spectate, stream, playerGirl, textSpeed = 'normal', onEnd }: Props) {
+export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed, foeClass, pvp, spectate, stream, playerGirl, playerSprite, textSpeed = 'normal', onEnd }: Props) {
   const lang = useLang()
   // the battle always looks classic (the game's own HP boxes, command and move screens), whatever the theme is; the theme comes back when the battle ends
   useEffect(() => { const prev = getTheme(); setTheme('classic'); return () => setTheme(prev) }, [])
@@ -815,9 +817,10 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
         jobs.push(d > 0 && d <= 649 ? warmAnim(m.species, back, !!m.shiny) : Promise.resolve(preloadPixel(m.species, back, !!m.shiny)))
       }
       for (const m of foeCopies.slice(1)) { const d = dexNum(m.species); if (d > 649) preloadPixel(m.species, false, !!m.shiny) }
-      jobs.push(trainerBackPic(playerBackClass(!!playerGirl)).then(setMyPic))
+      jobs.push(music.preloadCries([...playerTeam, ...foeCopies].map((m) => dexNum(m.species)))) // (cries and the sounds of the first moves are read now, so the very first battle has sound too)
+      jobs.push(trainerBackPic(playerSprite !== undefined ? backClassForSprite(playerSprite) : playerBackClass(!!playerGirl)).then(setMyPic))
       if (kind !== 'wild') jobs.push(trainerFrontPic(foeClass ?? trainerClassFor(kind === 'gym' ? 'gym' : 'trainer', foeSeed ?? foeName ?? 'trainer'), [2, 3, 4, 5]).then((r) => setFoePic(r?.canvas ?? null)))
-      await Promise.race([Promise.all(jobs), sleep(3000)])
+      await Promise.race([Promise.all(jobs), sleep(4000)])
     }
     // online duel: the other player's messages (the host waits until the guest is ready; the guest hands what it hears to its session)
     const guestSession = pvp?.role === 'guest' ? new PvpGuestSession(playerTeam, pvp.send) : null
@@ -1197,13 +1200,13 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
         </div>
       )}
       {layout && myPic && !trGone.me && (
-        <div className="stage-sprite trainer-me" style={{ left: layout.frame.l + layout.frame.w * 0.23, bottom: layout.frame.b + (13 * layout.frame.w) / 256, width: layout.me.w }}>
+        <div className="stage-sprite trainer-me" style={{ left: layout.frame.l + layout.frame.w * 0.23 + layout.meDx, bottom: layout.frame.b + (13 * layout.frame.w) / 256, width: layout.me.w }}>
           <TrainerFigure sprite={myPic} k={snapNear(layout.frame.w / 256)} side="me" out={trOut.me} play={throwKey} />
         </div>
       )}
       {layout && foe && (
         <>
-          <div className="stage-shadow" style={{ left: layout.foe.x, top: layout.foe.y + layout.foe.w * 0.13, width: layout.foe.w * 0.5 * shadowFor(foe.species) }} />
+          <div className={`stage-shadow ${foe.fainted ? 'gone' : ''}`} style={{ left: layout.foe.x, top: layout.foe.y + layout.foe.w * 0.1, width: layout.foe.w * 0.5 * shadowFor(foe.species), aspectRatio: `${1 / Math.max(0.12, layout.foe.asp)}` }} />
           <div data-mon="foe" className={`stage-sprite ${shake === 'foe' ? 'hit' : ''} ${foe.fainted ? 'fainted' : ''} ${lunge === 'foe' ? 'lunge-foe' : ''}`} style={{ left: layout.foe.x, top: layout.foe.y + layout.foe.w * 0.1, width: layout.foe.w, ['--hv' as string]: `${Math.round(layout.foe.w * 0.9)}px` }}>
             {!ball && <div className={send?.side === 'foe' ? 'so-mon' : undefined} key={send?.side === 'foe' ? send.key : 'foe'}><MonSprite species={foe.species} shiny={foe.shiny} scale={snap((layout.foe.w * 1.05) / 76.8 * 0.8) / 0.8} platform={layout.foe.w} animated />{send?.side === 'foe' && <div className="so-white" aria-hidden><MonSprite species={foe.species} shiny={foe.shiny} scale={snap((layout.foe.w * 1.05) / 76.8 * 0.8) / 0.8} platform={layout.foe.w} animated /></div>}</div>}
             {ball && <div className={`ball shake-${ball.shakes}`} />}
@@ -1212,14 +1215,14 @@ export default function BattleScreen({ trainer, foeTeam, kind, foeName, foeSeed,
       )}
       {layout && me && (
         <>
-          <div className="stage-shadow" style={{ left: layout.me.x, top: layout.me.y + layout.me.w * 0.09, width: layout.me.w * 0.32 * shadowFor(me.species) }} />
+          <div className={`stage-shadow ${me.fainted ? 'gone' : ''}`} style={{ left: layout.me.x, top: layout.me.y + layout.me.w * 0.1, width: layout.me.w * 0.32 * shadowFor(me.species), aspectRatio: `${1 / Math.max(0.12, layout.me.asp)}` }} />
           <div data-mon="me" className={`stage-sprite ${shake === 'me' ? 'hit' : ''} ${me.fainted ? 'fainted' : ''} ${lunge === 'me' ? 'lunge-me' : ''}`} style={{ left: layout.me.x, top: layout.me.y + layout.me.w * 0.1, width: layout.me.w, ['--hv' as string]: `${Math.round(layout.me.w * 0.75)}px` }}>
             <div className={send?.side === 'me' ? 'so-mon' : undefined} key={send?.side === 'me' ? send.key : 'me'}><MonSprite species={me.species} back shiny={me.shiny} scale={snap((layout.me.w * 0.92) / 76.8 * 0.8) / 0.8} platform={layout.me.w} animated />{send?.side === 'me' && <div className="so-white" aria-hidden><MonSprite species={me.species} back shiny={me.shiny} scale={snap((layout.me.w * 0.92) / 76.8 * 0.8) / 0.8} platform={layout.me.w} animated /></div>}</div>
           </div>
         </>
       )}
       </div>
-      {!transDone && <BattleTransition onBlack={() => setShowScene(true)} onFade={() => { /* (no opening fly-in: the battle starts with the usual camera, everything in view) */ setIntroOn(true); window.setTimeout(() => introResolve.current(), 1450) }} onDone={() => setTransDone(true)} />}
+      {!transDone && <BattleTransition onBlack={() => { sceneRef.current?.prepareSlide(); setShowScene(true) }} onFade={() => { /* the platforms slide in from the sides (yours from the left, the opponent's from the right) */ sceneRef.current?.slideIn(); setIntroOn(true); window.setTimeout(() => introResolve.current(), 1450) }} onDone={() => setTransDone(true)} />}
       {spectate && <button className="spec-leave" onClick={() => onEnd('ran', trainer)}>Stop watching · {spectate.who}</button>}
       {lvWin && layout && (
         <div className="lvwin" style={{ left: layout.frame.l + layout.frame.w * 0.55, top: layout.frame.t + layout.frame.h * 0.06, width: layout.frame.w * 0.43, padding: Kd * 3 }}>

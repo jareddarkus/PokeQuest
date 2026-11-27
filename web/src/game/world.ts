@@ -155,6 +155,8 @@ const NPC_NAMES = [
  * For every ring from 2 to the peak, the pieces of walkable ground of some size are joined to the biggest piece by the cheapest way through what blocks
  * (trees and fences first, then rocks, water last; the walls of the ring edges and of the gyms never). Returns the tile numbers that were changed into ground.
  */
+/** tiles under solid objects (rocks, houses ...): the ways cut by `connectRings` never go through them (set by the play screen) */
+export const NEVER_CARVE: { mask: Uint8Array | null } = { mask: null }
 export function connectRings(tiles: Uint8Array, debug?: unknown[]): number[] {
   const carved: number[] = []
   const walk = (t: number) => t === T.Grass || t === T.Tall || t === T.Sand || t === T.GymDoor
@@ -164,7 +166,7 @@ export function connectRings(tiles: Uint8Array, debug?: unknown[]): number[] {
     if (ringAt(x, y) !== ring) return Infinity
     const t = tiles[i]
     if (walk(t)) return t === T.GymDoor ? 6 : 1
-    if (edgeRow(x, y) || t === T.GymWall) return Infinity
+    if (edgeRow(x, y) || t === T.GymWall || NEVER_CARVE.mask?.[i]) return Infinity
     return t === T.Tree ? 4 : t === T.Cliff ? 30 : t === T.Water ? 40 : Infinity
   }
   for (let ring = 2; ring <= 4; ring++) {

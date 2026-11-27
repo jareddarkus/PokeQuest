@@ -16,7 +16,7 @@ import { ITEMS, startingBag, rollPickup } from '../data/items'
 import ItemIcon from './ItemIcon'
 import { createMon, maxHp, newUid, type Mon } from '../data/dex'
 import {
-  C, collapseInfo, squareTile, RADIUS, RING_INNER, SIZE, T, collapseRadius, generateWorld, isWalkable, ringAt, type Dir, type World,
+  C, NEVER_CARVE, collapseInfo, dist, squareTile, RADIUS, RING_INNER, SIZE, T, collapseRadius, generateWorld, isWalkable, ringAt, type Dir, type World,
 } from '../game/world'
 import BattleScreen, { CHAR_MS, TypedText, type BattleKind, type BattleOutcome, type PvpLink } from './BattleScreen'
 import { addGrassOnly, setNoGrass } from '../rom/mapModel'
@@ -879,7 +879,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
           pvp={battle.pvp}
           spectate={battle.spectate ? { who: battle.spectate.who, listen: battle.spectate.listen } : undefined}
           stream={streamEvents}
-          playerGirl={battle.spectate ? battle.spectate.girl : look.sprite === 10}
+          playerGirl={battle.spectate ? battle.spectate.girl : look.sprite === 10} playerSprite={battle.spectate ? undefined : look.sprite}
           textSpeed={settings.textSpeed}
           onEnd={endBattle}
         />
@@ -922,6 +922,7 @@ export default function PlayScreen(props: Props) {
       applyRules(custom?.rules, props.royale ? props.royale.rules ?? (await fetchGameConfig()) : await fetchGameConfig())
       if (!live) return
       let world: World
+      NEVER_CARVE.mask = null
       if (custom) { // a world from the editor: its own ground, heights and models replace the real map
         setProg({ text: 'Drawing your world…', frac: 0.8, step: 4, steps: 5, done: 0, total: 1, unit: 'step' })
         await pause()
@@ -934,6 +935,11 @@ export default function PlayScreen(props: Props) {
         built.group.add(vis.group)
       } else {
         prepareMeadow(built, seed) // ring 1 = a meadow (lots of tall grass, a ring road and paths, a beach)
+        if (built.solid) { // solid objects of the real map (rocks, signs ...) are never walkable and no way is cut through them
+          const mask = new Uint8Array(SIZE * SIZE)
+          for (let i = 0; i < SIZE * SIZE; i++) if (built.solid[i] && dist(i % SIZE, (i / SIZE) | 0) < RING_INNER[0] - 0.2) { mask[i] = 1; if (built.ground[i] === T.Grass || built.ground[i] === T.Tall || built.ground[i] === T.Sand) built.ground[i] = T.Tree }
+          NEVER_CARVE.mask = mask
+        }
         setProg({ text: 'Placing gyms, trainers and items…', frac: 0.8, step: 4, steps: 5, done: 0, total: 1, unit: 'step' })
         await pause()
         world = generateWorld(seed, built.ground, { connect: true })

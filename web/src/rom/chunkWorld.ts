@@ -25,6 +25,10 @@ export interface BuiltWorld {
   packModels: () => Array<{ pack: number; count: number }>
   /** 1 = a path tile of the meadow (set by game/meadow.ts) */
   pathMask?: Uint8Array
+  /** 1 = a tile of a bridge (the game's upper level is walkable there; a bridge deck gets no tall grass) */
+  bridge?: Uint8Array
+  /** 1 = a tile under a solid object (rock, sign, house ...): never walkable, never carved through */
+  solid?: Uint8Array
 }
 
 const TALL = new Set([4, 5, 6, 7, 8, 9, 0x21, 0x22])
@@ -33,7 +37,7 @@ const TALL = new Set([4, 5, 6, 7, 8, 9, 0x21, 0x22])
 export function classify(beh: number, fl: number): number {
   if (beh === 1 && fl & 1) return T.Tree // can't pass
   if (beh === 0xff) return T.Tree
-  if ((beh >= 0x3d && beh <= 0x44) || beh === 0x12 || (fl & 2 && beh !== 0x17)) return T.Water // lakes and sea
+  if ((beh >= 0x3d && beh <= 0x44) || beh === 0x12 || beh === 0x17 || (fl & 2 && beh !== 0x17)) return T.Water // lakes and sea (0x17 = the foam row of the shore: water you cannot walk into without Surf)
   if (beh >= 0x51 && beh <= 0x58) return T.Tree // one-sided walls
   if (beh >= 0x72 && beh <= 0x79) return T.Tree // ledges / spin tiles
   if (beh >= 0xd4 && beh <= 0xe2) return T.Tree // PCs, signs, machines
@@ -137,6 +141,8 @@ export function buildChunkWorld(data: WorldData): BuiltWorld {
     return best
   }
   const waterHeights: number[] = []
+  const bridge = new Uint8Array(size * size) // 1 = walkable only because of the upper level (a bridge)
+  const raw = import.meta.env.DEV ? { size, a: new Uint16Array(size * size), b: new Uint16Array(size * size), beh: new Uint16Array(size * size), fl: new Uint16Array(size * size) } : null
 
   for (const c of data.chunks) {
     const dv = new DataView(c.map.buffer, c.map.byteOffset, c.map.byteLength)
@@ -160,10 +166,54 @@ export function buildChunkWorld(data: WorldData): BuiltWorld {
       const beh = dv.getUint16(p + 4 + t * 8 + 4, true)
       const fl = dv.getUint16(p + 4 + t * 8 + 6, true)
       ground[(oz + Math.floor(t / w)) * size + ox + (t % w)] = classify(beh, fl)
+      if (raw) { const ti = (oz + Math.floor(t / w)) * size + ox + (t % w); raw.a[ti] = dv.getUint16(p + 4 + t * 8, true); raw.b[ti] = dv.getUint16(p + 4 + t * 8 + 2, true); raw.beh[ti] = beh; raw.fl[ti] = fl }
+    }
+    // The game keeps a SECOND tile table for the upper level (bridges, overpasses): same layout as the first one. A tile that can be walked on up there
+    // (the bridge) is walkable even if the ground below it is water or blocked; the rest of that table is filled with "blocked".
+    if (sections >= 3 && offs[3] - offs[2] === offs[2] - offs[1]) {
+      const p2 = offs[2]
+      const w2 = dv.getUint16(p2, true), h2 = dv.getUint16(p2 + 2, true)
+      if (w2 === w) {
+        for (let t = 0; t < w2 * h2; t++) {
+          const c2 = classify(dv.getUint16(p2 + 4 + t * 8 + 4, true), dv.getUint16(p2 + 4 + t * 8 + 6, true))
+          if (c2 !== T.Grass && c2 !== T.Tall) continue
+          const ti = (oz + Math.floor(t / w2)) * size + ox + (t % w2)
+          bridge[ti] = 1
+          if (ground[ti] !== T.Grass && ground[ti] !== T.Tall) ground[ti] = c2
+        }
+      }
     }
     rasterHeights(model, height, ox, oz, size)
+    if (raw) ((globalThis as { __pqChunks?: unknown[] }).__pqChunks ??= []).push({ ox, oz, offs, map: c.map })
+    if (raw) { // (developer tool: which non-ground pictures / models lie over each tile)
+      const mats = ((raw as unknown as { mats?: Map<number, Set<string>> }).mats ??= new Map())
+      for (const mesh of model.meshes) {
+        const name = model.materials[mesh.material]?.name ?? ''
+        for (const v of mesh.verts) {
+          const tx = Math.floor(v.x / 16 + 16), tz = Math.floor(v.z / 16 + 16)
+          if (tx < 0 || tz < 0 || tx > 31 || tz > 31) continue
+          const ti = (oz + tz) * size + ox + tx
+          let set = mats.get(ti); if (!set) { set = new Set(); mats.set(ti, set) }
+          set.add(name)
+        }
+      }
+    }
   }
   addBuildings(data, group, uniforms)
+  // Solid things (rocks, signs, machines, houses ...): the game blocks them through its tile table, but we change some of the ground (shores, paths, carved ways),
+  // so the footprint of every tall building model is worked out from the model itself: those tiles are never walkable.
+  const solid = new Uint8Array(size * size)
+  group.updateMatrixWorld(true)
+  for (const o of group.children) {
+    if (!o.userData.building) continue
+    const bb = new THREE.Box3().setFromObject(o)
+    if (bb.max.y - bb.min.y < 0.9) continue // low things (flowers, mats, flat bridges) can be walked over
+    for (let tz = Math.floor(bb.min.z); tz <= Math.floor(bb.max.z); tz++) for (let tx = Math.floor(bb.min.x); tx <= Math.floor(bb.max.x); tx++) {
+      if (tx < 0 || tz < 0 || tx >= size || tz >= size) continue
+      if (tx + 0.5 >= bb.min.x + 0.3 && tx + 0.5 <= bb.max.x - 0.3 && tz + 0.5 >= bb.min.z + 0.3 && tz + 0.5 <= bb.max.z - 0.3) solid[tz * size + tx] = 1
+    }
+  }
+  if (raw) (globalThis as { __pqRaw?: unknown }).__pqRaw = raw
   for (let i = 0; i < size * size; i++) if (ground[i] === T.Water) waterHeights.push(height[i])
   waterHeights.sort((a, b) => a - b)
   const waterY = waterHeights.length ? waterHeights[Math.floor(waterHeights.length / 2)] : -1
@@ -219,5 +269,5 @@ export function buildChunkWorld(data: WorldData): BuiltWorld {
   if (import.meta.env.DEV) (globalThis as { __pqTex?: () => string[] }).__pqTex = () => [...new Set(Object.values(data.textures).flatMap((raw) => readTexFile(raw)?.texs.map((x) => x.name) ?? []))]
   const textureNames = () => [...new Set(Object.values(data.textures).flatMap((raw) => readTexFile(raw)?.texs.map((x) => x.name) ?? []))].sort()
   const packModels = () => Object.keys(data.packs ?? {}).map((k) => { const raw = data.packs?.[Number(k)]; const parsed = raw ? parsePack(raw.bld) : null; return { pack: Number(k), count: parsed ? parsed.models.length : 0 } })
-  return { group, size, ground, height, waterY, uniforms, makeBuilding, textureNamed, textureNames, packModels }
+  return { group, size, ground, height, waterY, uniforms, makeBuilding, textureNamed, textureNames, packModels, bridge, solid }
 }
