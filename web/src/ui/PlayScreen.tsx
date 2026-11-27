@@ -70,7 +70,7 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
   const startRef = useRef(royale ? t0 : Date.now())
   const t0Ref = useRef(t0)
   t0Ref.current = t0
-  const [collapseOn, setCollapseOn] = useState(!!royale)
+  const [collapseOn, setCollapseOn] = useState(true) // (the shrinking circle is on by default, also on the practice island)
   const [now, setNow] = useState(Date.now())
   useEffect(() => { if (!royale) return; const id = window.setInterval(() => setNow(Date.now()), 500); return () => window.clearInterval(id) }, [])
   const waiting = !!royale && now < t0 // everybody waits for the others until the match really begins
@@ -328,12 +328,20 @@ function PlayInner({ royale, username, look, settings, onSettings, onExit, onCus
     busySender.current?.duel({ type: 'eliminated' })
     if (why === 'wipe') announceRef.current({ k: 'elim', a: username ?? '' }) // (a lost duel is announced by the winner, with the score)
   }
-  /** Your team fainted. There are no Pokémon Centers: with no Pokémon left that can fight (team and PC) you are out of the match. */
+  /** Your whole team fainted: you wake up, healed, at the Pokémon Center of the ring you are in (in the peak, where there is none, right where you are). */
   const blackOut = () => {
     const t = trainerRef.current
-    if (!royale) { setTrainer({ ...t, team: t.team.map(healedCopy) }); say('Practice: your Pokémon were healed.'); return } // (practice has no match to be out of)
-    if ([...t.team, ...t.pc].some((m) => m.hp > 0)) { say('Your whole team fainted! A healthy Pokémon is waiting in your PC: take it out.'); return }
-    eliminateMe('wipe')
+    setTrainer({ ...t, team: t.team.map(healedCopy) })
+    const pos = handleRef.current?.getPos()
+    const ring = pos ? ringAt(pos.x, pos.y) : 0
+    let target: { x: number; y: number } | null = null
+    const center = world.gyms.find((g) => g.center && g.ring === ring)
+    if (center) target = { x: center.doorX, y: center.doorY + 1 }
+    else if (world.triggers) { // (a world of the editor: its healing tiles are the centers)
+      for (const [key, v] of world.triggers) { if (v.type !== 6) continue; const hx = key % SIZE, hy = Math.floor(key / SIZE); if (ringAt(hx, hy) === ring) { target = { x: hx, y: hy + 1 }; break } }
+    }
+    if (target) { handleRef.current?.teleport(target.x, target.y); say(`You blacked out! You woke up at the Pokémon Center of ring ${ring}.`) }
+    else say('You blacked out! Your Pokémon were healed.')
   }
 
   if (import.meta.env.DEV) { (globalThis as { __pqElim?: unknown }).__pqElim = () => { eliminatedRef.current = true; setElimWhy('wipe'); setEliminated(true) }; (globalThis as { __pqAnn?: unknown }).__pqAnn = (a: Announcement) => showAnnRef.current(a) } // developer hooks
