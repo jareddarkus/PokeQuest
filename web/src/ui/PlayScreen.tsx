@@ -942,7 +942,7 @@ export default function PlayScreen(props: Props) {
         }
         setProg({ text: 'Placing gyms, trainers and items…', frac: 0.8, step: 4, steps: 5, done: 0, total: 1, unit: 'step' })
         await pause()
-        world = generateWorld(seed, built.ground, { connect: true })
+        world = generateWorld(seed, built.ground, { connect: true, height: built.height })
         setNoGrass([...clearPeakGrass(world), ...(world.carved ?? []), ...carveCenterPaths(world, built)])
         if (RULES.peakWildOn <= 0) { const peak: number[] = []; for (let i = 0; i < SIZE * SIZE; i++) if (ringAt(i % SIZE, (i / SIZE) | 0) === 4) peak.push(i); addGrassOnly(peak) } // (no grass at all at the peak, not even the leftovers at the edges of the old patches) // (nothing grows at the peak: the tiles become plain grass and the map's own grass pictures there are hidden)
         const extra = addExtraGrass(world, built, seed) // and more tall grass in the inner rings

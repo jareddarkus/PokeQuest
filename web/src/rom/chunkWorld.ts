@@ -208,9 +208,15 @@ export function buildChunkWorld(data: WorldData): BuiltWorld {
     if (!o.userData.building) continue
     const bb = new THREE.Box3().setFromObject(o)
     if (bb.max.y - bb.min.y < 0.9) continue // low things (flowers, mats, flat bridges) can be walked over
+    const feet: number[] = [] // the ground under the building (not water): a building never hangs in the air
     for (let tz = Math.floor(bb.min.z); tz <= Math.floor(bb.max.z); tz++) for (let tx = Math.floor(bb.min.x); tx <= Math.floor(bb.max.x); tx++) {
       if (tx < 0 || tz < 0 || tx >= size || tz >= size) continue
-      if (tx + 0.5 >= bb.min.x + 0.3 && tx + 0.5 <= bb.max.x - 0.3 && tz + 0.5 >= bb.min.z + 0.3 && tz + 0.5 <= bb.max.z - 0.3) solid[tz * size + tx] = 1
+      if (tx + 0.5 >= bb.min.x + 0.3 && tx + 0.5 <= bb.max.x - 0.3 && tz + 0.5 >= bb.min.z + 0.3 && tz + 0.5 <= bb.max.z - 0.3) { solid[tz * size + tx] = 1; if (ground[tz * size + tx] !== T.Water) feet.push(height[tz * size + tx]) }
+    }
+    if (feet.length >= 4) { // (a house of the real map stood 3 tiles above its plaza: the model's own height and the ground's do not always agree; set it down on the ground)
+      feet.sort((a, b) => a - b)
+      const gap = bb.min.y - feet[feet.length >> 1]
+      if (gap > 0.8 && gap < 8) o.position.y -= gap
     }
   }
   if (raw) (globalThis as { __pqRaw?: unknown }).__pqRaw = raw

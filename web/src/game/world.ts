@@ -229,7 +229,7 @@ export function connectRings(tiles: Uint8Array, debug?: unknown[]): number[] {
   return carved
 }
 
-export function generateWorld(seed: number, ground: Uint8Array, opts: { barriers?: boolean; connect?: boolean } = {}): World {
+export function generateWorld(seed: number, ground: Uint8Array, opts: { barriers?: boolean; connect?: boolean; height?: Float32Array } = {}): World {
   const rng = mulberry32(seed)
   const tiles = new Uint8Array(ground)
 
@@ -290,6 +290,18 @@ export function generateWorld(seed: number, ground: Uint8Array, opts: { barriers
   }
   // gyms: 4 per ring (rings 1-3) at the north, east, south and west, on the nearest free ground inside the ring
   const gyms: Gym[] = []
+  /** a gym building (about 11 wide and 6 deep, north of its door) must stand on solid ground: not over the sea and not hanging over a cliff */
+  const footOk = (x: number, y: number): boolean => {
+    let ok = 0, n = 0
+    const h0 = opts.height ? opts.height[y * SIZE + x] : 0
+    for (let ty = y - 6; ty < y; ty++) for (let tx = x - 5; tx <= x + 5; tx++) {
+      n++
+      if (!inBounds(tx, ty) || tiles[ty * SIZE + tx] === T.Water) continue
+      if (opts.height && Math.abs(opts.height[ty * SIZE + tx] - h0) > 2.5) continue
+      ok++
+    }
+    return ok >= n * 0.8
+  }
   const usedLeaders = new Set<string>() // (the real gym leaders of the games, each in one gym only)
   const dirs: Array<['N' | 'E' | 'S' | 'W', number, number]> = [['N', 0, -1], ['E', 1, 0], ['S', 0, 1], ['W', -1, 0]]
   for (let ring = 1; ring <= 3; ring++) {
@@ -299,6 +311,12 @@ export function generateWorld(seed: number, ground: Uint8Array, opts: { barriers
         for (const off of [0, 1, -1, 2, -2, 3, -3, 4, -4]) {
           const x = Math.round(C + dx * r - 0.5 + (dy !== 0 ? off : 0))
           const y = Math.round(C + dy * r - 0.5 + (dx !== 0 ? off : 0))
+          if (inBounds(x, y) && walkable(x, y) && footOk(x, y)) { spot = { x, y }; break }
+        }
+      }
+      if (!spot) { // (no solid ground found: the old rule, the nearest walkable tile)
+        for (let r = RING_INNER[ring - 1] + 4; r < RING_INNER[ring - 1] + 14 && !spot; r++) for (const off of [0, 1, -1, 2, -2, 3, -3, 4, -4]) {
+          const x = Math.round(C + dx * r - 0.5 + (dy !== 0 ? off : 0)), y = Math.round(C + dy * r - 0.5 + (dx !== 0 ? off : 0))
           if (inBounds(x, y) && walkable(x, y)) { spot = { x, y }; break }
         }
       }

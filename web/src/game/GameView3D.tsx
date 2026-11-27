@@ -320,7 +320,12 @@ export default function GameView3D(props: Props) {
       if (b) {
         // the front of the building (its door side, towards the south) ends at the south edge of the door tile
         const box = new THREE.Box3().setFromObject(b.obj)
-        b.obj.position.set(g.x + 0.5 - (box.min.x + box.max.x) / 2, gy, g.y + 1 - box.max.z)
+        // set it down on the ground it stands on: the median ground height under the building (never more than 2.5 below the door), so it never hangs in the air
+        const under: number[] = []
+        for (let ty = Math.floor(g.y + 1 - (box.max.z - box.min.z)); ty < g.y; ty++) for (let tx = Math.floor(g.x + 0.5 - (box.max.x - box.min.x) / 2); tx <= Math.floor(g.x + 0.5 + (box.max.x - box.min.x) / 2); tx++) if (inBounds(tx, ty) && tileAt(world, tx, ty) !== T.Water) under.push(built.height[ty * SIZE + tx])
+        under.sort((p, q) => p - q)
+        const gyDown = under.length ? Math.max(gy - 2.5, Math.min(gy, under[under.length >> 1])) : gy
+        b.obj.position.set(g.x + 0.5 - (box.min.x + box.max.x) / 2, gyDown, g.y + 1 - box.max.z)
         scene.add(b.obj)
         gymParts.push({ x: g.x, y: g.y, things: [b.obj] })
         // you cannot walk through the building (the door tile and the row in front of it stay open)
